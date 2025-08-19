@@ -49,7 +49,7 @@ class Options_Helper {
             'page_title' => $page['page_title'] ?? '',
             'menu_title' => $page['menu_title'] ?? '',
             'post_id'    => $page['post_id'] ?? '',
-            'data'       => get_fields($page['post_id'] ?? '') ?: [],
+            'data'       => function_exists('get_fields') ? (get_fields($page['post_id'] ?? '') ?: []) : [],
         ];
     }
 

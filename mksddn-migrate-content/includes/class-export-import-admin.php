@@ -11,11 +11,11 @@ class Export_Import_Admin {
 
     public function add_admin_menu(): void {
         add_menu_page(
-            'Export and Import',
-            'Export & Import',
+            __('Export and Import', MKSDDN_MC_TEXT_DOMAIN),
+            __('Export & Import', MKSDDN_MC_TEXT_DOMAIN),
             'manage_options',
-            'mksddn-migrate-content',
-            $this->render_admin_page(...),
+            MKSDDN_MC_TEXT_DOMAIN,
+            [$this, 'render_admin_page'],
             'dashicons-download',
             20
         );
@@ -28,7 +28,7 @@ class Export_Import_Admin {
         }
 
         echo '<div class="wrap">';
-        echo '<h1>Export & Import</h1>';
+        echo '<h1>' . esc_html__('Export & Import', MKSDDN_MC_TEXT_DOMAIN) . '</h1>';
 
         $this->render_export_form();
         $this->render_import_form();
@@ -41,7 +41,7 @@ class Export_Import_Admin {
 
 
     private function render_export_form(): void {
-        echo '<h2>Export</h2>';
+        echo '<h2>' . esc_html__('Export', MKSDDN_MC_TEXT_DOMAIN) . '</h2>';
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         wp_nonce_field('export_single_page_nonce');
 
@@ -49,18 +49,18 @@ class Export_Import_Admin {
         $this->render_type_selector();
         $this->render_selection_fields();
 
-        echo '<button type="submit" class="button button-primary">Export</button>';
+        echo '<button type="submit" class="button button-primary">' . esc_html__('Export', MKSDDN_MC_TEXT_DOMAIN) . '</button>';
         echo '</form>';
     }
 
 
     private function render_type_selector(): void {
-        echo '<label for="export_type">Select type to export:</label><br>';
+        echo '<label for="export_type">' . esc_html__('Select type to export:', MKSDDN_MC_TEXT_DOMAIN) . '</label><br>';
         echo '<select id="export_type" name="export_type" onchange="toggleExportOptions()" required>';
-        echo '<option value="">Select type...</option>';
-        echo '<option value="page">Page</option>';
-        echo '<option value="options_page">Options Page</option>';
-        echo '<option value="forms">Form</option>';
+        echo '<option value="">' . esc_html__('Select type...', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
+        echo '<option value="page">' . esc_html__('Page', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
+        echo '<option value="options_page">' . esc_html__('Options Page', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
+        echo '<option value="forms">' . esc_html__('Form', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
         echo '</select><br><br>';
     }
 
@@ -68,9 +68,9 @@ class Export_Import_Admin {
     private function render_selection_fields(): void {
         // Page selection
         echo '<div id="page_selection" style="display:none;">';
-        echo '<label for="export_page_id">Select a page to export:</label><br>';
+        echo '<label for="export_page_id">' . esc_html__('Select a page to export:', MKSDDN_MC_TEXT_DOMAIN) . '</label><br>';
         echo '<select id="export_page_id" name="page_id">';
-        echo '<option value="">Select page...</option>';
+        echo '<option value="">' . esc_html__('Select page...', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
         foreach (get_pages() as $page) {
             echo '<option value="' . esc_attr($page->ID) . '">' . esc_html($page->post_title) . '</option>';
         }
@@ -80,10 +80,10 @@ class Export_Import_Admin {
 
         // Options Page selection
         echo '<div id="options_page_selection" style="display:none;">';
-        echo '<label for="export_options_page_slug">Select an options page to export:</label><br>';
+        echo '<label for="export_options_page_slug">' . esc_html__('Select an options page to export:', MKSDDN_MC_TEXT_DOMAIN) . '</label><br>';
         $options_helper = new Options_Helper();
         echo '<select id="export_options_page_slug" name="options_page_slug">';
-        echo '<option value="">Select options page...</option>';
+        echo '<option value="">' . esc_html__('Select options page...', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
         foreach ($options_helper->get_all_options_pages() as $page) {
             $title = $page['page_title'] ?? $page['menu_title'] ?? ucfirst(str_replace('-', ' ', $page['menu_slug']));
             echo '<option value="' . esc_attr($page['menu_slug']) . '">' . esc_html($title) . '</option>';
@@ -94,9 +94,9 @@ class Export_Import_Admin {
 
         // Forms selection
         echo '<div id="forms_selection" style="display:none;">';
-        echo '<label for="export_form_id">Select a form to export:</label><br>';
+        echo '<label for="export_form_id">' . esc_html__('Select a form to export:', MKSDDN_MC_TEXT_DOMAIN) . '</label><br>';
         echo '<select id="export_form_id" name="form_id">';
-        echo '<option value="">Select form...</option>';
+        echo '<option value="">' . esc_html__('Select form...', MKSDDN_MC_TEXT_DOMAIN) . '</option>';
         foreach ($this->get_forms() as $form) {
             echo '<option value="' . esc_attr($form->ID) . '">' . esc_html($form->post_title) . '</option>';
         }
@@ -118,31 +118,47 @@ class Export_Import_Admin {
 
 
     private function render_import_form(): void {
-        echo '<h2>Import</h2>';
+        echo '<h2>' . esc_html__('Import', MKSDDN_MC_TEXT_DOMAIN) . '</h2>';
         echo '<form method="post" enctype="multipart/form-data">';
         wp_nonce_field('import_single_page_nonce');
 
-        echo '<label for="import_file">Upload JSON file:</label><br>';
+        echo '<label for="import_file">' . esc_html__('Upload JSON file:', MKSDDN_MC_TEXT_DOMAIN) . '</label><br>';
         echo '<input type="file" id="import_file" name="import_file" accept=".json" required><br><br>';
 
-        echo '<button type="submit" class="button button-primary">Import</button>';
+        echo '<button type="submit" class="button button-primary">' . esc_html__('Import', MKSDDN_MC_TEXT_DOMAIN) . '</button>';
         echo '</form>';
     }
 
 
     private function handle_import(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !check_admin_referer('import_single_page_nonce')) {
             return;
         }
 
         if (!isset($_FILES['import_file']) || $_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
-            $this->show_error('Failed to upload file.');
+            $this->show_error(esc_html__('Failed to upload file.', MKSDDN_MC_TEXT_DOMAIN));
             return;
         }
 
         $file = $_FILES['import_file']['tmp_name'];
-        if (mime_content_type($file) !== 'application/json') {
-            $this->show_error('Invalid file type.');
+        $filename = (string)($_FILES['import_file']['name'] ?? '');
+        $size = (int)($_FILES['import_file']['size'] ?? 0);
+
+        if ($size <= 0 || $size > 10 * 1024 * 1024) {
+            $this->show_error(esc_html__('Invalid file size. Max 10MB.', MKSDDN_MC_TEXT_DOMAIN));
+            return;
+        }
+
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $mime = function_exists('mime_content_type') ? mime_content_type($file) : '';
+        $allowed_mimes = ['application/json', 'text/plain'];
+
+        if ($ext !== 'json' || ($mime !== '' && !in_array($mime, $allowed_mimes, true))) {
+            $this->show_error(esc_html__('Invalid file type.', MKSDDN_MC_TEXT_DOMAIN));
             return;
         }
 
@@ -150,7 +166,7 @@ class Export_Import_Admin {
         $data = json_decode($json, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->show_error('Invalid JSON file.');
+            $this->show_error(esc_html__('Invalid JSON file.', MKSDDN_MC_TEXT_DOMAIN));
             return;
         }
 
@@ -159,9 +175,9 @@ class Export_Import_Admin {
 
         if ($result) {
             $type = $data['type'] ?? 'page';
-            $this->show_success(sprintf('%s imported successfully!', ucfirst((string) $type)));
+            $this->show_success(sprintf(esc_html__('%s imported successfully!', MKSDDN_MC_TEXT_DOMAIN), ucfirst((string) $type)));
         } else {
-            $this->show_error('Failed to import content.');
+            $this->show_error(esc_html__('Failed to import content.', MKSDDN_MC_TEXT_DOMAIN));
         }
     }
 
@@ -180,12 +196,12 @@ class Export_Import_Admin {
 
 
     private function show_success(string $message): void {
-        echo '<div class="updated"><p>' . esc_html__($message, 'mksddn-migrate-content') . '</p></div>';
+        echo '<div class="updated"><p>' . esc_html($message) . '</p></div>';
     }
 
 
     private function show_error(string $message): void {
-        echo '<div class="error"><p>' . esc_html__($message, 'mksddn-migrate-content') . '</p></div>';
+        echo '<div class="error"><p>' . esc_html($message) . '</p></div>';
     }
 
 
@@ -216,8 +232,12 @@ class Export_Import_Admin {
 
 
     public function handle_export(): void {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('Sorry, you are not allowed to export.', MKSDDN_MC_TEXT_DOMAIN));
+        }
+
         if (!check_admin_referer('export_single_page_nonce')) {
-            wp_die('Invalid request');
+            wp_die(esc_html__('Invalid request', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $export_handler = new Export_Handler();

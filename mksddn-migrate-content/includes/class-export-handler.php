@@ -10,10 +10,10 @@ class Export_Handler {
 
 
     public function export_single_page(): void {
-        $export_type = sanitize_text_field($_POST['export_type'] ?? '');
+        $export_type = sanitize_key($_POST['export_type'] ?? '');
 
         if (!isset(self::EXPORT_TYPES[$export_type])) {
-            wp_die(esc_html__('Invalid export type.', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid export type.', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $method = self::EXPORT_TYPES[$export_type];
@@ -22,9 +22,9 @@ class Export_Handler {
 
 
     private function export_options_page(): void {
-        $options_page_slug = sanitize_text_field($_POST['options_page_slug'] ?? '');
+        $options_page_slug = sanitize_key($_POST['options_page_slug'] ?? '');
         if (empty($options_page_slug)) {
-            wp_die(esc_html__('Invalid options page slug.', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid options page slug.', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $options_helper = new Options_Helper();
@@ -32,7 +32,7 @@ class Export_Handler {
         $target_page = $this->find_options_page($options_pages, $options_page_slug);
 
         if (!$target_page) {
-            wp_die(esc_html__('Invalid options page slug.', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid options page slug.', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $data = $this->prepare_options_page_data($target_page);
@@ -42,14 +42,14 @@ class Export_Handler {
 
 
     private function export_page(): void {
-        $page_id = intval($_POST['page_id'] ?? 0);
+        $page_id = absint($_POST['page_id'] ?? 0);
         if ($page_id === 0) {
-            wp_die(esc_html__('Invalid request', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid request', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $page = get_post($page_id);
         if (!$page || $page->post_type !== 'page') {
-            wp_die(esc_html__('Invalid page ID.', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid page ID.', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $data = $this->prepare_page_data($page);
@@ -59,14 +59,14 @@ class Export_Handler {
 
 
     private function export_form(): void {
-        $form_id = intval($_POST['form_id'] ?? 0);
+        $form_id = absint($_POST['form_id'] ?? 0);
         if ($form_id === 0) {
-            wp_die(esc_html__('Invalid request', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid request', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $form = get_post($form_id);
         if (!$form || $form->post_type !== 'forms') {
-            wp_die(esc_html__('Invalid form ID.', 'mksddn-migrate-content'));
+            wp_die(esc_html__('Invalid form ID.', MKSDDN_MC_TEXT_DOMAIN));
         }
 
         $data = $this->prepare_form_data($form);
@@ -139,6 +139,7 @@ class Export_Handler {
         }
 
         // Set headers for file download
+        nocache_headers();
         header('Content-Type: application/json; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Content-Length: ' . strlen($json));

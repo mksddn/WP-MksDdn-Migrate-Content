@@ -25,6 +25,8 @@
 - `mksddn-migrate-content/includes/class-export-import-admin.php`
 - `mksddn-migrate-content/includes/class-import-handler.php`
 - `mksddn-migrate-content/includes/class-options-helper.php`
+- `mksddn-migrate-content/readme.txt`
+- `mksddn-migrate-content/uninstall.php`
 
 #### 3.3. Целевое разбиение модулей
 - Bootstrap плагина: главный файл плагина с заголовком, регистрацией хуков, загрузкой переводов.
@@ -33,6 +35,7 @@
 - `Import Handler`: валидация/санитизация входных данных, маппинг сущностей, транзакционность (насколько позволяет WP), отчёт об изменениях.
 - `Options Helper`: централизованная работа с Settings API и опциями плагина.
 - Локализация: загрузка текстового домена `mksddn-migrate-content`.
+ - Локализация: загрузка текстового домена `mksddn-migrate-content` (константа `MKSDDN_MC_TEXT_DOMAIN`).
 
 #### 3.4. Потоки данных
 - Export: админ-форма → проверка прав и nonce → `Export Handler` → отдача файла (JSON) или скачивание.
@@ -58,6 +61,7 @@
 - Разработка в GitHub: весь проект с документацией.
 - Публикация в WordPress.org (SVN): только содержимое `mksddn-migrate-content/` (trunk/tags/assets).
 - Семантическое версионирование, `readme.txt` с шорт-дескрипшеном, баннерами/иконками в `/assets/` для каталога.
+ - Локализации: каталог `languages/` внутри плагина, загрузка через `load_plugin_textdomain`.
 
 ### 7. Этапы разработки
 1) Инициализация проекта и документации (данный этап).

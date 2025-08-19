@@ -160,7 +160,7 @@ class Import_Handler {
     }
 
 
-    private function import_acf_fields(array $data, int $post_id): void {
+    private function import_acf_fields(array $data, int|string $post_id): void {
         if (!function_exists('update_field') || !isset($data['acf_fields'])) {
             return;
         }
