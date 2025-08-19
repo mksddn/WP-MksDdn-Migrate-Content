@@ -4,8 +4,8 @@ class Export_Import_Admin {
 
 
     public function __construct() {
-        add_action('admin_menu', $this->add_admin_menu(...));
-        add_action('admin_post_export_single_page', $this->handle_export(...));
+        add_action('admin_menu', [$this, 'add_admin_menu']);
+        add_action('admin_post_export_single_page', [$this, 'handle_export']);
     }
 
 
@@ -14,7 +14,7 @@ class Export_Import_Admin {
             'Export and Import',
             'Export & Import',
             'manage_options',
-            'export-import-single-page',
+            'mksddn-migrate-content',
             $this->render_admin_page(...),
             'dashicons-download',
             20
@@ -180,12 +180,12 @@ class Export_Import_Admin {
 
 
     private function show_success(string $message): void {
-        echo '<div class="updated"><p>' . esc_html__($message, 'export-import-single-page') . '</p></div>';
+        echo '<div class="updated"><p>' . esc_html__($message, 'mksddn-migrate-content') . '</p></div>';
     }
 
 
     private function show_error(string $message): void {
-        echo '<div class="error"><p>' . esc_html__($message, 'export-import-single-page') . '</p></div>';
+        echo '<div class="error"><p>' . esc_html__($message, 'mksddn-migrate-content') . '</p></div>';
     }
 
 

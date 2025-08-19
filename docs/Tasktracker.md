@@ -27,6 +27,8 @@
   - [x] Добавить заголовок плагина и `load_plugin_textdomain`
   - [x] Зарегистрировать активацию/деактивацию
   - [x] Удалить заголовок из `export-import-single-page.php`
+  - [x] Переименовать `export-import-single-page.php` → `mksddn-migrate-content-core.php`
+  - [x] Обновить текстовый домен и slug меню на `mksddn-migrate-content`
   - [ ] Обновить `Project.md`
 - **Зависимости**: Документация
 

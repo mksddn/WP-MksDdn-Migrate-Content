@@ -13,7 +13,7 @@ class Export_Handler {
         $export_type = sanitize_text_field($_POST['export_type'] ?? '');
 
         if (!isset(self::EXPORT_TYPES[$export_type])) {
-            wp_die(esc_html__('Invalid export type.', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid export type.', 'mksddn-migrate-content'));
         }
 
         $method = self::EXPORT_TYPES[$export_type];
@@ -24,7 +24,7 @@ class Export_Handler {
     private function export_options_page(): void {
         $options_page_slug = sanitize_text_field($_POST['options_page_slug'] ?? '');
         if (empty($options_page_slug)) {
-            wp_die(esc_html__('Invalid options page slug.', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid options page slug.', 'mksddn-migrate-content'));
         }
 
         $options_helper = new Options_Helper();
@@ -32,7 +32,7 @@ class Export_Handler {
         $target_page = $this->find_options_page($options_pages, $options_page_slug);
 
         if (!$target_page) {
-            wp_die(esc_html__('Invalid options page slug.', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid options page slug.', 'mksddn-migrate-content'));
         }
 
         $data = $this->prepare_options_page_data($target_page);
@@ -44,12 +44,12 @@ class Export_Handler {
     private function export_page(): void {
         $page_id = intval($_POST['page_id'] ?? 0);
         if ($page_id === 0) {
-            wp_die(esc_html__('Invalid request', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid request', 'mksddn-migrate-content'));
         }
 
         $page = get_post($page_id);
         if (!$page || $page->post_type !== 'page') {
-            wp_die(esc_html__('Invalid page ID.', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid page ID.', 'mksddn-migrate-content'));
         }
 
         $data = $this->prepare_page_data($page);
@@ -61,12 +61,12 @@ class Export_Handler {
     private function export_form(): void {
         $form_id = intval($_POST['form_id'] ?? 0);
         if ($form_id === 0) {
-            wp_die(esc_html__('Invalid request', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid request', 'mksddn-migrate-content'));
         }
 
         $form = get_post($form_id);
         if (!$form || $form->post_type !== 'forms') {
-            wp_die(esc_html__('Invalid form ID.', 'export-import-single-page'));
+            wp_die(esc_html__('Invalid form ID.', 'mksddn-migrate-content'));
         }
 
         $data = $this->prepare_form_data($form);

@@ -23,10 +23,11 @@ define('MKSDDN_MC_VERSION', '1.0.0');
 define('MKSDDN_MC_FILE', __FILE__);
 define('MKSDDN_MC_DIR', plugin_dir_path(__FILE__));
 define('MKSDDN_MC_URL', plugin_dir_url(__FILE__));
+define('MKSDDN_MC_TEXT_DOMAIN', 'mksddn-migrate-content');
 
 // I18n
 add_action('plugins_loaded', function (): void {
-    load_plugin_textdomain('mksddn-migrate-content', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    load_plugin_textdomain(MKSDDN_MC_TEXT_DOMAIN, false, dirname(plugin_basename(__FILE__)) . '/languages');
 });
 
 // Requirements check
@@ -41,7 +42,7 @@ function mksddn_mc_meets_requirements(): bool {
 register_activation_hook(__FILE__, function (): void {
     if (!mksddn_mc_meets_requirements()) {
         deactivate_plugins(plugin_basename(__FILE__));
-        wp_die(esc_html__('MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+.', 'mksddn-migrate-content'));
+        wp_die(esc_html__('MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+.', MKSDDN_MC_TEXT_DOMAIN));
     }
 });
 
@@ -50,6 +51,6 @@ register_deactivation_hook(__FILE__, function (): void {
 });
 
 // Bootstrap existing functionality
-require_once MKSDDN_MC_DIR . 'export-import-single-page.php';
+require_once MKSDDN_MC_DIR . 'mksddn-migrate-content-core.php';
 
 

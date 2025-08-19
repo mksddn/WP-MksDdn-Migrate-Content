@@ -20,7 +20,7 @@
 - Директория плагина: `mksddn-migrate-content/` — единственная директория, публикуемая в WordPress.org SVN.
 
 #### 3.2. Текущие файлы плагина
-- `mksddn-migrate-content/export-import-single-page.php`
+- `mksddn-migrate-content/mksddn-migrate-content-core.php`
 - `mksddn-migrate-content/includes/class-export-handler.php`
 - `mksddn-migrate-content/includes/class-export-import-admin.php`
 - `mksddn-migrate-content/includes/class-import-handler.php`
