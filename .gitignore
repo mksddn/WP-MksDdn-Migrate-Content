@@ -1,0 +1,88 @@
+# WordPress плагин - MksDdn Forms Handler
+# Исключения для GitHub репозитория
+
+# Системные файлы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Временные файлы
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Логи
+*.log
+logs/
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.atom/
+.brackets.json
+
+# Node.js (если используется для сборки)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# PHP
+vendor/
+composer.lock
+.phpunit.result.cache
+
+# WordPress специфичные
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/backup-db/
+wp-content/backups/
+wp-content/blogs.dir/
+wp-content/upgrade/
+wp-content/uploads/
+wp-content/mu-plugins/
+wp-content/wp-cache-config.php
+
+# Плагин специфичные
+# Исключаем файлы разработки, но оставляем структуру плагина
+mksddn-forms-handler/tests/coverage/
+mksddn-forms-handler/tests/reports/
+mksddn-forms-handler/assets/build/
+mksddn-forms-handler/assets/dist/
+
+# Конфигурационные файлы с секретами
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Временные файлы плагина
+mksddn-forms-handler/temp/
+mksddn-forms-handler/cache/
+
+# Файлы сборки (если используются)
+*.zip
+*.tar.gz
+build/
+dist/
+
+# Документация разработки (оставляем только финальную)
+docs/drafts/
+docs/temp/
+*.md.bak
+
+# Git
+.git/
+.gitignore.bak 
