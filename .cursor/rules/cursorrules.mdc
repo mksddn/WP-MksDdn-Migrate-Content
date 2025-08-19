@@ -1,3 +1,27 @@
+MksDdn Migrate Content — Cursor Rules
+
+1) Перед началом любой операции:
+   - Проверить актуальность `docs/Project.md` и требований безопасности/производительности.
+   - Свериться с `docs/Tasktracker.md` (статусы, приоритеты) и `docs/qa.md` (открытые вопросы).
+   - Соблюдать принципы SOLID, KISS, DRY и WordPress Coding Standards.
+
+2) Перед изменениями кода плагина:
+   - Убедиться, что изменения не ломают текущую функциональность.
+   - Предусмотреть i18n, escaping, sanitization, capability checks.
+   - Не оставлять неиспользуемый код и лишние комментарии. Все комментарии в коде — на английском языке.
+
+3) После изменений:
+   - Обновить `docs/Project.md` при архитектурных сдвигах.
+   - Отметить прогресс в `docs/Tasktracker.md`.
+   - Зафиксировать наблюдения/решения в `docs/Diary.md`.
+   - Прогнать linters и WP Plugin Check (PCP), устранить замечания.
+
+4) Публикация:
+   - В SVN отправляется только содержимое `mksddn-migrate-content/`.
+   - Полный проект (с документацией) хранится на GitHub.
+
+Справочник: Plugin Handbook — https://developer.wordpress.org/plugins/
+
 ---
 alwaysApply: true
 ---
