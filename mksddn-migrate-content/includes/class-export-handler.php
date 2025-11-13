@@ -1,208 +1,324 @@
 <?php
 /**
- * Export handler.
+ * Export handler class.
  *
  * @package MksDdn_Migrate_Content
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
- * Handles export operations for pages, options pages and forms.
+ * Export handler class.
  */
-class Export_Handler {
-
-	private const EXPORT_TYPES = array(
-		'page'         => 'export_page',
-		'options_page' => 'export_options_page',
-		'forms'        => 'export_form',
-	);
-
+class MksDdn_MC_Export_Handler {
 
 	/**
-	 * Handle export dispatch.
-	 */
-	public function export_single_page(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$export_type = sanitize_key( $_POST['export_type'] ?? '' );
-
-		if ( ! isset( self::EXPORT_TYPES[ $export_type ] ) ) {
-			wp_die( esc_html__( 'Invalid export type.', 'mksddn-migrate-content' ) );
-		}
-
-		$method = self::EXPORT_TYPES[ $export_type ];
-		$this->$method();
-	}
-
-
-	/**
-	 * Export options page via ACF.
+	 * Export type: full site.
 	 *
-	 * @return void
+	 * @var string
 	 */
-	private function export_options_page(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$options_page_slug = sanitize_key( $_POST['options_page_slug'] ?? '' );
-		if ( '' === $options_page_slug ) {
-			wp_die( esc_html__( 'Invalid options page slug.', 'mksddn-migrate-content' ) );
-		}
-
-		$options_helper = new Options_Helper();
-		$options_pages  = $options_helper->get_all_options_pages();
-		$target_page    = $this->find_options_page( $options_pages, $options_page_slug );
-
-		if ( ! $target_page ) {
-			wp_die( esc_html__( 'Invalid options page slug.', 'mksddn-migrate-content' ) );
-		}
-
-		$data     = $this->prepare_options_page_data( $target_page );
-		$filename = 'options-page-' . $options_page_slug . '.json';
-		$this->download_json( $data, $filename );
-	}
-
+	const TYPE_FULL = 'full';
 
 	/**
-	 * Export a single page.
+	 * Export type: specific posts/pages.
 	 *
-	 * @return void
+	 * @var string
 	 */
-	private function export_page(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$page_id = absint( $_POST['page_id'] ?? 0 );
-		if ( 0 === $page_id ) {
-			wp_die( esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
-		}
-
-		$page = get_post( $page_id );
-		if ( ! $page || 'page' !== $page->post_type ) {
-			wp_die( esc_html__( 'Invalid page ID.', 'mksddn-migrate-content' ) );
-		}
-
-		$data     = $this->prepare_page_data( $page );
-		$filename = 'page-' . $page_id . '.json';
-		$this->download_json( $data, $filename );
-	}
-
+	const TYPE_SELECTIVE = 'selective';
 
 	/**
-	 * Export a form.
+	 * Export data.
 	 *
-	 * @return void
+	 * @param string $type Export type.
+	 * @param array  $args Export arguments.
+	 * @return array|WP_Error
 	 */
-	private function export_form(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$form_id = absint( $_POST['form_id'] ?? 0 );
-		if ( 0 === $form_id ) {
-			wp_die( esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
+	public function export( $type = self::TYPE_FULL, $args = array() ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new WP_Error( 'permission_denied', __( 'Permission denied.', 'mksddn-migrate-content' ) );
 		}
 
-		$form = get_post( $form_id );
-		if ( ! $form || 'forms' !== $form->post_type ) {
-			wp_die( esc_html__( 'Invalid form ID.', 'mksddn-migrate-content' ) );
+		switch ( $type ) {
+			case self::TYPE_FULL:
+				return $this->export_full_site( $args );
+			case self::TYPE_SELECTIVE:
+				return $this->export_selective( $args );
+			default:
+				return new WP_Error( 'invalid_type', __( 'Invalid export type.', 'mksddn-migrate-content' ) );
 		}
-
-		$data     = $this->prepare_form_data( $form );
-		$filename = 'form-' . $form_id . '.json';
-		$this->download_json( $data, $filename );
 	}
 
 	/**
-	 * Find options page by slug.
+	 * Export full site.
 	 *
-	 * @param array  $options_pages Options page list.
-	 * @param string $slug          Options page slug.
-	 * @return array|null
+	 * @param array $args Export arguments.
+	 * @return array|WP_Error
 	 */
-	private function find_options_page( array $options_pages, string $slug ): ?array {
-		foreach ( $options_pages as $page ) {
-			if ( $page['menu_slug'] === $slug ) {
-				return $page;
+	private function export_full_site( $args = array() ) {
+		$export_data = array(
+			'version'     => MKSDDN_MC_VERSION,
+			'type'        => self::TYPE_FULL,
+			'timestamp'   => current_time( 'mysql' ),
+			'site_url'    => get_site_url(),
+			'home_url'    => get_home_url(),
+			'database'    => $this->export_database(),
+			'plugins'     => $this->export_plugins(),
+			'themes'      => $this->export_themes(),
+			'uploads'     => $this->export_uploads_info(),
+			'options'     => $this->export_options(),
+		);
+
+		return $export_data;
+	}
+
+	/**
+	 * Export selective content (posts/pages by slug).
+	 *
+	 * @param array $args Export arguments (post_types, slugs).
+	 * @return array|WP_Error
+	 */
+	private function export_selective( $args = array() ) {
+		$post_types = isset( $args['post_types'] ) ? $args['post_types'] : array( 'post', 'page' );
+		$slugs      = isset( $args['slugs'] ) ? $args['slugs'] : array();
+
+		if ( empty( $slugs ) ) {
+			return new WP_Error( 'no_slugs', __( 'No slugs provided for selective export.', 'mksddn-migrate-content' ) );
+		}
+
+		$export_data = array(
+			'version'     => MKSDDN_MC_VERSION,
+			'type'        => self::TYPE_SELECTIVE,
+			'timestamp'   => current_time( 'mysql' ),
+			'site_url'    => get_site_url(),
+			'home_url'    => get_home_url(),
+			'post_types'  => $post_types,
+			'slugs'       => $slugs,
+			'posts'       => $this->export_posts_by_slug( $post_types, $slugs ),
+			'media'       => $this->export_related_media( $post_types, $slugs ),
+			'options'     => $this->export_options(),
+		);
+
+		return $export_data;
+	}
+
+	/**
+	 * Export database content.
+	 *
+	 * @return array
+	 */
+	private function export_database() {
+		global $wpdb;
+
+		$tables = array();
+		$db_tables = $wpdb->get_results( 'SHOW TABLES', ARRAY_N );
+
+		foreach ( $db_tables as $table ) {
+			$table_name = $table[0];
+			$tables[ $table_name ] = $wpdb->get_results( "SELECT * FROM {$table_name}", ARRAY_A );
+		}
+
+		return $tables;
+	}
+
+	/**
+	 * Export plugins info.
+	 *
+	 * @return array
+	 */
+	private function export_plugins() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$plugins = get_plugins();
+		$active_plugins = get_option( 'active_plugins', array() );
+
+		return array(
+			'all'    => $plugins,
+			'active' => $active_plugins,
+		);
+	}
+
+	/**
+	 * Export themes info.
+	 *
+	 * @return array
+	 */
+	private function export_themes() {
+		$themes = wp_get_themes();
+		$active_theme = get_option( 'stylesheet' );
+
+		return array(
+			'all'    => array_keys( $themes ),
+			'active' => $active_theme,
+		);
+	}
+
+	/**
+	 * Export uploads directory info.
+	 *
+	 * @return array
+	 */
+	private function export_uploads_info() {
+		$upload_dir = wp_upload_dir();
+		return array(
+			'basedir' => $upload_dir['basedir'],
+			'baseurl' => $upload_dir['baseurl'],
+		);
+	}
+
+	/**
+	 * Export WordPress options.
+	 *
+	 * @return array
+	 */
+	private function export_options() {
+		global $wpdb;
+
+		$options = array();
+		$option_names = $wpdb->get_col(
+			"SELECT option_name FROM {$wpdb->options} WHERE option_name NOT LIKE '_transient%' AND option_name NOT LIKE '_site_transient%'"
+		);
+
+		foreach ( $option_names as $option_name ) {
+			$options[ $option_name ] = get_option( $option_name );
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Export posts by slug.
+	 *
+	 * @param array $post_types Post types.
+	 * @param array $slugs Slugs.
+	 * @return array
+	 */
+	private function export_posts_by_slug( $post_types, $slugs ) {
+		$posts = array();
+
+		foreach ( $post_types as $post_type ) {
+			foreach ( $slugs as $slug ) {
+				$post = get_page_by_path( $slug, OBJECT, $post_type );
+				if ( $post ) {
+					$posts[] = $this->export_post_data( $post );
+				}
 			}
 		}
 
-		return null;
+		return $posts;
 	}
 
 	/**
-	 * Prepare options page payload.
+	 * Export single post data.
 	 *
-	 * @param array $target_page Target page.
+	 * @param WP_Post $post Post object.
 	 * @return array
 	 */
-	private function prepare_options_page_data( array $target_page ): array {
-		return array(
-			'type'       => 'options_page',
-			'menu_slug'  => $target_page['menu_slug'],
-			'page_title' => $target_page['page_title'] ?? '',
-			'menu_title' => $target_page['menu_title'] ?? '',
-			'post_id'    => $target_page['post_id'] ?? '',
-			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $target_page['post_id'] ) : array(),
+	private function export_post_data( $post ) {
+		$post_data = array(
+			'ID'           => $post->ID,
+			'post_title'   => $post->post_title,
+			'post_name'    => $post->post_name,
+			'post_content' => $post->post_content,
+			'post_excerpt' => $post->post_excerpt,
+			'post_status'  => $post->post_status,
+			'post_type'    => $post->post_type,
+			'post_date'    => $post->post_date,
+			'post_author'  => $post->post_author,
+			'meta'         => get_post_meta( $post->ID ),
+			'taxonomies'   => $this->export_post_taxonomies( $post->ID ),
 		);
+
+		return $post_data;
 	}
 
 	/**
-	 * Prepare page payload.
+	 * Export post taxonomies.
 	 *
-	 * @param WP_Post $page Page.
+	 * @param int $post_id Post ID.
 	 * @return array
 	 */
-	private function prepare_page_data( WP_Post $page ): array {
-		return array(
-			'type'       => 'page',
-			'ID'         => $page->ID,
-			'title'      => $page->post_title,
-			'content'    => $page->post_content,
-			'excerpt'    => $page->post_excerpt,
-			'slug'       => $page->post_name,
-			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $page->ID ) : array(),
-			'meta'       => get_post_meta( $page->ID ),
-		);
-	}
+	private function export_post_taxonomies( $post_id ) {
+		$taxonomies = array();
+		$post_taxonomies = get_object_taxonomies( get_post_type( $post_id ) );
 
-	/**
-	 * Prepare form payload.
-	 *
-	 * @param WP_Post $form Form.
-	 * @return array
-	 */
-	private function prepare_form_data( WP_Post $form ): array {
-		$fields_config = get_post_meta( $form->ID, '_fields_config', true );
-
-		return array(
-			'type'          => 'forms',
-			'ID'            => $form->ID,
-			'title'         => $form->post_title,
-			'content'       => $form->post_content,
-			'excerpt'       => $form->post_excerpt,
-			'slug'          => $form->post_name,
-			'fields_config' => $fields_config,
-			'fields'        => json_decode( $fields_config, true ),
-			'acf_fields'    => function_exists( 'get_fields' ) ? get_fields( $form->ID ) : array(),
-			'meta'          => get_post_meta( $form->ID ),
-		);
-	}
-
-	/**
-	 * Stream JSON file to the browser.
-	 *
-	 * @param array  $data     Payload.
-	 * @param string $filename Filename.
-	 * @return void
-	 */
-	private function download_json( array $data, string $filename ): void {
-		$json = wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
-
-		// Clear all output buffering levels.
-		while ( ob_get_level() ) {
-			ob_end_clean();
+		foreach ( $post_taxonomies as $taxonomy ) {
+			$terms = wp_get_post_terms( $post_id, $taxonomy, array( 'fields' => 'all' ) );
+			if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+				$taxonomies[ $taxonomy ] = array();
+				foreach ( $terms as $term ) {
+					$taxonomies[ $taxonomy ][] = array(
+						'term_id'  => $term->term_id,
+						'name'     => $term->name,
+						'slug'     => $term->slug,
+						'taxonomy' => $term->taxonomy,
+					);
+				}
+			}
 		}
 
-		// Set headers for file download.
-		nocache_headers();
-		header( 'Content-Type: application/json; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
-		header( 'Content-Length: ' . strlen( $json ) );
+		return $taxonomies;
+	}
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Output is a JSON file payload.
-		echo $json;
-		exit;
+	/**
+	 * Export media files related to posts.
+	 *
+	 * @param array $post_types Post types.
+	 * @param array $slugs Slugs.
+	 * @return array
+	 */
+	private function export_related_media( $post_types, $slugs ) {
+		$media = array();
+
+		foreach ( $post_types as $post_type ) {
+			foreach ( $slugs as $slug ) {
+				$post = get_page_by_path( $slug, OBJECT, $post_type );
+				if ( $post ) {
+					$attachments = get_attached_media( 'image', $post->ID );
+					foreach ( $attachments as $attachment ) {
+						$media[] = array(
+							'ID'          => $attachment->ID,
+							'guid'        => $attachment->guid,
+							'post_title'  => $attachment->post_title,
+							'post_name'   => $attachment->post_name,
+							'file_path'   => get_attached_file( $attachment->ID ),
+							'meta'        => wp_get_attachment_metadata( $attachment->ID ),
+						);
+					}
+				}
+			}
+		}
+
+		return $media;
+	}
+
+	/**
+	 * Create export file.
+	 *
+	 * @param array $data Export data.
+	 * @return string|WP_Error File path or error.
+	 */
+	public function create_export_file( $data ) {
+		$upload_dir = wp_upload_dir();
+		$export_dir = $upload_dir['basedir'] . '/mksddn-mc-exports';
+
+		if ( ! file_exists( $export_dir ) ) {
+			wp_mkdir_p( $export_dir );
+		}
+
+		$filename = 'export-' . date( 'Y-m-d-H-i-s' ) . '-' . uniqid() . '.json';
+		$filepath = $export_dir . '/' . $filename;
+
+		$json_data = wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+
+		if ( false === file_put_contents( $filepath, $json_data ) ) {
+			return new WP_Error( 'file_write_error', __( 'Failed to write export file.', 'mksddn-migrate-content' ) );
+		}
+
+		return $filepath;
 	}
 }
+

@@ -1,68 +1,111 @@
 <?php
 /**
- * Options helper.
+ * Options helper class.
  *
  * @package MksDdn_Migrate_Content
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
- * Options helper service.
+ * Options helper class.
  */
-class Options_Helper {
+class MksDdn_MC_Options_Helper {
+
 	/**
-	 * Function to get all Options Pages through ACF.
+	 * Option name prefix.
 	 *
-	 * @return mixed[]
+	 * @var string
 	 */
-	public function get_all_options_pages(): array {
-		$options_pages = array();
+	const OPTION_PREFIX = 'mksddn_mc_';
 
-		// Through ACF Options Page API.
-		if ( function_exists( 'acf_options_page' ) ) {
-			try {
-				$acf_pages = acf_options_page()->get_pages();
-				if ( is_array( $acf_pages ) && array() !== $acf_pages ) {
-					$options_pages = $acf_pages;
-				}
-			} catch ( Exception $e ) {
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log is acceptable for admin-only context troubleshooting.
-				error_log( 'ACF Options Page API error: ' . $e->getMessage() );
+	/**
+	 * Initialize default options.
+	 */
+	public function init_default_options() {
+		$defaults = array(
+			'version'           => MKSDDN_MC_VERSION,
+			'max_upload_size'   => wp_max_upload_size(),
+			'export_history'    => array(),
+			'import_history'    => array(),
+		);
+
+		foreach ( $defaults as $key => $value ) {
+			$option_name = self::OPTION_PREFIX . $key;
+			if ( false === get_option( $option_name ) ) {
+				add_option( $option_name, $value );
 			}
 		}
-
-		// Through acf_get_options_pages (alternative method).
-		if ( array() === $options_pages && function_exists( 'acf_get_options_pages' ) ) {
-			$acf_pages = acf_get_options_pages();
-			if ( is_array( $acf_pages ) && array() !== $acf_pages ) {
-				$options_pages = $acf_pages;
-			}
-		}
-
-		return $options_pages;
 	}
 
 	/**
-	 * Function to format Options Page data.
+	 * Get option value.
 	 *
-	 * @param array $page Options Page data.
+	 * @param string $key Option key.
+	 * @param mixed  $default Default value.
+	 * @return mixed
 	 */
-	public function format_options_page_data( $page ): array {
-		if ( ! is_array( $page ) ) {
-			return array();
-		}
+	public static function get_option( $key, $default = false ) {
+		return get_option( self::OPTION_PREFIX . $key, $default );
+	}
 
-		$fields = array();
-		if ( function_exists( 'get_fields' ) ) {
-			$fields_raw = get_fields( $page['post_id'] ?? '' );
-			$fields     = is_array( $fields_raw ) ? $fields_raw : array();
-		}
+	/**
+	 * Update option value.
+	 *
+	 * @param string $key Option key.
+	 * @param mixed  $value Option value.
+	 * @return bool
+	 */
+	public static function update_option( $key, $value ) {
+		return update_option( self::OPTION_PREFIX . $key, $value );
+	}
 
-		return array(
-			'menu_slug'  => $page['menu_slug'] ?? '',
-			'page_title' => $page['page_title'] ?? '',
-			'menu_title' => $page['menu_title'] ?? '',
-			'post_id'    => $page['post_id'] ?? '',
-			'data'       => $fields,
+	/**
+	 * Delete option.
+	 *
+	 * @param string $key Option key.
+	 * @return bool
+	 */
+	public static function delete_option( $key ) {
+		return delete_option( self::OPTION_PREFIX . $key );
+	}
+
+	/**
+	 * Add history entry.
+	 *
+	 * @param string $type Type (export or import).
+	 * @param array  $data Entry data.
+	 * @return bool
+	 */
+	public static function add_history_entry( $type, $data ) {
+		$history_key = $type . '_history';
+		$history     = self::get_option( $history_key, array() );
+
+		$entry = array(
+			'id'        => uniqid( 'migrate_', true ),
+			'timestamp' => current_time( 'mysql' ),
+			'data'      => $data,
 		);
+
+		array_unshift( $history, $entry );
+		$history = array_slice( $history, 0, 50 );
+
+		return self::update_option( $history_key, $history );
+	}
+
+	/**
+	 * Get history entries.
+	 *
+	 * @param string $type Type (export or import).
+	 * @param int    $limit Limit.
+	 * @return array
+	 */
+	public static function get_history( $type, $limit = 20 ) {
+		$history_key = $type . '_history';
+		$history     = self::get_option( $history_key, array() );
+		return array_slice( $history, 0, $limit );
 	}
 }
+
