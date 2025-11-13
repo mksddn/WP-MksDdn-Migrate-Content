@@ -20,7 +20,11 @@
 		var $exportForm = $('#mksddn-mc-export-form');
 		var $exportType = $('#export-type');
 		var $selectiveOptions = $('#selective-options');
-		var $selectiveSlugs = $('#selective-slugs');
+		var $selectivePosts = $('#selective-posts');
+		var $loadPostsButton = $('#mksddn-mc-load-posts');
+		var $postsList = $('#mksddn-mc-posts-list');
+		var $postsContent = $('#mksddn-mc-posts-content');
+		var $postsLoading = $('#mksddn-mc-posts-loading');
 		var $exportButton = $('#mksddn-mc-export-button');
 		var $progress = $('#mksddn-mc-export-progress');
 		var $result = $('#mksddn-mc-export-result');
@@ -28,11 +32,76 @@
 		$exportType.on('change', function() {
 			if ($(this).val() === 'selective') {
 				$selectiveOptions.show();
-				$selectiveSlugs.show();
+				$selectivePosts.show();
 			} else {
 				$selectiveOptions.hide();
-				$selectiveSlugs.hide();
+				$selectivePosts.hide();
+				$postsList.hide();
 			}
+		});
+
+		$loadPostsButton.on('click', function() {
+			var postTypes = $('input[name="post_types[]"]:checked').map(function() {
+				return $(this).val();
+			}).get();
+
+			if (postTypes.length === 0) {
+				alert(mksddnMcAdmin.i18n.selectPostType || 'Please select at least one post type.');
+				return;
+			}
+
+			$postsLoading.show();
+			$postsContent.empty();
+			$postsList.show();
+
+			$.ajax({
+				url: mksddnMcAdmin.ajaxUrl,
+				type: 'POST',
+				data: {
+					action: 'mksddn_mc_get_posts',
+					nonce: mksddnMcAdmin.nonce,
+					post_types: postTypes
+				},
+				success: function(response) {
+					$postsLoading.hide();
+
+					if (response.success && response.data.posts.length > 0) {
+						var html = '<div style="margin-bottom: 10px;"><label><input type="checkbox" id="select-all-posts"> <strong>Select All</strong></label></div>';
+						html += '<div style="max-height: 350px; overflow-y: auto;">';
+
+						var groupedPosts = {};
+						response.data.posts.forEach(function(post) {
+							if (!groupedPosts[post.type]) {
+								groupedPosts[post.type] = [];
+							}
+							groupedPosts[post.type].push(post);
+						});
+
+						Object.keys(groupedPosts).forEach(function(postType) {
+							html += '<div style="margin-bottom: 15px;"><strong>' + escapeHtml(postType) + '</strong><br>';
+							groupedPosts[postType].forEach(function(post) {
+								html += '<label style="display: block; margin: 5px 0;"><input type="checkbox" name="selected_posts[]" value="' + escapeHtml(post.slug) + '" data-post-type="' + escapeHtml(post.type) + '"> ' + escapeHtml(post.title) + ' <span style="color: #666;">(' + escapeHtml(post.slug) + ')</span></label>';
+							});
+							html += '</div>';
+						});
+
+						html += '</div>';
+						$postsContent.html(html);
+
+						$('#select-all-posts').on('change', function() {
+							$('input[name="selected_posts[]"]').prop('checked', $(this).prop('checked'));
+						});
+					} else {
+						var noPostsText = mksddnMcAdmin.i18n.noPostsFound || 'No posts found for selected post types.';
+						$postsContent.html('<p>' + noPostsText + '</p>');
+					}
+				},
+				error: function() {
+					$postsLoading.hide();
+					var errorText = mksddnMcAdmin.i18n.errorLoadingPosts || 'Error loading posts.';
+					$postsContent.html('<p style="color: red;">' + errorText + '</p>');
+				}
+			});
 		});
 
 		$exportForm.on('submit', function(e) {
@@ -46,14 +115,26 @@
 			};
 
 			if (exportType === 'selective') {
-				data.post_types = $('input[name="post_types[]"]:checked').map(function() {
-					return $(this).val();
-				}).get();
-				data.slugs = $('#post-slugs').val().split('\n').map(function(slug) {
-					return slug.trim();
-				}).filter(function(slug) {
-					return slug.length > 0;
+				var selectedPosts = $('input[name="selected_posts[]"]:checked');
+				if (selectedPosts.length === 0) {
+					alert(mksddnMcAdmin.i18n.selectPost || 'Please select at least one post to export.');
+					return;
+				}
+
+				var postTypes = [];
+				var slugs = [];
+
+				selectedPosts.each(function() {
+					var slug = $(this).val();
+					var postType = $(this).data('post-type');
+					slugs.push(slug);
+					if (postTypes.indexOf(postType) === -1) {
+						postTypes.push(postType);
+					}
 				});
+
+				data.post_types = postTypes;
+				data.slugs = slugs;
 			}
 
 			$exportButton.prop('disabled', true);
@@ -201,6 +282,20 @@
 		var $result = $('.mksddn-mc-export-result, .mksddn-mc-import-result');
 		$result.removeClass('success error').addClass(type);
 		$result.html(message).show();
+	}
+
+	/**
+	 * Escape HTML to prevent XSS.
+	 */
+	function escapeHtml(text) {
+		var map = {
+			'&': '&amp;',
+			'<': '&lt;',
+			'>': '&gt;',
+			'"': '&quot;',
+			"'": '&#039;'
+		};
+		return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
 	}
 
 })(jQuery);

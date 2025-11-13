@@ -106,3 +106,33 @@
 	margin-top: 10px;
 }
 
+.mksddn-mc-posts-list {
+	border: 1px solid #ddd;
+	padding: 10px;
+	max-height: 400px;
+	overflow-y: auto;
+	background: #fff;
+}
+
+.mksddn-mc-posts-list label {
+	display: block;
+	margin: 5px 0;
+	padding: 5px;
+	cursor: pointer;
+}
+
+.mksddn-mc-posts-list label:hover {
+	background-color: #f5f5f5;
+}
+
+.mksddn-mc-posts-list input[type="checkbox"] {
+	margin-right: 8px;
+}
+
+.mksddn-mc-posts-list strong {
+	display: block;
+	margin: 10px 0 5px 0;
+	padding-bottom: 5px;
+	border-bottom: 1px solid #eee;
+}
+

@@ -96,6 +96,7 @@ class MksDdn_Migrate_Content {
 		add_action( 'wp_ajax_mksddn_mc_export', array( $admin, 'handle_export_ajax' ) );
 		add_action( 'wp_ajax_mksddn_mc_import', array( $admin, 'handle_import_ajax' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_history', array( $admin, 'handle_get_history_ajax' ) );
+		add_action( 'wp_ajax_mksddn_mc_get_posts', array( $admin, 'handle_get_posts_ajax' ) );
 	}
 
 	/**

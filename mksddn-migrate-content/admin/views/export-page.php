@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<td>
 							<select id="export-type" name="export_type">
 								<option value="full"><?php esc_html_e( 'Full Site', 'mksddn-migrate-content' ); ?></option>
-								<option value="selective"><?php esc_html_e( 'Selective (by slug)', 'mksddn-migrate-content' ); ?></option>
+								<option value="selective"><?php esc_html_e( 'Selective', 'mksddn-migrate-content' ); ?></option>
 							</select>
 						</td>
 					</tr>
@@ -46,13 +46,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 							<?php endforeach; ?>
 						</td>
 					</tr>
-					<tr id="selective-slugs" style="display: none;">
+					<tr id="selective-posts" style="display: none;">
 						<th scope="row">
-							<label for="post-slugs"><?php esc_html_e( 'Post Slugs', 'mksddn-migrate-content' ); ?></label>
+							<label><?php esc_html_e( 'Select Posts', 'mksddn-migrate-content' ); ?></label>
 						</th>
 						<td>
-							<textarea id="post-slugs" name="slugs" rows="5" cols="50" placeholder="<?php esc_attr_e( 'Enter slugs separated by new lines', 'mksddn-migrate-content' ); ?>"></textarea>
-							<p class="description"><?php esc_html_e( 'Enter one slug per line', 'mksddn-migrate-content' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Select post types above and click "Load Posts" to see available posts.', 'mksddn-migrate-content' ); ?></p>
+							<button type="button" id="mksddn-mc-load-posts" class="button">
+								<?php esc_html_e( 'Load Posts', 'mksddn-migrate-content' ); ?>
+							</button>
+							<div id="mksddn-mc-posts-list" class="mksddn-mc-posts-list" style="display: none;">
+								<div id="mksddn-mc-posts-loading" style="display: none;">
+									<p><?php esc_html_e( 'Loading posts...', 'mksddn-migrate-content' ); ?></p>
+								</div>
+								<div id="mksddn-mc-posts-content"></div>
+							</div>
 						</td>
 					</tr>
 				</tbody>

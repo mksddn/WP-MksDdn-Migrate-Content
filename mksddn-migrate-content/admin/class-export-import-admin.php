@@ -99,12 +99,17 @@ class MksDdn_MC_Export_Import_Admin {
 				'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
 				'nonce'    => wp_create_nonce( 'mksddn_mc_admin_nonce' ),
 				'i18n'     => array(
-					'exporting'     => __( 'Exporting...', 'mksddn-migrate-content' ),
-					'importing'     => __( 'Importing...', 'mksddn-migrate-content' ),
-					'success'       => __( 'Success!', 'mksddn-migrate-content' ),
-					'error'         => __( 'Error occurred.', 'mksddn-migrate-content' ),
-					'selectFile'    => __( 'Please select a file.', 'mksddn-migrate-content' ),
-					'download'      => __( 'Download', 'mksddn-migrate-content' ),
+					'exporting'        => __( 'Exporting...', 'mksddn-migrate-content' ),
+					'importing'        => __( 'Importing...', 'mksddn-migrate-content' ),
+					'success'          => __( 'Success!', 'mksddn-migrate-content' ),
+					'error'            => __( 'Error occurred.', 'mksddn-migrate-content' ),
+					'selectFile'       => __( 'Please select a file.', 'mksddn-migrate-content' ),
+					'download'         => __( 'Download', 'mksddn-migrate-content' ),
+					'selectPostType'   => __( 'Please select at least one post type.', 'mksddn-migrate-content' ),
+					'selectPost'       => __( 'Please select at least one post to export.', 'mksddn-migrate-content' ),
+					'loadingPosts'     => __( 'Loading posts...', 'mksddn-migrate-content' ),
+					'noPostsFound'     => __( 'No posts found for selected post types.', 'mksddn-migrate-content' ),
+					'errorLoadingPosts' => __( 'Error loading posts.', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -287,6 +292,43 @@ class MksDdn_MC_Export_Import_Admin {
 		$history = MksDdn_MC_Options_Helper::get_history( $type, $limit );
 
 		wp_send_json_success( array( 'history' => $history ) );
+	}
+
+	/**
+	 * Handle get posts AJAX request.
+	 */
+	public function handle_get_posts_ajax() {
+		check_ajax_referer( 'mksddn_mc_admin_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'mksddn-migrate-content' ) ) );
+		}
+
+		$post_types = isset( $_POST['post_types'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['post_types'] ) ) : array();
+
+		if ( empty( $post_types ) ) {
+			wp_send_json_error( array( 'message' => __( 'No post types selected.', 'mksddn-migrate-content' ) ) );
+		}
+
+		$posts = get_posts( array(
+			'post_type'      => $post_types,
+			'posts_per_page' => -1,
+			'post_status'    => 'any',
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+		) );
+
+		$posts_data = array();
+		foreach ( $posts as $post ) {
+			$posts_data[] = array(
+				'ID'    => $post->ID,
+				'title' => $post->post_title,
+				'slug'  => $post->post_name,
+				'type'  => $post->post_type,
+			);
+		}
+
+		wp_send_json_success( array( 'posts' => $posts_data ) );
 	}
 }
 
