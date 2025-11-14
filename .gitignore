@@ -38,7 +38,7 @@ package-lock.json
 yarn.lock
 
 # PHP
-vendor/
+# vendor/
 composer.lock
 .phpunit.result.cache
 
@@ -86,3 +86,5 @@ docs/temp/
 # Git
 .git/
 .gitignore.bak 
+
+references/
