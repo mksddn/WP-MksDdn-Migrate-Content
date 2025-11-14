@@ -87,4 +87,6 @@ docs/temp/
 .git/
 .gitignore.bak 
 
+.cursor/
 references/
+tasktracker.md
