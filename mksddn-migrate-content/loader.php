@@ -54,6 +54,40 @@ function mksddn_mc_autoloader( $class_name ) {
 
 spl_autoload_register( 'mksddn_mc_autoloader' );
 
+// Load core filesystem classes
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-directory.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-file.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-file-htaccess.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-file-index.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-file-robots.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-file-webconfig.php';
+
+// Load core archiver classes
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-archiver.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-compressor.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-extractor.php';
+
+// Load core database classes
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-database.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-database-mysqli.php';
+
+// Load core iterator classes
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-recursive-directory-iterator.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-recursive-iterator-iterator.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-recursive-exclude-filter.php';
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-recursive-extension-filter.php';
+
+// Load core cron class
+require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-cron.php';
+
+// Load WP-CLI command class
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-wp-cli-command.php';
+}
+
+// Load model classes
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-template.php';
+
 // Load main controller
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-main-controller.php';
 
