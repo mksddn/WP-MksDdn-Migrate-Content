@@ -1,0 +1,38 @@
+/**
+ * Admin styles
+ *
+ * @package MksDdn_Migrate_Content
+ */
+
+.mksddn-mc-main-page {
+	margin-top: 20px;
+}
+
+.mksddn-mc-welcome {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	padding: 20px;
+	margin-bottom: 20px;
+}
+
+.mksddn-mc-actions {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 20px;
+}
+
+.mksddn-mc-action-card {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	padding: 20px;
+	text-align: center;
+}
+
+.mksddn-mc-action-card h3 {
+	margin-top: 0;
+}
+
+.mksddn-mc-action-card p {
+	color: #666;
+}
+
