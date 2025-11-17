@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	die( 'Direct access not allowed' );
 }
 
-if ( defined( 'WP_CLI' ) && WP_CLI ) {
+if ( defined( 'WP_CLI' ) && constant( 'WP_CLI' ) ) {
 	/**
 	 * WP-CLI command class
 	 */

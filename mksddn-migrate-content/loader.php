@@ -81,13 +81,16 @@ require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-recurs
 require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-cron.php';
 
 // Load WP-CLI command class
-if ( defined( 'WP_CLI' ) && WP_CLI ) {
+if ( defined( 'WP_CLI' ) && constant( 'WP_CLI' ) ) {
 	require_once MKSDDN_MC_CORE_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-wp-cli-command.php';
 }
 
 // Load model classes
 require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-template.php';
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-status.php';
 
-// Load main controller
+// Load controllers
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-main-controller.php';
+require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-export-controller.php';
+require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-status-controller.php';
 

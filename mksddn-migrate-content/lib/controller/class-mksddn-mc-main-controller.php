@@ -85,6 +85,11 @@ class MksDdn_MC_Main_Controller {
 
 		// Initialize storage
 		$this->init_storage();
+
+		// Register AJAX handlers
+		add_action( 'wp_ajax_mksddn_mc_export', array( 'MksDdn_MC_Export_Controller', 'export' ) );
+		add_action( 'wp_ajax_mksddn_mc_download', array( 'MksDdn_MC_Export_Controller', 'download' ) );
+		add_action( 'wp_ajax_mksddn_mc_status', array( 'MksDdn_MC_Status_Controller', 'status' ) );
 	}
 
 	/**
@@ -101,6 +106,15 @@ class MksDdn_MC_Main_Controller {
 			array( $this, 'render_main_page' ),
 			'dashicons-database-export',
 			80
+		);
+
+		add_submenu_page(
+			'mksddn-mc',
+			__( 'Export', 'mksddn-migrate-content' ),
+			__( 'Export', 'mksddn-migrate-content' ),
+			'manage_options',
+			'mksddn-mc-export',
+			array( 'MksDdn_MC_Export_Controller', 'index' )
 		);
 	}
 
