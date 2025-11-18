@@ -115,11 +115,9 @@ class ExportImportAdmin {
 	 */
 	private function render_type_selector(): void {
 		echo '<label for="export_type">' . esc_html__( 'Select type to export:', 'mksddn-migrate-content' ) . '</label><br>';
-		echo '<select id="export_type" name="export_type" onchange="toggleExportOptions()" required>';
-		echo '<option value="">' . esc_html__( 'Select type...', 'mksddn-migrate-content' ) . '</option>';
-		echo '<option value="page">' . esc_html__( 'Page', 'mksddn-migrate-content' ) . '</option>';
-		echo '<option value="options_page">' . esc_html__( 'Options Page', 'mksddn-migrate-content' ) . '</option>';
-		echo '<option value="forms">' . esc_html__( 'Form', 'mksddn-migrate-content' ) . '</option>';
+		echo '<select id="export_type" name="export_type" onchange="mksddnToggleType()" required>';
+		echo '<option value="page" selected>' . esc_html__( 'Page', 'mksddn-migrate-content' ) . '</option>';
+		echo '<option value="post">' . esc_html__( 'Post', 'mksddn-migrate-content' ) . '</option>';
 		echo '</select><br><br>';
 	}
 
@@ -127,8 +125,7 @@ class ExportImportAdmin {
 	 * Render selection fields.
 	 */
 	private function render_selection_fields(): void {
-		// Page selection.
-		echo '<div id="page_selection" style="display:none;">';
+		echo '<div id="page_selection">';
 		echo '<label for="export_page_id">' . esc_html__( 'Select a page to export:', 'mksddn-migrate-content' ) . '</label><br>';
 		echo '<select id="export_page_id" name="page_id">';
 		echo '<option value="">' . esc_html__( 'Select page...', 'mksddn-migrate-content' ) . '</option>';
@@ -139,27 +136,12 @@ class ExportImportAdmin {
 		echo '</select><br><br>';
 		echo '</div>';
 
-		// Options Page selection.
-		echo '<div id="options_page_selection" style="display:none;">';
-		echo '<label for="export_options_page_slug">' . esc_html__( 'Select an options page to export:', 'mksddn-migrate-content' ) . '</label><br>';
-		$options_helper = new OptionsHelper();
-		echo '<select id="export_options_page_slug" name="options_page_slug">';
-		echo '<option value="">' . esc_html__( 'Select options page...', 'mksddn-migrate-content' ) . '</option>';
-		foreach ( $options_helper->get_all_options_pages() as $page ) {
-			$title = $page['page_title'] ?? $page['menu_title'] ?? ucfirst( str_replace( '-', ' ', $page['menu_slug'] ) );
-			echo '<option value="' . esc_attr( $page['menu_slug'] ) . '">' . esc_html( $title ) . '</option>';
-		}
-
-		echo '</select><br><br>';
-		echo '</div>';
-
-		// Forms selection.
-		echo '<div id="forms_selection" style="display:none;">';
-		echo '<label for="export_form_id">' . esc_html__( 'Select a form to export:', 'mksddn-migrate-content' ) . '</label><br>';
-		echo '<select id="export_form_id" name="form_id">';
-		echo '<option value="">' . esc_html__( 'Select form...', 'mksddn-migrate-content' ) . '</option>';
-		foreach ( $this->get_forms() as $form ) {
-			echo '<option value="' . esc_attr( $form->ID ) . '">' . esc_html( $form->post_title ) . '</option>';
+		echo '<div id="post_selection" style="display:none;">';
+		echo '<label for="export_post_id">' . esc_html__( 'Select a post to export:', 'mksddn-migrate-content' ) . '</label><br>';
+		echo '<select id="export_post_id" name="post_id">';
+		echo '<option value="">' . esc_html__( 'Select post...', 'mksddn-migrate-content' ) . '</option>';
+		foreach ( get_posts( array( 'numberposts' => -1, 'post_type' => 'post', 'orderby' => 'title', 'order' => 'ASC', 'post_status' => 'publish' ) ) as $post ) {
+			echo '<option value="' . esc_attr( $post->ID ) . '">' . esc_html( $post->post_title ) . '</option>';
 		}
 
 		echo '</select><br><br>';
@@ -365,11 +347,7 @@ class ExportImportAdmin {
 	 * @return bool
 	 */
 	private function process_import( ImportHandler $import_handler, string $type, array $data ): bool {
-		return match ( $type ) {
-			'options_page' => $import_handler->import_options_page( $data ),
-			'forms' => $import_handler->import_form( $data ),
-			default => $import_handler->import_single_page( $data ),
-		};
+		return $import_handler->import_single_page( $data );
 	}
 
 	/**
@@ -411,26 +389,23 @@ class ExportImportAdmin {
 			}
 		})();
 
-        function toggleExportOptions() {
-            const exportType = document.getElementById("export_type").value;
-            const pageSelection = document.getElementById("page_selection");
-            const optionsPageSelection = document.getElementById("options_page_selection");
-            const formsSelection = document.getElementById("forms_selection");
-            
-            [pageSelection, optionsPageSelection, formsSelection].forEach(el => el.style.display = "none");
-            
-            switch(exportType) {
-                case "page":
-                    pageSelection.style.display = "block";
-                    break;
-                case "options_page":
-                    optionsPageSelection.style.display = "block";
-                    break;
-                case "forms":
-                    formsSelection.style.display = "block";
-                    break;
-            }
-        }
+		window.mksddnToggleType = function(){
+			const exportType = document.getElementById("export_type");
+			if(!exportType){return;}
+			const type = exportType.value;
+			const pageSelection = document.getElementById("page_selection");
+			const postSelection = document.getElementById("post_selection");
+
+			if(pageSelection){
+				pageSelection.style.display = (type === "post") ? "none" : "block";
+			}
+
+			if(postSelection){
+				postSelection.style.display = (type === "post") ? "block" : "none";
+			}
+		};
+
+		window.mksddnToggleType();
         </script>';
 	}
 

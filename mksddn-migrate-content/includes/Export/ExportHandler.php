@@ -8,7 +8,6 @@
 namespace Mksddn_MC\Export;
 
 use Mksddn_MC\Archive\Packer;
-use Mksddn_MC\Options\OptionsHelper;
 use Mksddn_MC\Media\AttachmentCollector;
 use Mksddn_MC\Media\AttachmentCollection;
 use WP_Error;
@@ -24,9 +23,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ExportHandler {
 
 	private const EXPORT_TYPES = array(
-		'page'         => 'export_page',
-		'options_page' => 'export_options_page',
-		'forms'        => 'export_form',
+		'page' => 'export_page',
+		'post' => 'export_page',
 	);
 
 	/**
@@ -73,50 +71,25 @@ class ExportHandler {
 
 
 	/**
-	 * Export options page via ACF.
-	 *
-	 * @return void
-	 */
-	private function export_options_page(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$options_page_slug = sanitize_key( $_POST['options_page_slug'] ?? '' );
-		if ( '' === $options_page_slug ) {
-			wp_die( esc_html__( 'Invalid options page slug.', 'mksddn-migrate-content' ) );
-		}
-
-		$options_helper = new OptionsHelper();
-		$options_pages  = $options_helper->get_all_options_pages();
-		$target_page    = $this->find_options_page( $options_pages, $options_page_slug );
-
-		if ( ! $target_page ) {
-			wp_die( esc_html__( 'Invalid options page slug.', 'mksddn-migrate-content' ) );
-		}
-
-		$data = $this->prepare_options_page_data( $target_page );
-		$this->deliver_payload( $data, 'options-page-' . $options_page_slug );
-	}
-
-
-	/**
 	 * Export a single page.
 	 *
 	 * @return void
 	 */
 	private function export_page(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$page_id = absint( $_POST['page_id'] ?? 0 );
-		if ( 0 === $page_id ) {
+		$target_id = $this->resolve_target_id();
+		if ( 0 === $target_id ) {
 			wp_die( esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
 		}
 
-		$page = get_post( $page_id );
-		if ( ! $page || 'page' !== $page->post_type ) {
-			wp_die( esc_html__( 'Invalid page ID.', 'mksddn-migrate-content' ) );
+		$post = get_post( $target_id );
+		if ( ! $post || ! in_array( $post->post_type, array( 'page', 'post' ), true ) ) {
+			wp_die( esc_html__( 'Invalid content ID.', 'mksddn-migrate-content' ) );
 		}
 
-		$media = $this->collect_media_for_post( $page );
-		$data  = $this->prepare_page_data( $page, $media );
-		$this->deliver_payload( $data, 'page-' . $page_id, $media );
+		$media = $this->collect_media_for_post( $post );
+		$data  = $this->prepare_post_data( $post, $media );
+		$this->deliver_payload( $data, $post->post_type . '-' . $target_id, $media );
 	}
 
 
@@ -143,64 +116,78 @@ class ExportHandler {
 	}
 
 	/**
-	 * Find options page by slug.
+	 * Prepare post/page payload.
 	 *
-	 * @param array  $options_pages Options page list.
-	 * @param string $slug          Options page slug.
-	 * @return array|null
-	 */
-	private function find_options_page( array $options_pages, string $slug ): ?array {
-		foreach ( $options_pages as $page ) {
-			if ( $page['menu_slug'] === $slug ) {
-				return $page;
-			}
-		}
-
-		return null;
-	}
-
-	/**
-	 * Prepare options page payload.
-	 *
-	 * @param array $target_page Target page.
-	 * @return array
-	 */
-	private function prepare_options_page_data( array $target_page ): array {
-		return array(
-			'type'       => 'options_page',
-			'menu_slug'  => $target_page['menu_slug'],
-			'page_title' => $target_page['page_title'] ?? '',
-			'menu_title' => $target_page['menu_title'] ?? '',
-			'post_id'    => $target_page['post_id'] ?? '',
-			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $target_page['post_id'] ) : array(),
-		);
-	}
-
-	/**
-	 * Prepare page payload.
-	 *
-	 * @param WP_Post                 $page  Page.
+	 * @param WP_Post                 $post  Post object.
 	 * @param AttachmentCollection|null $media Media bundle.
 	 * @return array
 	 */
-	private function prepare_page_data( WP_Post $page, ?AttachmentCollection $media = null ): array {
+	private function prepare_post_data( WP_Post $post, ?AttachmentCollection $media = null ): array {
 		$data = array(
-			'type'       => 'page',
-			'ID'         => $page->ID,
-			'title'      => $page->post_title,
-			'content'    => $page->post_content,
-			'excerpt'    => $page->post_excerpt,
-			'slug'       => $page->post_name,
-			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $page->ID ) : array(),
-			'meta'       => get_post_meta( $page->ID ),
-			'featured_media' => get_post_thumbnail_id( $page ),
+			'type'       => $post->post_type,
+			'ID'         => $post->ID,
+			'title'      => $post->post_title,
+			'content'    => $post->post_content,
+			'excerpt'    => $post->post_excerpt,
+			'slug'       => $post->post_name,
+			'status'     => $post->post_status,
+			'author'     => $post->post_author,
+			'date'       => $post->post_date_gmt,
+			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $post->ID ) : array(),
+			'meta'       => get_post_meta( $post->ID ),
+			'featured_media' => get_post_thumbnail_id( $post ),
 		);
+
+		if ( 'post' === $post->post_type ) {
+			$data['taxonomies'] = $this->collect_taxonomies( $post->ID );
+		}
 
 		if ( $media && $media->has_items() ) {
 			$data['_mksddn_media'] = $media->get_manifest();
 		}
 
 		return $data;
+	}
+	/**
+	 * Resolve target ID based on requested type.
+	 */
+	private function resolve_target_id(): int {
+		$type = sanitize_key( $_POST['export_type'] ?? 'page' );
+		return match ( $type ) {
+			'post' => absint( $_POST['post_id'] ?? 0 ),
+			default => absint( $_POST['page_id'] ?? 0 ),
+		};
+	}
+
+	/**
+	 * Collect taxonomy terms for posts.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array
+	 */
+	private function collect_taxonomies( int $post_id ): array {
+		$taxonomies = get_object_taxonomies( 'post', 'names' );
+		$result     = array();
+
+		foreach ( $taxonomies as $taxonomy ) {
+			$terms = wp_get_object_terms( $post_id, $taxonomy );
+			if ( is_wp_error( $terms ) || empty( $terms ) ) {
+				continue;
+			}
+
+			$result[ $taxonomy ] = array_map(
+				static function ( $term ) {
+					return array(
+						'slug'        => $term->slug,
+						'name'        => $term->name,
+						'description' => $term->description,
+					);
+				},
+				$terms
+			);
+		}
+
+		return $result;
 	}
 
 	/**
@@ -369,7 +356,7 @@ class ExportHandler {
 	 * @param string $export_type Export type.
 	 */
 	private function is_json_allowed( string $export_type ): bool {
-		$allowed_types = array( 'page', 'options_page', 'forms' );
+		$allowed_types = array( 'page', 'post', 'options_page', 'forms' );
 		/**
 		 * Filter list of export types that support JSON output.
 		 *

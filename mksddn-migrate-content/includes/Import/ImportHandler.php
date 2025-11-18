@@ -56,35 +56,23 @@ class ImportHandler {
 			return false;
 		}
 
-		$existing_page = get_page_by_path( $data['slug'], OBJECT, 'page' );
-		$page_data     = $this->prepare_page_data( $data );
+		$post_type = in_array( $data['type'] ?? 'page', array( 'post', 'page' ), true ) ? $data['type'] : 'page';
+		$existing  = get_page_by_path( $data['slug'], OBJECT, $post_type );
+		$post_data = $this->prepare_post_data( $data, $post_type );
 
-		$page_id = $existing_page ? $this->update_page( $existing_page, $page_data ) : $this->create_page( $page_data );
+		$post_id = $existing ? $this->update_post( $existing, $post_data ) : $this->create_post( $post_data );
 
-		if ( is_wp_error( $page_id ) ) {
+		if ( is_wp_error( $post_id ) ) {
 			return false;
 		}
 
-		$this->import_acf_fields( $data, $page_id );
-		$this->import_meta_data( $data, $page_id );
-		$this->restore_media( $data, $page_id );
-
-		return true;
-	}
-
-	/**
-	 * Imports ACF fields for an options page.
-	 *
-	 * @param array $data Data array containing 'menu_slug', 'acf_fields', and optionally 'post_id'.
-	 * @return bool True on success, false on failure.
-	 */
-	public function import_options_page( $data ): bool {
-		if ( ! $this->validate_options_page_data( $data ) ) {
-			return false;
+		if ( 'post' === $post_type ) {
+			$this->assign_taxonomies( $post_id, $data );
 		}
 
-		$post_id = sanitize_text_field( $data['post_id'] ?? 'option' );
 		$this->import_acf_fields( $data, $post_id );
+		$this->import_meta_data( $data, $post_id );
+		$this->restore_media( $data, $post_id );
 
 		return true;
 	}
@@ -181,14 +169,16 @@ class ImportHandler {
 	 * @param array $data Page payload.
 	 * @return array
 	 */
-	private function prepare_page_data( array $data ): array {
+	private function prepare_post_data( array $data, string $post_type ): array {
 		return array(
 			'post_title'   => sanitize_text_field( $data['title'] ),
 			'post_content' => wp_kses_post( $data['content'] ),
 			'post_excerpt' => sanitize_text_field( $data['excerpt'] ?? '' ),
 			'post_name'    => sanitize_title( $data['slug'] ),
-			'post_type'    => 'page',
-			'post_status'  => 'publish',
+			'post_type'    => $post_type,
+			'post_status'  => sanitize_key( $data['status'] ?? 'publish' ),
+			'post_author'  => absint( $data['author'] ?? get_current_user_id() ),
+			'post_date_gmt'=> isset( $data['date'] ) ? sanitize_text_field( $data['date'] ) : current_time( 'mysql', true ),
 		);
 	}
 
@@ -210,47 +200,76 @@ class ImportHandler {
 	}
 
 	/**
-	 * Update an existing page.
+	 * Update an existing post.
 	 *
-	 * @param WP_Post $existing_page Existing page.
-	 * @param array   $page_data     Data to update.
+	 * @param WP_Post $existing Existing post.
+	 * @param array   $post_data     Data to update.
 	 * @return int|WP_Error
 	 */
-	private function update_page( WP_Post $existing_page, array $page_data ): int|WP_Error {
-		$page_data['ID'] = $existing_page->ID;
-		return wp_update_post( $page_data );
+	private function update_post( WP_Post $existing, array $post_data ): int|WP_Error {
+		$post_data['ID'] = $existing->ID;
+		return wp_update_post( $post_data );
 	}
 
 	/**
-	 * Create a page.
+	 * Create a post/page.
 	 *
-	 * @param array $page_data Data to insert.
+	 * @param array $post_data Data to insert.
 	 * @return int|WP_Error
 	 */
-	private function create_page( array $page_data ): int|WP_Error {
-		return wp_insert_post( $page_data );
+	private function create_post( array $post_data ): int|WP_Error {
+		return wp_insert_post( $post_data );
 	}
 
-	/**
-	 * Update an existing form.
-	 *
-	 * @param WP_Post $existing_form Existing form.
-	 * @param array   $form_data     Data to update.
-	 * @return int|WP_Error
-	 */
 	private function update_form( WP_Post $existing_form, array $form_data ): int|WP_Error {
 		$form_data['ID'] = $existing_form->ID;
 		return wp_update_post( $form_data );
 	}
 
-	/**
-	 * Create a form.
-	 *
-	 * @param array $form_data Data to insert.
-	 * @return int|WP_Error
-	 */
 	private function create_form( array $form_data ): int|WP_Error {
 		return wp_insert_post( $form_data );
+	}
+	/**
+	 * Assign taxonomy terms for posts.
+	 *
+	 * @param int   $post_id Post ID.
+	 * @param array $data    Payload.
+	 */
+	private function assign_taxonomies( int $post_id, array $data ): void {
+		if ( empty( $data['taxonomies'] ) || ! is_array( $data['taxonomies'] ) ) {
+			return;
+		}
+
+		foreach ( $data['taxonomies'] as $taxonomy => $terms ) {
+			if ( ! taxonomy_exists( $taxonomy ) || ! is_array( $terms ) ) {
+				continue;
+			}
+
+			$term_ids = array();
+			foreach ( $terms as $term_data ) {
+				$term = wp_insert_term(
+					$term_data['name'] ?? '',
+					$taxonomy,
+					array(
+						'slug'        => $term_data['slug'] ?? '',
+						'description' => $term_data['description'] ?? '',
+					)
+				);
+
+				if ( is_wp_error( $term ) ) {
+					$existing = get_term_by( 'slug', $term_data['slug'] ?? '', $taxonomy );
+					if ( $existing ) {
+						$term_ids[] = (int) $existing->term_id;
+					}
+				} else {
+					$term_ids[] = (int) $term['term_id'];
+				}
+			}
+
+			if ( ! empty( $term_ids ) ) {
+				wp_set_object_terms( $post_id, $term_ids, $taxonomy );
+			}
+		}
 	}
 
 	/**
