@@ -87,6 +87,9 @@ docs/temp/
 .git/
 .gitignore.bak 
 
+
+/*
+!/mksddn-migrate-content
 .cursor/
-references/
 tasktracker.md
+mvp.md
