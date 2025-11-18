@@ -82,3 +82,48 @@
 	font-weight: 600;
 }
 
+.mksddn-mc-import-page {
+	margin-top: 20px;
+}
+
+.mksddn-mc-import-form {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	padding: 20px;
+}
+
+.mksddn-mc-upload-area {
+	border: 2px dashed #ccd0d4;
+	border-radius: 4px;
+	padding: 40px;
+	text-align: center;
+	background: #f9f9f9;
+	transition: all 0.3s ease;
+}
+
+.mksddn-mc-upload-area:hover {
+	border-color: #2271b1;
+	background: #f0f6fc;
+}
+
+.mksddn-mc-upload-area.dragover {
+	border-color: #2271b1;
+	background: #e8f4f8;
+}
+
+.mksddn-mc-upload-icon {
+	font-size: 48px;
+	margin-bottom: 10px;
+}
+
+.mksddn-mc-upload-text {
+	margin: 10px 0;
+	color: #666;
+}
+
+.mksddn-mc-upload-info {
+	margin-top: 20px;
+	font-size: 12px;
+	color: #999;
+}
+

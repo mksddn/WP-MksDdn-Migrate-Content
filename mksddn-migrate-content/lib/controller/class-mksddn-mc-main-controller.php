@@ -89,6 +89,7 @@ class MksDdn_MC_Main_Controller {
 		// Register AJAX handlers
 		add_action( 'wp_ajax_mksddn_mc_export', array( 'MksDdn_MC_Export_Controller', 'export' ) );
 		add_action( 'wp_ajax_mksddn_mc_download', array( 'MksDdn_MC_Export_Controller', 'download' ) );
+		add_action( 'wp_ajax_mksddn_mc_import', array( 'MksDdn_MC_Import_Controller', 'import' ) );
 		add_action( 'wp_ajax_mksddn_mc_status', array( 'MksDdn_MC_Status_Controller', 'status' ) );
 	}
 
@@ -115,6 +116,15 @@ class MksDdn_MC_Main_Controller {
 			'manage_options',
 			'mksddn-mc-export',
 			array( 'MksDdn_MC_Export_Controller', 'index' )
+		);
+
+		add_submenu_page(
+			'mksddn-mc',
+			__( 'Import', 'mksddn-migrate-content' ),
+			__( 'Import', 'mksddn-migrate-content' ),
+			'manage_options',
+			'mksddn-mc-import',
+			array( 'MksDdn_MC_Import_Controller', 'index' )
 		);
 	}
 
