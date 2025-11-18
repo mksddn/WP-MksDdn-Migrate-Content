@@ -78,6 +78,8 @@ class MksDdn_MC_Main_Controller {
 	 * @return void
 	 */
 	public function admin_init() {
+		// Display admin notices
+		add_action( 'admin_notices', array( 'MksDdn_MC_Notification', 'display' ) );
 		// Check user capabilities
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
@@ -90,6 +92,9 @@ class MksDdn_MC_Main_Controller {
 		add_action( 'wp_ajax_mksddn_mc_export', array( 'MksDdn_MC_Export_Controller', 'export' ) );
 		add_action( 'wp_ajax_mksddn_mc_download', array( 'MksDdn_MC_Export_Controller', 'download' ) );
 		add_action( 'wp_ajax_mksddn_mc_import', array( 'MksDdn_MC_Import_Controller', 'import' ) );
+		add_action( 'wp_ajax_mksddn_mc_backups_delete', array( 'MksDdn_MC_Backups_Controller', 'delete' ) );
+		add_action( 'wp_ajax_mksddn_mc_backups_download', array( 'MksDdn_MC_Backups_Controller', 'download' ) );
+		add_action( 'wp_ajax_mksddn_mc_settings_save', array( 'MksDdn_MC_Settings_Controller', 'save' ) );
 		add_action( 'wp_ajax_mksddn_mc_status', array( 'MksDdn_MC_Status_Controller', 'status' ) );
 	}
 
@@ -125,6 +130,24 @@ class MksDdn_MC_Main_Controller {
 			'manage_options',
 			'mksddn-mc-import',
 			array( 'MksDdn_MC_Import_Controller', 'index' )
+		);
+
+		add_submenu_page(
+			'mksddn-mc',
+			__( 'Backups', 'mksddn-migrate-content' ),
+			__( 'Backups', 'mksddn-migrate-content' ),
+			'manage_options',
+			'mksddn-mc-backups',
+			array( 'MksDdn_MC_Backups_Controller', 'index' )
+		);
+
+		add_submenu_page(
+			'mksddn-mc',
+			__( 'Settings', 'mksddn-migrate-content' ),
+			__( 'Settings', 'mksddn-migrate-content' ),
+			'manage_options',
+			'mksddn-mc-settings',
+			array( 'MksDdn_MC_Settings_Controller', 'index' )
 		);
 	}
 

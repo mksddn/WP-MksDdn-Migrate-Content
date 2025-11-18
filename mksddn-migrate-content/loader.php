@@ -88,10 +88,15 @@ if ( defined( 'WP_CLI' ) && constant( 'WP_CLI' ) ) {
 // Load model classes
 require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-template.php';
 require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-status.php';
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-backups.php';
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-settings.php';
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-notification.php';
 
 // Load controllers
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-main-controller.php';
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-export-controller.php';
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-import-controller.php';
+require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-backups-controller.php';
+require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-settings-controller.php';
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-status-controller.php';
 
