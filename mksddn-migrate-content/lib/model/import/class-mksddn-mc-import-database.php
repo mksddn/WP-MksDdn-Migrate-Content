@@ -42,6 +42,16 @@ class MksDdn_MC_Import_Database {
 			throw new Exception( __( 'Failed to read database file.', 'mksddn-migrate-content' ) );
 		}
 
+		// Replace URLs if needed
+		$settings = MksDdn_MC_Settings::get_all();
+		if ( isset( $params['package']['wordpress']['url'] ) && ! empty( $settings['import_replace_urls'] ) ) {
+			$old_url = $params['package']['wordpress']['url'];
+			$new_url = site_url();
+			if ( ! empty( $old_url ) && $old_url !== $new_url ) {
+				$sql_content = mksddn_mc_replace_urls( $sql_content, $old_url, $new_url );
+			}
+		}
+
 		// Process SQL queries
 		self::process_sql( $sql_content );
 

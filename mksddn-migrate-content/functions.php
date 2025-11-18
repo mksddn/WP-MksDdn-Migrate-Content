@@ -123,3 +123,182 @@ function mksddn_mc_allowed_html_tags() {
 	);
 }
 
+/**
+ * Replace URLs in content
+ *
+ * @param string $content Content to replace URLs in
+ * @param string $old_url Old URL
+ * @param string $new_url New URL
+ * @return string
+ */
+function mksddn_mc_replace_urls( $content, $old_url, $new_url ) {
+	if ( empty( $old_url ) || empty( $new_url ) || $old_url === $new_url ) {
+		return $content;
+	}
+
+	// Replace various URL formats
+	$replacements = array(
+		$old_url => $new_url,
+		str_replace( '/', '\/', $old_url ) => str_replace( '/', '\/', $new_url ),
+		urlencode( $old_url ) => urlencode( $new_url ),
+		rawurlencode( $old_url ) => rawurlencode( $new_url ),
+	);
+
+	foreach ( $replacements as $old => $new ) {
+		$content = str_replace( $old, $new, $content );
+	}
+
+	return $content;
+}
+
+/**
+ * Replace serialized URLs in content
+ *
+ * @param string $content Serialized content
+ * @param string $old_url Old URL
+ * @param string $new_url New URL
+ * @return string
+ */
+function mksddn_mc_replace_serialized_urls( $content, $old_url, $new_url ) {
+	if ( empty( $old_url ) || empty( $new_url ) || $old_url === $new_url ) {
+		return $content;
+	}
+
+	// Check if content is serialized
+	if ( ! is_serialized( $content ) ) {
+		return mksddn_mc_replace_urls( $content, $old_url, $new_url );
+	}
+
+	// Unserialize, replace, and reserialize
+	$data = unserialize( $content );
+	$data = mksddn_mc_replace_urls_recursive( $data, $old_url, $new_url );
+	return serialize( $data );
+}
+
+/**
+ * Replace URLs recursively in array or object
+ *
+ * @param mixed $data Data to process
+ * @param string $old_url Old URL
+ * @param string $new_url New URL
+ * @return mixed
+ */
+function mksddn_mc_replace_urls_recursive( $data, $old_url, $new_url ) {
+	if ( is_array( $data ) ) {
+		foreach ( $data as $key => $value ) {
+			$data[ $key ] = mksddn_mc_replace_urls_recursive( $value, $old_url, $new_url );
+		}
+	} elseif ( is_object( $data ) ) {
+		foreach ( $data as $key => $value ) {
+			$data->$key = mksddn_mc_replace_urls_recursive( $value, $old_url, $new_url );
+		}
+	} elseif ( is_string( $data ) ) {
+		$data = mksddn_mc_replace_urls( $data, $old_url, $new_url );
+	}
+
+	return $data;
+}
+
+/**
+ * Get table prefix
+ *
+ * @return string
+ */
+function mksddn_mc_table_prefix() {
+	global $wpdb;
+	return $wpdb->prefix;
+}
+
+/**
+ * Verify secret key
+ *
+ * @param string $secret_key Secret key
+ * @return bool
+ */
+function mksddn_mc_verify_secret_key( $secret_key ) {
+	$stored_key = get_option( MKSDDN_MC_SECRET_KEY );
+	if ( empty( $stored_key ) ) {
+		$stored_key = wp_generate_password( 32, false );
+		update_option( MKSDDN_MC_SECRET_KEY, $stored_key );
+	}
+
+	return hash_equals( $stored_key, $secret_key );
+}
+
+/**
+ * Get secret key
+ *
+ * @return string
+ */
+function mksddn_mc_get_secret_key() {
+	$secret_key = get_option( MKSDDN_MC_SECRET_KEY );
+	if ( empty( $secret_key ) ) {
+		$secret_key = wp_generate_password( 32, false );
+		update_option( MKSDDN_MC_SECRET_KEY, $secret_key );
+	}
+
+	return $secret_key;
+}
+
+/**
+ * Setup environment
+ *
+ * @return void
+ */
+function mksddn_mc_setup_environment() {
+	// Set time limit
+	if ( function_exists( 'set_time_limit' ) ) {
+		@set_time_limit( 0 );
+	}
+
+	// Set memory limit
+	if ( function_exists( 'ini_set' ) ) {
+		@ini_set( 'memory_limit', '256M' );
+	}
+
+	// Disable output buffering
+	if ( ob_get_level() ) {
+		@ob_end_clean();
+	}
+}
+
+/**
+ * Setup error handling
+ *
+ * @return void
+ */
+function mksddn_mc_setup_errors() {
+	// Disable error display
+	if ( function_exists( 'ini_set' ) ) {
+		@ini_set( 'display_errors', 0 );
+		@ini_set( 'log_errors', 1 );
+	}
+}
+
+/**
+ * Get filters for export
+ *
+ * @return array
+ */
+function mksddn_mc_get_filters() {
+	$settings = MksDdn_MC_Settings::get_all();
+	return array(
+		'exclude_files'       => $settings['exclude_files'],
+		'exclude_directories' => $settings['exclude_directories'],
+		'exclude_extensions'  => $settings['exclude_extensions'],
+		'exclude_tables'      => $settings['exclude_tables'],
+	);
+}
+
+/**
+ * Send JSON response
+ *
+ * @param array $data Response data
+ * @return void
+ */
+function mksddn_mc_json_response( $data ) {
+	header( 'Content-Type: application/json' );
+	echo wp_json_encode( $data );
+	exit;
+}
+
