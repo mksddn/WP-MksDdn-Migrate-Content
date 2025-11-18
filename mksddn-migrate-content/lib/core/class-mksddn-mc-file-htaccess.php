@@ -48,7 +48,15 @@ class MksDdn_MC_File_Htaccess {
 	 * @return string
 	 */
 	private static function get_default_content() {
-		return "# Deny access to all files\nOrder Deny,Allow\nDeny from all\n";
+		$content = "# Deny access to all files\n";
+		$content .= "<IfModule mod_authz_core.c>\n";
+		$content .= "  Require all denied\n";
+		$content .= "</IfModule>\n";
+		$content .= "<IfModule !mod_authz_core.c>\n";
+		$content .= "  Order Deny,Allow\n";
+		$content .= "  Deny from all\n";
+		$content .= "</IfModule>\n";
+		return $content;
 	}
 }
 

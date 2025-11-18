@@ -228,7 +228,7 @@ class MksDdn_MC_Main_Controller {
 	private function create_protection_files() {
 		// Create index.php in storage
 		if ( ! file_exists( MKSDDN_MC_STORAGE_INDEX_PHP ) ) {
-			file_put_contents( MKSDDN_MC_STORAGE_INDEX_PHP, '<?php // Silence is golden' );
+			MksDdn_MC_File_Index::create( MKSDDN_MC_STORAGE_PATH );
 		}
 
 		// Create index.html in storage
@@ -236,14 +236,24 @@ class MksDdn_MC_Main_Controller {
 			file_put_contents( MKSDDN_MC_STORAGE_INDEX_HTML, '' );
 		}
 
+		// Create .htaccess in storage (if Apache)
+		if ( ! file_exists( MKSDDN_MC_STORAGE_PATH . DIRECTORY_SEPARATOR . '.htaccess' ) ) {
+			MksDdn_MC_File_Htaccess::create( MKSDDN_MC_STORAGE_PATH );
+		}
+
 		// Create index.php in backups
 		if ( ! file_exists( MKSDDN_MC_BACKUPS_INDEX_PHP ) ) {
-			file_put_contents( MKSDDN_MC_BACKUPS_INDEX_PHP, '<?php // Silence is golden' );
+			MksDdn_MC_File_Index::create( MKSDDN_MC_BACKUPS_PATH );
 		}
 
 		// Create index.html in backups
 		if ( ! file_exists( MKSDDN_MC_BACKUPS_INDEX_HTML ) ) {
 			file_put_contents( MKSDDN_MC_BACKUPS_INDEX_HTML, '' );
+		}
+
+		// Create .htaccess in backups (if Apache)
+		if ( ! file_exists( MKSDDN_MC_BACKUPS_PATH . DIRECTORY_SEPARATOR . '.htaccess' ) ) {
+			MksDdn_MC_File_Htaccess::create( MKSDDN_MC_BACKUPS_PATH );
 		}
 	}
 }

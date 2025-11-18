@@ -61,12 +61,21 @@ class MksDdn_MC_Backups_Controller {
 		}
 
 		// Get archive filename
-		$archive = isset( $params['archive'] ) ? trim( $params['archive'] ) : '';
+		$archive = isset( $params['archive'] ) ? sanitize_file_name( trim( $params['archive'] ) ) : '';
 
 		if ( empty( $archive ) ) {
 			wp_send_json_error( array( 'message' => __( 'Archive filename is required.', 'mksddn-migrate-content' ) ) );
 			exit;
 		}
+
+		// Validate filename to prevent path traversal
+		if ( mksddn_mc_validate_file( $archive ) !== 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid archive filename.', 'mksddn-migrate-content' ) ) );
+			exit;
+		}
+
+		// Use basename to prevent path traversal
+		$archive = basename( $archive );
 
 		try {
 			MksDdn_MC_Backups::delete_file( $archive );
@@ -102,11 +111,19 @@ class MksDdn_MC_Backups_Controller {
 		}
 
 		// Get archive filename
-		$archive = isset( $params['archive'] ) ? trim( $params['archive'] ) : '';
+		$archive = isset( $params['archive'] ) ? sanitize_file_name( trim( $params['archive'] ) ) : '';
 
 		if ( empty( $archive ) ) {
 			wp_die( __( 'Archive filename is required.', 'mksddn-migrate-content' ) );
 		}
+
+		// Validate filename to prevent path traversal
+		if ( mksddn_mc_validate_file( $archive ) !== 0 ) {
+			wp_die( __( 'Invalid archive filename.', 'mksddn-migrate-content' ) );
+		}
+
+		// Use basename to prevent path traversal
+		$archive = basename( $archive );
 
 		try {
 			$file_path = MksDdn_MC_Backups::get_file_path( $archive );

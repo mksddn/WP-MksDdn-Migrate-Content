@@ -46,7 +46,10 @@ class MksDdn_MC_Import_Controller {
 
 		// Set params
 		if ( empty( $params ) ) {
-			$params = array_merge( $_GET, $_POST );
+			$params = array_merge(
+				array_map( 'sanitize_text_field', $_GET ),
+				array_map( 'sanitize_text_field', $_POST )
+			);
 			
 			// Try to get params from transient if available
 			$stored_params = get_transient( 'mksddn_mc_import_params' );

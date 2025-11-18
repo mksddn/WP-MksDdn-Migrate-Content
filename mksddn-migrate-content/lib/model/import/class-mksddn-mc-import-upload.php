@@ -50,6 +50,19 @@ class MksDdn_MC_Import_Upload {
 			throw new Exception( __( 'Invalid file type. Only .mksddn files are allowed.', 'mksddn-migrate-content' ) );
 		}
 
+		// Validate MIME type
+		$file_type = wp_check_filetype( $original_filename );
+		if ( empty( $file_type['ext'] ) || ! in_array( strtolower( $file_type['ext'] ), array( 'mksddn', 'migrate' ), true ) ) {
+			throw new Exception( __( 'Invalid file type. Only .mksddn files are allowed.', 'mksddn-migrate-content' ) );
+		}
+
+		// Check file size
+		$max_size = wp_max_upload_size();
+		$file_size = filesize( $upload_tmp_name );
+		if ( $file_size > $max_size ) {
+			throw new Exception( sprintf( __( 'File size exceeds maximum allowed size: %s', 'mksddn-migrate-content' ), size_format( $max_size ) ) );
+		}
+
 		// Set storage path
 		if ( empty( $params['storage'] ) ) {
 			$params['storage'] = 'import-' . time();

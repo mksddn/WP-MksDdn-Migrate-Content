@@ -70,7 +70,17 @@ function mksddn_mc_backup_path( $params ) {
  * @return int
  */
 function mksddn_mc_validate_file( $filename ) {
-	return preg_match( '/[<>:"|?*\x00]/', $filename );
+	// Check for invalid characters
+	if ( preg_match( '/[<>:"|?*\x00]/', $filename ) ) {
+		return 1;
+	}
+
+	// Check for path traversal attempts
+	if ( strpos( $filename, '..' ) !== false || strpos( $filename, '/' ) !== false || strpos( $filename, '\\' ) !== false ) {
+		return 1;
+	}
+
+	return 0;
 }
 
 /**

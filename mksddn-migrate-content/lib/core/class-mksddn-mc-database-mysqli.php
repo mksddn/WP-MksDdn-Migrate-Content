@@ -40,6 +40,8 @@ class MksDdn_MC_Database_MySQLi extends MksDdn_MC_Database {
 	 * @return string
 	 */
 	public function get_table_structure( $table_name ) {
+		// Escape table name to prevent SQL injection
+		$table_name = $this->escape( $table_name );
 		$result = $this->connection->query( "SHOW CREATE TABLE `{$table_name}`" );
 		if ( $result && $row = $result->fetch_assoc() ) {
 			return $row['Create Table'];
@@ -57,6 +59,10 @@ class MksDdn_MC_Database_MySQLi extends MksDdn_MC_Database {
 	 */
 	public function get_table_data( $table_name, $offset = 0, $limit = 1000 ) {
 		$rows = array();
+		// Escape table name and sanitize offset/limit to prevent SQL injection
+		$table_name = $this->escape( $table_name );
+		$offset = absint( $offset );
+		$limit = absint( $limit );
 		$query = "SELECT * FROM `{$table_name}` LIMIT {$limit} OFFSET {$offset}";
 		$result = $this->connection->query( $query );
 

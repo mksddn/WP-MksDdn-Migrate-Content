@@ -46,7 +46,10 @@ class MksDdn_MC_Export_Controller {
 
 		// Set params
 		if ( empty( $params ) ) {
-			$params = array_merge( $_GET, $_POST );
+			$params = array_merge(
+				array_map( 'sanitize_text_field', $_GET ),
+				array_map( 'sanitize_text_field', $_POST )
+			);
 		}
 
 		// Set priority
@@ -160,6 +163,13 @@ class MksDdn_MC_Export_Controller {
 			wp_die( __( 'Archive file not specified.', 'mksddn-migrate-content' ) );
 		}
 
+		// Validate filename to prevent path traversal
+		if ( mksddn_mc_validate_file( $archive ) !== 0 ) {
+			wp_die( __( 'Invalid archive filename.', 'mksddn-migrate-content' ) );
+		}
+
+		// Use basename to prevent path traversal
+		$archive = basename( $archive );
 		$archive_path = MKSDDN_MC_BACKUPS_PATH . DIRECTORY_SEPARATOR . $archive;
 
 		if ( ! file_exists( $archive_path ) ) {

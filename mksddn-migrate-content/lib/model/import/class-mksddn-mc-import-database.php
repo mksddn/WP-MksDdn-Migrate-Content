@@ -86,11 +86,17 @@ class MksDdn_MC_Import_Database {
 				continue;
 			}
 
+			// Skip potentially dangerous queries (DROP, TRUNCATE, DELETE without WHERE)
+			if ( preg_match( '/^\s*(DROP|TRUNCATE|DELETE\s+FROM\s+\w+\s*;?\s*$)/i', $query ) ) {
+				MksDdn_MC_Log::warning( sprintf( 'Skipped potentially dangerous query: %s', substr( $query, 0, 100 ) ) );
+				continue;
+			}
+
 			// Execute query
 			$result = $wpdb->query( $query );
 			if ( false === $result ) {
 				// Log error but continue
-				error_log( sprintf( 'Database import error: %s', $wpdb->last_error ) );
+				MksDdn_MC_Log::error( sprintf( 'Database import error: %s', $wpdb->last_error ) );
 			}
 
 			$processed++;

@@ -122,6 +122,13 @@ class MksDdn_MC_Backups {
 			throw new Exception( __( 'Backup file not found.', 'mksddn-migrate-content' ) );
 		}
 
+		// Additional security: ensure file is within backups directory
+		$real_path = realpath( $file_path );
+		$real_backups_path = realpath( MKSDDN_MC_BACKUPS_PATH );
+		if ( $real_path === false || $real_backups_path === false || strpos( $real_path, $real_backups_path ) !== 0 ) {
+			throw new Exception( __( 'Invalid file path.', 'mksddn-migrate-content' ) );
+		}
+
 		return $file_path;
 	}
 
