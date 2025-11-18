@@ -37,6 +37,7 @@ class MksDdn_MC_Recursive_Exclude_Filter extends RecursiveFilterIterator {
 	 *
 	 * @return bool
 	 */
+	#[\ReturnTypeWillChange]
 	public function accept() {
 		$path = $this->getInnerIterator()->getPathname();
 
@@ -52,8 +53,9 @@ class MksDdn_MC_Recursive_Exclude_Filter extends RecursiveFilterIterator {
 	/**
 	 * Get children
 	 *
-	 * @return RecursiveFilterIterator
+	 * @return RecursiveFilterIterator|null
 	 */
+	#[\ReturnTypeWillChange]
 	public function getChildren() {
 		return new self( $this->getInnerIterator()->getChildren(), $this->excluded_paths );
 	}

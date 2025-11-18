@@ -37,6 +37,7 @@ class MksDdn_MC_Recursive_Extension_Filter extends RecursiveFilterIterator {
 	 *
 	 * @return bool
 	 */
+	#[\ReturnTypeWillChange]
 	public function accept() {
 		$file = $this->getInnerIterator()->current();
 
@@ -51,8 +52,9 @@ class MksDdn_MC_Recursive_Extension_Filter extends RecursiveFilterIterator {
 	/**
 	 * Get children
 	 *
-	 * @return RecursiveFilterIterator
+	 * @return RecursiveFilterIterator|null
 	 */
+	#[\ReturnTypeWillChange]
 	public function getChildren() {
 		return new self( $this->getInnerIterator()->getChildren(), $this->allowed_extensions );
 	}
