@@ -9,6 +9,8 @@ namespace Mksddn_MC\Export;
 
 use Mksddn_MC\Archive\Packer;
 use Mksddn_MC\Options\OptionsHelper;
+use Mksddn_MC\Media\AttachmentCollector;
+use Mksddn_MC\Media\AttachmentCollection;
 use WP_Error;
 use WP_Post;
 
@@ -34,20 +36,22 @@ class ExportHandler {
 	 */
 	private string $format = 'archive';
 
-	/**
-	 * Archive packer.
-	 *
-	 * @var Packer
-	 */
 	private Packer $packer;
+
+	/**
+	 * Attachment collector.
+	 */
+	private AttachmentCollector $media_collector;
 
 	/**
 	 * Setup handler.
 	 *
-	 * @param Packer|null $packer Optional packer.
+	 * @param Packer|null             $packer          Optional packer.
+	 * @param AttachmentCollector|null $media_collector Optional collector.
 	 */
-	public function __construct( ?Packer $packer = null ) {
-		$this->packer = $packer ?? new Packer();
+	public function __construct( ?Packer $packer = null, ?AttachmentCollector $media_collector = null ) {
+		$this->packer          = $packer ?? new Packer();
+		$this->media_collector = $media_collector ?? new AttachmentCollector();
 	}
 
 	/**
@@ -110,8 +114,9 @@ class ExportHandler {
 			wp_die( esc_html__( 'Invalid page ID.', 'mksddn-migrate-content' ) );
 		}
 
-		$data = $this->prepare_page_data( $page );
-		$this->deliver_payload( $data, 'page-' . $page_id );
+		$media = $this->collect_media_for_post( $page );
+		$data  = $this->prepare_page_data( $page, $media );
+		$this->deliver_payload( $data, 'page-' . $page_id, $media );
 	}
 
 
@@ -132,8 +137,9 @@ class ExportHandler {
 			wp_die( esc_html__( 'Invalid form ID.', 'mksddn-migrate-content' ) );
 		}
 
-		$data = $this->prepare_form_data( $form );
-		$this->deliver_payload( $data, 'form-' . $form_id );
+		$media = $this->collect_media_for_post( $form );
+		$data  = $this->prepare_form_data( $form, $media );
+		$this->deliver_payload( $data, 'form-' . $form_id, $media );
 	}
 
 	/**
@@ -173,11 +179,12 @@ class ExportHandler {
 	/**
 	 * Prepare page payload.
 	 *
-	 * @param WP_Post $page Page.
+	 * @param WP_Post                 $page  Page.
+	 * @param AttachmentCollection|null $media Media bundle.
 	 * @return array
 	 */
-	private function prepare_page_data( WP_Post $page ): array {
-		return array(
+	private function prepare_page_data( WP_Post $page, ?AttachmentCollection $media = null ): array {
+		$data = array(
 			'type'       => 'page',
 			'ID'         => $page->ID,
 			'title'      => $page->post_title,
@@ -186,7 +193,14 @@ class ExportHandler {
 			'slug'       => $page->post_name,
 			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $page->ID ) : array(),
 			'meta'       => get_post_meta( $page->ID ),
+			'featured_media' => get_post_thumbnail_id( $page ),
 		);
+
+		if ( $media && $media->has_items() ) {
+			$data['_mksddn_media'] = $media->get_manifest();
+		}
+
+		return $data;
 	}
 
 	/**
@@ -195,10 +209,10 @@ class ExportHandler {
 	 * @param WP_Post $form Form.
 	 * @return array
 	 */
-	private function prepare_form_data( WP_Post $form ): array {
+	private function prepare_form_data( WP_Post $form, ?AttachmentCollection $media = null ): array {
 		$fields_config = get_post_meta( $form->ID, '_fields_config', true );
 
-		return array(
+		$data = array(
 			'type'          => 'forms',
 			'ID'            => $form->ID,
 			'title'         => $form->post_title,
@@ -210,26 +224,37 @@ class ExportHandler {
 			'acf_fields'    => function_exists( 'get_fields' ) ? get_fields( $form->ID ) : array(),
 			'meta'          => get_post_meta( $form->ID ),
 		);
+
+		if ( $media && $media->has_items() ) {
+			$data['_mksddn_media'] = $media->get_manifest();
+		}
+
+		return $data;
 	}
 
 	/**
 	 * Ship payload either as archive or debug JSON.
 	 *
 	 * @param array  $data     Payload contents.
-	 * @param string $basename Filename base without extension.
+	 * @param string                 $basename Filename base without extension.
+	 * @param AttachmentCollection|null $media Media bundle.
 	 */
-	private function deliver_payload( array $data, string $basename ): void {
+	private function deliver_payload( array $data, string $basename, ?AttachmentCollection $media = null ): void {
 		if ( $this->should_output_json() ) {
 			$this->download_json( $data, $basename . '.json' );
 			return;
 		}
+
+		$media_manifest = $media && $media->has_items() ? $media->get_manifest() : array();
 
 		$archive = $this->packer->create_archive(
 			$data,
 			array(
 				'type'  => $data['type'] ?? 'page',
 				'label' => $basename,
-			)
+				'media' => $media_manifest,
+			),
+			$media ? $media->get_assets() : array()
 		);
 
 		if ( is_wp_error( $archive ) ) {
@@ -355,5 +380,23 @@ class ExportHandler {
 		$allowed_types = apply_filters( 'mksddn_mc_json_export_types', $allowed_types );
 
 		return in_array( $export_type, $allowed_types, true );
+	}
+
+	/**
+	 * Collect media for given post if supported.
+	 *
+	 * @param WP_Post|null $post Post reference.
+	 * @return AttachmentCollection|null
+	 */
+	private function collect_media_for_post( ?WP_Post $post ): ?AttachmentCollection {
+		if ( ! $post instanceof WP_Post ) {
+			return null;
+		}
+
+		if ( 'archive' !== $this->format ) {
+			return null;
+		}
+
+		return $this->media_collector->collect_for_post( $post );
 	}
 }

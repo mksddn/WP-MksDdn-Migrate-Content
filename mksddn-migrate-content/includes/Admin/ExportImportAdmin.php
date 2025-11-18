@@ -64,6 +64,7 @@ class ExportImportAdmin {
 
 		echo '<div class="wrap">';
 		echo '<h1>' . esc_html__( 'Export & Import', 'mksddn-migrate-content' ) . '</h1>';
+		$this->render_progress_container();
 
 		$this->render_export_form();
 		$this->render_import_form();
@@ -72,6 +73,24 @@ class ExportImportAdmin {
 		echo '</div>';
 
 		$this->render_javascript();
+	}
+
+	/**
+	 * Render progress container.
+	 */
+	private function render_progress_container(): void {
+		echo '<style>
+		#mksddn-mc-progress{margin:1rem 0;padding:1rem;border:1px solid #ddd;border-radius:6px;background:#fff;display:none;}
+		#mksddn-mc-progress[aria-hidden="false"]{display:block;}
+		#mksddn-mc-progress .mksddn-mc-progress__bar{width:100%;height:12px;background:#f0f0f0;border-radius:999px;overflow:hidden;margin-bottom:0.5rem;}
+		#mksddn-mc-progress .mksddn-mc-progress__bar span{display:block;height:100%;width:0%;background:#2c7be5;transition:width .3s ease;}
+		#mksddn-mc-progress .mksddn-mc-progress__label{margin:0;font-size:13px;color:#444;}
+		</style>';
+
+		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
+		echo '<div class="mksddn-mc-progress__bar"><span></span></div>';
+		echo '<p class="mksddn-mc-progress__label"></p>';
+		echo '</div>';
 	}
 
 	/**
@@ -157,7 +176,7 @@ class ExportImportAdmin {
 		echo '<option value="archive" selected>' . esc_html__( '.wpbkp (archive with manifest)', 'mksddn-migrate-content' ) . '</option>';
 		echo '<option value="json">' . esc_html__( '.json (content only, editable)', 'mksddn-migrate-content' ) . '</option>';
 		echo '</select>';
-		echo '<p class="description">' . esc_html__( 'Use .json for fast edits of single items. Use .wpbkp for integrity-checked archives.', 'mksddn-migrate-content' ) . '</p><br>';
+		echo '<p class="description">' . esc_html__( '.json skips media files and is best for quick edits. .wpbkp packs media + checksum.', 'mksddn-migrate-content' ) . '</p><br>';
 		echo '</div>';
 	}
 
@@ -188,7 +207,7 @@ class ExportImportAdmin {
 
 		echo '<label for="import_file">' . esc_html__( 'Upload .wpbkp or .json file:', 'mksddn-migrate-content' ) . '</label><br>';
 		echo '<input type="file" id="import_file" name="import_file" accept=".wpbkp,.json" required><br>';
-		echo '<p class="description">' . esc_html__( 'Archives keep checksum verification. JSON fits manual edits for single items.', 'mksddn-migrate-content' ) . '</p><br>';
+		echo '<p class="description">' . esc_html__( 'Archives include media and integrity checks. JSON imports skip media restoration.', 'mksddn-migrate-content' ) . '</p><br>';
 
 		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
@@ -209,6 +228,7 @@ class ExportImportAdmin {
 
 		if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
 			$this->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
+			$this->progress_tick( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
 			return;
 		}
 
@@ -221,6 +241,8 @@ class ExportImportAdmin {
 			return;
 		}
 
+		$this->progress_tick( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
+
 		$ext  = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
 		$mime = function_exists( 'mime_content_type' ) && '' !== $file ? mime_content_type( $file ) : '';
 
@@ -228,20 +250,37 @@ class ExportImportAdmin {
 
 		if ( is_wp_error( $result ) ) {
 			$this->show_error( $result->get_error_message() );
+			$this->progress_tick( 100, __( 'Import aborted', 'mksddn-migrate-content' ) );
 			return;
 		}
 
-		$payload      = $result['payload'];
-		$payload_type = $result['type'];
-		$payload['type'] = $payload_type;
+		$this->progress_tick( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
+
+		$payload            = $result['payload'];
+		$payload_type       = $result['type'];
+		$payload['type']    = $payload_type;
+		$payload['_mksddn_media'] = $payload['_mksddn_media'] ?? $result['media'];
 
 		$import_handler = new ImportHandler();
-		$result         = $this->process_import( $import_handler, $payload_type, $payload );
+
+		if ( 'archive' === $result['media_source'] ) {
+			$import_handler->set_media_file_loader(
+				function ( string $archive_path ) use ( $file ) {
+					return $this->extractor->extract_media_file( $archive_path, $file );
+				}
+			);
+		}
+
+		$this->progress_tick( 70, __( 'Importing content…', 'mksddn-migrate-content' ) );
+
+		$result = $this->process_import( $import_handler, $payload_type, $payload );
 
 		if ( $result ) {
+			$this->progress_tick( 100, __( 'Completed', 'mksddn-migrate-content' ) );
 			// translators: %s is imported item type.
 			$this->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
 		} else {
+			$this->progress_tick( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
 			$this->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
 		}
 	}
@@ -268,8 +307,10 @@ class ExportImportAdmin {
 				}
 
 				return array(
-					'type'    => $data['type'] ?? 'page',
-					'payload' => $data,
+					'type'         => $data['type'] ?? 'page',
+					'payload'      => $data,
+					'media'        => $data['_mksddn_media'] ?? array(),
+					'media_source' => 'json',
 				);
 
 			case 'wpbkp':
@@ -284,8 +325,10 @@ class ExportImportAdmin {
 				}
 
 				return array(
-					'type'    => $extracted['type'],
-					'payload' => $extracted['payload'],
+					'type'         => $extracted['type'],
+					'payload'      => $extracted['payload'],
+					'media'        => $extracted['media'] ?? array(),
+					'media_source' => 'archive',
 				);
 		}
 
@@ -352,6 +395,22 @@ class ExportImportAdmin {
 	 */
 	private function render_javascript(): void {
 		echo '<script>
+		window.mksddnMcProgress = (function(){
+			const container = document.getElementById("mksddn-mc-progress");
+			if(!container){return null;}
+			const bar = container.querySelector(".mksddn-mc-progress__bar span");
+			const label = container.querySelector(".mksddn-mc-progress__label");
+			return {
+				set(percent, text){
+					if(!bar){return;}
+					container.setAttribute("aria-hidden","false");
+					const clamped = Math.max(0, Math.min(100, percent));
+					bar.style.width = clamped + "%";
+					if(label){ label.textContent = text || ""; }
+				}
+			}
+		})();
+
         function toggleExportOptions() {
             const exportType = document.getElementById("export_type").value;
             const pageSelection = document.getElementById("page_selection");
@@ -373,6 +432,35 @@ class ExportImportAdmin {
             }
         }
         </script>';
+	}
+
+	/**
+	 * Output inline progress update.
+	 *
+	 * @param int    $percent Percent value.
+	 * @param string $message Label.
+	 */
+	private function progress_tick( int $percent, string $message ): void {
+		printf(
+			'<script>window.mksddnMcProgress && window.mksddnMcProgress.set(%1$d, %2$s);</script>',
+			absint( $percent ),
+			wp_json_encode( $message )
+		);
+
+		$this->flush_buffers();
+	}
+
+	/**
+	 * Flush buffers so progress scripts reach browser early.
+	 */
+	private function flush_buffers(): void {
+		if ( function_exists( 'ob_flush' ) ) {
+			@ob_flush();
+		}
+
+		if ( function_exists( 'flush' ) ) {
+			@flush();
+		}
 	}
 
 	/**

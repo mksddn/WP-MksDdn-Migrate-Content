@@ -26,9 +26,10 @@ class Packer {
 	 *
 	 * @param array $payload Payload data.
 	 * @param array $meta    Manifest metadata (type, label, etc).
+	 * @param array $assets  Additional files to embed.
 	 * @return string|WP_Error
 	 */
-	public function create_archive( array $payload, array $meta ): string|WP_Error {
+	public function create_archive( array $payload, array $meta, array $assets = array() ): string|WP_Error {
 		$payload_json = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 
 		if ( false === $payload_json ) {
@@ -43,6 +44,7 @@ class Packer {
 			'label'          => sanitize_text_field( $meta['label'] ?? '' ),
 			'created_at_gmt' => gmdate( 'c' ),
 			'checksum'       => $checksum,
+			'media'          => $meta['media'] ?? array(),
 		);
 
 		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
@@ -51,10 +53,10 @@ class Packer {
 		}
 
 		if ( class_exists( ZipArchive::class ) ) {
-			return $this->build_with_ziparchive( $manifest_json, $payload_json );
+			return $this->build_with_ziparchive( $manifest_json, $payload_json, $assets );
 		}
 
-		return $this->build_with_pclzip( $manifest_json, $payload_json );
+		return $this->build_with_pclzip( $manifest_json, $payload_json, $assets );
 	}
 
 	/**
@@ -64,7 +66,7 @@ class Packer {
 	 * @param string $payload_json  Payload string.
 	 * @return string|WP_Error
 	 */
-	private function build_with_ziparchive( string $manifest_json, string $payload_json ): string|WP_Error {
+	private function build_with_ziparchive( string $manifest_json, string $payload_json, array $assets ): string|WP_Error {
 		$archive_path = wp_tempnam( 'mksddn-mc-' );
 
 		if ( ! $archive_path ) {
@@ -80,6 +82,17 @@ class Packer {
 
 		$zip->addFromString( 'manifest.json', $manifest_json );
 		$zip->addFromString( 'payload/content.json', $payload_json );
+
+		foreach ( $assets as $asset ) {
+			$source = $asset['source'] ?? '';
+			$target = $asset['target'] ?? '';
+			if ( '' === $source || '' === $target || ! file_exists( $source ) ) {
+				continue;
+			}
+
+			$zip->addFile( $source, $target );
+		}
+
 		$zip->close();
 
 		return $archive_path;
@@ -92,7 +105,7 @@ class Packer {
 	 * @param string $payload_json  Payload string.
 	 * @return string|WP_Error
 	 */
-	private function build_with_pclzip( string $manifest_json, string $payload_json ): string|WP_Error {
+	private function build_with_pclzip( string $manifest_json, string $payload_json, array $assets ): string|WP_Error {
 		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
 
 		$archive_path = wp_tempnam( 'mksddn-mc-' );
@@ -124,6 +137,19 @@ class Packer {
 				PCLZIP_ATT_FILE_NEW_FULL_NAME => 'payload/content.json',
 			),
 		);
+
+		foreach ( $assets as $asset ) {
+			$source = $asset['source'] ?? '';
+			$target = $asset['target'] ?? '';
+			if ( '' === $source || '' === $target || ! file_exists( $source ) ) {
+				continue;
+			}
+
+			$files[] = array(
+				PCLZIP_ATT_FILE_NAME        => $source,
+				PCLZIP_ATT_FILE_NEW_FULL_NAME => $target,
+			);
+		}
 
 		$result = $archive->create( $files );
 

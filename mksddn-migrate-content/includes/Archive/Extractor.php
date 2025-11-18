@@ -56,6 +56,7 @@ class Extractor {
 		return array(
 			'type'    => sanitize_key( $manifest['type'] ?? 'page' ),
 			'payload' => $payload,
+			'media'   => $manifest['media'] ?? array(),
 		);
 	}
 
@@ -127,5 +128,55 @@ class Extractor {
 			'payload'  => $payload[0]['content'] ?? '',
 		);
 	}
-}
 
+	/**
+	 * Extract media file into a temporary path.
+	 *
+	 * @param string $archive_path Relative path inside archive.
+	 * @param string $file_path    Original uploaded archive.
+	 * @return string|WP_Error
+	 */
+	public function extract_media_file( string $archive_path, string $file_path ): string|WP_Error {
+		if ( '' === $archive_path ) {
+			return new WP_Error( 'mksddn_mc_media_path_missing', __( 'Media file path missing in archive.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( class_exists( ZipArchive::class ) ) {
+			$zip = new ZipArchive();
+			if ( true === $zip->open( $file_path ) ) {
+				$stream = $zip->getStream( $archive_path );
+				if ( ! $stream ) {
+					$zip->close();
+					return new WP_Error( 'mksddn_mc_media_not_found', __( 'Media file not found inside archive.', 'mksddn-migrate-content' ) );
+				}
+
+				$tmp_path = wp_tempnam( 'mksddn-media-' );
+				$target   = fopen( $tmp_path, 'wb' );
+				stream_copy_to_stream( $stream, $target );
+				fclose( $target );
+				fclose( $stream );
+				$zip->close();
+
+				return $tmp_path;
+			}
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		$archive = new \PclZip( $file_path );
+		$files   = $archive->extract(
+			PCLZIP_OPT_BY_NAME,
+			$archive_path,
+			PCLZIP_OPT_EXTRACT_AS_STRING
+		);
+
+		if ( false === $files || empty( $files ) ) {
+			return new WP_Error( 'mksddn_mc_media_not_found', __( 'Media file not found inside archive.', 'mksddn-migrate-content' ) );
+		}
+
+		$content = $files[0]['content'] ?? '';
+		$tmp     = wp_tempnam( 'mksddn-media-' );
+		file_put_contents( $tmp, $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_file_put_contents
+
+		return $tmp;
+	}
+}

@@ -14,10 +14,37 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use Mksddn_MC\Media\AttachmentRestorer;
+
 /**
  * Handles importing pages, options pages, and forms.
  */
 class ImportHandler {
+
+	/**
+	 * Attachment restorer.
+	 */
+	private AttachmentRestorer $media_restorer;
+
+	/**
+	 * Loader callback for media files (archives only).
+	 *
+	 * @var callable|null
+	 */
+	private $media_file_loader = null;
+
+	public function __construct( ?AttachmentRestorer $media_restorer = null ) {
+		$this->media_restorer = $media_restorer ?? new AttachmentRestorer();
+	}
+
+	/**
+	 * Set loader used to fetch files from archive.
+	 *
+	 * @param callable|null $loader Loader callback.
+	 */
+	public function set_media_file_loader( ?callable $loader ): void {
+		$this->media_file_loader = $loader;
+	}
 	/**
 	 * Imports a single page with ACF fields.
 	 *
@@ -40,6 +67,7 @@ class ImportHandler {
 
 		$this->import_acf_fields( $data, $page_id );
 		$this->import_meta_data( $data, $page_id );
+		$this->restore_media( $data, $page_id );
 
 		return true;
 	}
@@ -84,12 +112,37 @@ class ImportHandler {
 		$this->import_fields_config( $data, $form_id );
 		$this->import_acf_fields( $data, $form_id );
 		$this->import_meta_data( $data, $form_id );
+		$this->restore_media( $data, $form_id );
 
 		// Force refresh and clear caches.
 		clean_post_cache( $form_id );
 		wp_cache_flush();
 
 		return true;
+	}
+
+	/**
+	 * Restore media attachments for the entity.
+	 *
+	 * @param array $data    Payload.
+	 * @param int   $post_id Target post ID.
+	 */
+	private function restore_media( array $data, int $post_id ): void {
+		$entries = $data['_mksddn_media'] ?? array();
+
+		if ( empty( $entries ) || ! is_callable( $this->media_file_loader ) ) {
+			return;
+		}
+
+		if ( isset( $data['featured_media'] ) ) {
+			update_post_meta( $post_id, '_mksddn_original_thumbnail', (int) $data['featured_media'] );
+		}
+
+		$this->media_restorer->restore(
+			$entries,
+			$this->media_file_loader,
+			$post_id
+		);
 	}
 
 	/**
@@ -226,7 +279,7 @@ class ImportHandler {
 	 * @return void
 	 */
 	private function import_acf_fields( array $data, int|string $post_id ): void {
-		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) ) {
+		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
 			return;
 		}
 
