@@ -7,6 +7,29 @@
 (function($) {
 	'use strict';
 
+	// Main plugin object
+	var MksDdnMC = {
+		ajaxUrl: mksddnMc.ajaxUrl,
+		nonce: mksddnMc.nonce,
+
+		/**
+		 * Show error message
+		 */
+		showError: function(message) {
+			if (typeof message === 'object' && message.message) {
+				message = message.message;
+			}
+			alert(message || 'An error occurred. Please try again.');
+		},
+
+		/**
+		 * Show success message
+		 */
+		showSuccess: function(message) {
+			alert(message || 'Operation completed successfully.');
+		}
+	};
+
 	$(document).ready(function() {
 		// Export form handler
 		$('#mksddn-mc-export-form').on('submit', function(e) {
@@ -60,9 +83,14 @@
 					$button.prop('disabled', false).text('Export Site');
 				}
 			},
-			error: function() {
-				$progressText.text('Export failed: Network error');
+			error: function(xhr, status, error) {
+				var errorMessage = 'Export failed: Network error';
+				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+					errorMessage = 'Export failed: ' + xhr.responseJSON.data.message;
+				}
+				$progressText.text(errorMessage);
 				$button.prop('disabled', false).text('Export Site');
+				MksDdnMC.showError(errorMessage);
 			}
 		});
 	}
@@ -203,8 +231,13 @@
 					$progressText.text('Import failed: ' + (response.data ? response.data.message : 'Unknown error'));
 				}
 			},
-			error: function() {
-				$progressText.text('Import failed: Network error');
+			error: function(xhr, status, error) {
+				var errorMessage = 'Import failed: Network error';
+				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+					errorMessage = 'Import failed: ' + xhr.responseJSON.data.message;
+				}
+				$progressText.text(errorMessage);
+				MksDdnMC.showError(errorMessage);
 			}
 		});
 	}

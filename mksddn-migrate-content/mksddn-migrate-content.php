@@ -50,6 +50,12 @@ define( 'MKSDDN_MC_URL', plugins_url( '', MKSDDN_MC_PLUGIN_BASENAME ) );
 // Include constants
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'constants.php';
 
+// Load error handler early
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR . 'model' . DIRECTORY_SEPARATOR . 'class-mksddn-mc-handler.php';
+if ( class_exists( 'MksDdn_MC_Handler' ) ) {
+	MksDdn_MC_Handler::register();
+}
+
 // Include functions
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'functions.php';
 

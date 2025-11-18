@@ -39,7 +39,7 @@ define( 'MKSDDN_MC_MODEL_PATH', MKSDDN_MC_LIB_PATH . DIRECTORY_SEPARATOR . 'mode
 // View path
 define( 'MKSDDN_MC_TEMPLATES_PATH', MKSDDN_MC_LIB_PATH . DIRECTORY_SEPARATOR . 'view' );
 
-// Core path (replacement for ServMask libraries)
+// Core path
 define( 'MKSDDN_MC_CORE_PATH', MKSDDN_MC_LIB_PATH . DIRECTORY_SEPARATOR . 'core' );
 
 // Vendor path

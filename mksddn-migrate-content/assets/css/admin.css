@@ -253,3 +253,60 @@
 	margin-right: 8px;
 }
 
+/* Responsive design */
+@media screen and (max-width: 782px) {
+	.mksddn-mc-dashboard-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.mksddn-mc-action-buttons {
+		flex-direction: column;
+	}
+
+	.mksddn-mc-action-buttons .button {
+		width: 100%;
+		margin-bottom: 10px;
+	}
+
+	.mksddn-mc-backups-list .column-filename,
+	.mksddn-mc-backups-list .column-date,
+	.mksddn-mc-backups-list .column-size,
+	.mksddn-mc-backups-list .column-actions {
+		width: auto;
+	}
+
+	.mksddn-mc-upload-area {
+		padding: 20px;
+	}
+
+	.mksddn-mc-upload-icon {
+		font-size: 32px;
+	}
+}
+
+/* Loading states */
+.mksddn-mc-loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+.mksddn-mc-loading::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 20px;
+	height: 20px;
+	margin: -10px 0 0 -10px;
+	border: 2px solid #2271b1;
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: mksddn-mc-spin 0.6s linear infinite;
+}
+
+@keyframes mksddn-mc-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+

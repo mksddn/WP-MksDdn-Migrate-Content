@@ -91,6 +91,8 @@ require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-statu
 require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-backups.php';
 require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-settings.php';
 require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-notification.php';
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-log.php';
+require_once MKSDDN_MC_MODEL_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-handler.php';
 
 // Load controllers
 require_once MKSDDN_MC_CONTROLLER_PATH . DIRECTORY_SEPARATOR . 'class-mksddn-mc-main-controller.php';
