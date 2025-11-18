@@ -5,10 +5,18 @@
  * @package MksDdn_Migrate_Content
  */
 
+namespace Mksddn_MC\Options;
+
+use Exception;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Options helper service.
  */
-class Options_Helper {
+class OptionsHelper {
 	/**
 	 * Function to get all Options Pages through ACF.
 	 *

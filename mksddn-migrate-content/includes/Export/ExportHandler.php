@@ -5,10 +5,21 @@
  * @package MksDdn_Migrate_Content
  */
 
+namespace Mksddn_MC\Export;
+
+use Mksddn_MC\Archive\Packer;
+use Mksddn_MC\Options\OptionsHelper;
+use WP_Error;
+use WP_Post;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Handles export operations for pages, options pages and forms.
  */
-class Export_Handler {
+class ExportHandler {
 
 	private const EXPORT_TYPES = array(
 		'page'         => 'export_page',
@@ -16,6 +27,28 @@ class Export_Handler {
 		'forms'        => 'export_form',
 	);
 
+	/**
+	 * Requested export format (archive|json).
+	 *
+	 * @var string
+	 */
+	private string $format = 'archive';
+
+	/**
+	 * Archive packer.
+	 *
+	 * @var Packer
+	 */
+	private Packer $packer;
+
+	/**
+	 * Setup handler.
+	 *
+	 * @param Packer|null $packer Optional packer.
+	 */
+	public function __construct( ?Packer $packer = null ) {
+		$this->packer = $packer ?? new Packer();
+	}
 
 	/**
 	 * Handle export dispatch.
@@ -27,6 +60,8 @@ class Export_Handler {
 		if ( ! isset( self::EXPORT_TYPES[ $export_type ] ) ) {
 			wp_die( esc_html__( 'Invalid export type.', 'mksddn-migrate-content' ) );
 		}
+
+		$this->format = $this->resolve_format( $export_type );
 
 		$method = self::EXPORT_TYPES[ $export_type ];
 		$this->$method();
@@ -45,7 +80,7 @@ class Export_Handler {
 			wp_die( esc_html__( 'Invalid options page slug.', 'mksddn-migrate-content' ) );
 		}
 
-		$options_helper = new Options_Helper();
+		$options_helper = new OptionsHelper();
 		$options_pages  = $options_helper->get_all_options_pages();
 		$target_page    = $this->find_options_page( $options_pages, $options_page_slug );
 
@@ -53,9 +88,8 @@ class Export_Handler {
 			wp_die( esc_html__( 'Invalid options page slug.', 'mksddn-migrate-content' ) );
 		}
 
-		$data     = $this->prepare_options_page_data( $target_page );
-		$filename = 'options-page-' . $options_page_slug . '.json';
-		$this->download_json( $data, $filename );
+		$data = $this->prepare_options_page_data( $target_page );
+		$this->deliver_payload( $data, 'options-page-' . $options_page_slug );
 	}
 
 
@@ -76,9 +110,8 @@ class Export_Handler {
 			wp_die( esc_html__( 'Invalid page ID.', 'mksddn-migrate-content' ) );
 		}
 
-		$data     = $this->prepare_page_data( $page );
-		$filename = 'page-' . $page_id . '.json';
-		$this->download_json( $data, $filename );
+		$data = $this->prepare_page_data( $page );
+		$this->deliver_payload( $data, 'page-' . $page_id );
 	}
 
 
@@ -99,9 +132,8 @@ class Export_Handler {
 			wp_die( esc_html__( 'Invalid form ID.', 'mksddn-migrate-content' ) );
 		}
 
-		$data     = $this->prepare_form_data( $form );
-		$filename = 'form-' . $form_id . '.json';
-		$this->download_json( $data, $filename );
+		$data = $this->prepare_form_data( $form );
+		$this->deliver_payload( $data, 'form-' . $form_id );
 	}
 
 	/**
@@ -181,7 +213,87 @@ class Export_Handler {
 	}
 
 	/**
-	 * Stream JSON file to the browser.
+	 * Ship payload either as archive or debug JSON.
+	 *
+	 * @param array  $data     Payload contents.
+	 * @param string $basename Filename base without extension.
+	 */
+	private function deliver_payload( array $data, string $basename ): void {
+		if ( $this->should_output_json() ) {
+			$this->download_json( $data, $basename . '.json' );
+			return;
+		}
+
+		$archive = $this->packer->create_archive(
+			$data,
+			array(
+				'type'  => $data['type'] ?? 'page',
+				'label' => $basename,
+			)
+		);
+
+		if ( is_wp_error( $archive ) ) {
+			wp_die( esc_html( $archive->get_error_message() ) );
+		}
+
+		$this->download_archive( $archive, $basename . '.wpbkp' );
+	}
+
+	/**
+	 * Determine whether JSON export is enabled.
+	 */
+	private function should_output_json(): bool {
+		if ( 'json' === $this->format ) {
+			return true;
+		}
+
+		$toggle = defined( 'MKSDDN_MC_DEBUG_JSON_EXPORT' ) && MKSDDN_MC_DEBUG_JSON_EXPORT;
+		/**
+		 * Filter enabling legacy JSON export output.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param bool $enabled JSON export enabled.
+		 */
+		return (bool) apply_filters( 'mksddn_mc_enable_json_export', $toggle );
+	}
+
+	/**
+	 * Download archive file to browser.
+	 *
+	 * @param string $archive_path Absolute archive path.
+	 * @param string $filename     Download filename.
+	 */
+	private function download_archive( string $archive_path, string $filename ): void {
+		$handle = @fopen( $archive_path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+
+		if ( ! $handle ) {
+			wp_die( esc_html__( 'Failed to open archive for download.', 'mksddn-migrate-content' ) );
+		}
+
+		// Clear buffers.
+		while ( ob_get_level() ) {
+			ob_end_clean();
+		}
+
+		$filesize = filesize( $archive_path );
+
+		nocache_headers();
+		header( 'Content-Type: application/octet-stream' );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+		if ( false !== $filesize ) {
+			header( 'Content-Length: ' . $filesize );
+		}
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Binary stream output.
+		fpassthru( $handle );
+		fclose( $handle );
+		unlink( $archive_path );
+		exit;
+	}
+
+	/**
+	 * Stream JSON file to the browser (debug mode only).
 	 *
 	 * @param array  $data     Payload.
 	 * @param string $filename Filename.
@@ -190,12 +302,10 @@ class Export_Handler {
 	private function download_json( array $data, string $filename ): void {
 		$json = wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 
-		// Clear all output buffering levels.
 		while ( ob_get_level() ) {
 			ob_end_clean();
 		}
 
-		// Set headers for file download.
 		nocache_headers();
 		header( 'Content-Type: application/json; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
@@ -204,5 +314,46 @@ class Export_Handler {
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Output is a JSON file payload.
 		echo $json;
 		exit;
+	}
+
+	/**
+	 * Decide which format to use for current export.
+	 *
+	 * @param string $export_type Selected export type.
+	 * @return string
+	 */
+	private function resolve_format( string $export_type ): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Checked upstream.
+		$requested = sanitize_key( $_POST['export_format'] ?? 'archive' );
+		$allowed   = array( 'archive', 'json' );
+
+		if ( ! in_array( $requested, $allowed, true ) ) {
+			return 'archive';
+		}
+
+		if ( 'json' === $requested && ! $this->is_json_allowed( $export_type ) ) {
+			return 'archive';
+		}
+
+		return $requested;
+	}
+
+	/**
+	 * Whether JSON format is supported for given type.
+	 *
+	 * @param string $export_type Export type.
+	 */
+	private function is_json_allowed( string $export_type ): bool {
+		$allowed_types = array( 'page', 'options_page', 'forms' );
+		/**
+		 * Filter list of export types that support JSON output.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $allowed_types Types list.
+		 */
+		$allowed_types = apply_filters( 'mksddn_mc_json_export_types', $allowed_types );
+
+		return in_array( $export_type, $allowed_types, true );
 	}
 }

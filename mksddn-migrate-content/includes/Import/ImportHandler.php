@@ -5,10 +5,19 @@
  * @package MksDdn_Migrate_Content
  */
 
+namespace Mksddn_MC\Import;
+
+use WP_Error;
+use WP_Post;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Handles importing pages, options pages, and forms.
  */
-class Import_Handler {
+class ImportHandler {
 	/**
 	 * Imports a single page with ACF fields.
 	 *
