@@ -85,6 +85,11 @@ class ExportImportAdmin {
 		#mksddn-mc-progress .mksddn-mc-progress__bar{width:100%;height:12px;background:#f0f0f0;border-radius:999px;overflow:hidden;margin-bottom:0.5rem;}
 		#mksddn-mc-progress .mksddn-mc-progress__bar span{display:block;height:100%;width:0%;background:#2c7be5;transition:width .3s ease;}
 		#mksddn-mc-progress .mksddn-mc-progress__label{margin:0;font-size:13px;color:#444;}
+		.mksddn-mc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.5rem;margin-top:1rem;}
+		.mksddn-mc-card{background:#fff;border:1px solid #e1e1e1;border-radius:8px;padding:1rem;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+		.mksddn-mc-card h3{margin-top:0;}
+		.mksddn-mc-multiselect{width:100%;}
+		.mksddn-mc-format-selector select{width:100%;}
 		</style>';
 
 		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
@@ -102,9 +107,16 @@ class ExportImportAdmin {
 		wp_nonce_field( 'export_single_page_nonce' );
 
 		echo '<input type="hidden" name="action" value="export_single_page">';
+		echo '<div class="mksddn-mc-grid">';
+		echo '<div class="mksddn-mc-card">';
 		$this->render_type_selector();
 		$this->render_selection_fields();
+		echo '</div>';
+
+		echo '<div class="mksddn-mc-card">';
 		$this->render_format_selector();
+		echo '</div>';
+		echo '</div>';
 
 		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Export', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
@@ -114,10 +126,13 @@ class ExportImportAdmin {
 	 * Render export type selector.
 	 */
 	private function render_type_selector(): void {
-		echo '<label for="export_type">' . esc_html__( 'Select type to export:', 'mksddn-migrate-content' ) . '</label><br>';
+		echo '<h3>' . esc_html__( 'Single item export', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<p>' . esc_html__( 'Select a content type to export.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<label for="export_type">' . esc_html__( 'Content type:', 'mksddn-migrate-content' ) . '</label><br>';
 		echo '<select id="export_type" name="export_type" onchange="mksddnToggleType()" required>';
-		echo '<option value="page" selected>' . esc_html__( 'Page', 'mksddn-migrate-content' ) . '</option>';
-		echo '<option value="post">' . esc_html__( 'Post', 'mksddn-migrate-content' ) . '</option>';
+		foreach ( $this->get_exportable_post_types() as $type => $label ) {
+			echo '<option value="' . esc_attr( $type ) . '">' . esc_html( $label ) . '</option>';
+		}
 		echo '</select><br><br>';
 	}
 
@@ -125,27 +140,91 @@ class ExportImportAdmin {
 	 * Render selection fields.
 	 */
 	private function render_selection_fields(): void {
-		echo '<div id="page_selection">';
-		echo '<label for="export_page_id">' . esc_html__( 'Select a page to export:', 'mksddn-migrate-content' ) . '</label><br>';
-		echo '<select id="export_page_id" name="page_id">';
-		echo '<option value="">' . esc_html__( 'Select page...', 'mksddn-migrate-content' ) . '</option>';
-		foreach ( get_pages() as $page ) {
-			echo '<option value="' . esc_attr( $page->ID ) . '">' . esc_html( $page->post_title ) . '</option>';
+		echo '<div class="mksddn-mc-basic-selection">';
+		foreach ( $this->get_exportable_post_types() as $type => $label ) {
+			$default = ( 'page' === $type );
+			$this->render_single_select(
+				$type,
+				sprintf(
+					/* translators: %s type label */
+					__( 'Select %s:', 'mksddn-migrate-content' ),
+					strtolower( $label )
+				),
+				$this->get_items_for_type( $type ),
+				! $default
+			);
 		}
+		echo '</div>';
+	}
 
+	/**
+	 * Render a select for a specific post type.
+	 *
+	 * @param string  $type   Post type slug.
+	 * @param string  $label  Label text.
+	 * @param WP_Post[] $items Items to populate.
+	 * @param bool    $hidden Hide by default.
+	 */
+	private function render_single_select( string $type, string $label, array $items, bool $hidden = false ): void {
+		$style = $hidden ? 'style="display:none;"' : '';
+		echo '<div class="mksddn-mc-type-select mksddn-mc-type-' . esc_attr( $type ) . '" ' . $style . '>';
+		echo '<label for="export_' . esc_attr( $type ) . '_id">' . esc_html( $label ) . '</label><br>';
+		echo '<select id="export_' . esc_attr( $type ) . '_id" name="' . esc_attr( $type ) . '_id">';
+		echo '<option value="">' . esc_html__( 'Select item...', 'mksddn-migrate-content' ) . '</option>';
+		foreach ( $items as $item ) {
+			echo '<option value="' . esc_attr( $item->ID ) . '">' . esc_html( $item->post_title ?: $item->ID ) . '</option>';
+		}
 		echo '</select><br><br>';
 		echo '</div>';
+	}
 
-		echo '<div id="post_selection" style="display:none;">';
-		echo '<label for="export_post_id">' . esc_html__( 'Select a post to export:', 'mksddn-migrate-content' ) . '</label><br>';
-		echo '<select id="export_post_id" name="post_id">';
-		echo '<option value="">' . esc_html__( 'Select post...', 'mksddn-migrate-content' ) . '</option>';
-		foreach ( get_posts( array( 'numberposts' => -1, 'post_type' => 'post', 'orderby' => 'title', 'order' => 'ASC', 'post_status' => 'publish' ) ) as $post ) {
-			echo '<option value="' . esc_attr( $post->ID ) . '">' . esc_html( $post->post_title ) . '</option>';
+	/**
+	 * Render CPT multi-select builder.
+	 */
+	private function get_exportable_post_types(): array {
+		$objects = get_post_types(
+			array(
+				'show_ui' => true,
+				'public'  => true,
+			),
+			'objects'
+		);
+
+		$types = array();
+		foreach ( $objects as $type => $object ) {
+			if ( in_array( $type, array( 'attachment', 'revision', 'nav_menu_item' ), true ) ) {
+				continue;
+			}
+			$types[ $type ] = $object->labels->singular_name ?? $object->label ?? ucfirst( $type );
 		}
 
-		echo '</select><br><br>';
-		echo '</div>';
+		if ( ! isset( $types['page'] ) ) {
+			$types = array( 'page' => __( 'Page', 'mksddn-migrate-content' ) ) + $types;
+		}
+
+		return $types;
+	}
+
+	/**
+	 * Fetch items for select.
+	 *
+	 * @param string $type Post type.
+	 * @return WP_Post[]
+	 */
+	private function get_items_for_type( string $type ): array {
+		if ( 'page' === $type ) {
+			return get_pages();
+		}
+
+		return get_posts(
+			array(
+				'post_type'      => $type,
+				'posts_per_page' => 100,
+				'post_status'    => 'publish',
+				'orderby'        => 'title',
+				'order'          => 'ASC',
+			)
+		);
 	}
 
 	/**
@@ -153,6 +232,7 @@ class ExportImportAdmin {
 	 */
 	private function render_format_selector(): void {
 		echo '<div class="mksddn-mc-format-selector">';
+		echo '<h3>' . esc_html__( 'Export format', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<label for="export_format">' . esc_html__( 'Choose file format:', 'mksddn-migrate-content' ) . '</label><br>';
 		echo '<select id="export_format" name="export_format">';
 		echo '<option value="archive" selected>' . esc_html__( '.wpbkp (archive with manifest)', 'mksddn-migrate-content' ) . '</option>';
@@ -160,23 +240,6 @@ class ExportImportAdmin {
 		echo '</select>';
 		echo '<p class="description">' . esc_html__( '.json skips media files and is best for quick edits. .wpbkp packs media + checksum.', 'mksddn-migrate-content' ) . '</p><br>';
 		echo '</div>';
-	}
-
-	/**
-	 * Get forms list.
-	 *
-	 * @return WP_Post[]
-	 */
-	private function get_forms(): array {
-		return get_posts(
-			array(
-				'post_type'      => 'forms',
-				'posts_per_page' => -1,
-				'orderby'        => 'title',
-				'order'          => 'ASC',
-				'post_status'    => 'publish',
-			)
-		);
 	}
 
 	/**
@@ -393,15 +456,12 @@ class ExportImportAdmin {
 			const exportType = document.getElementById("export_type");
 			if(!exportType){return;}
 			const type = exportType.value;
-			const pageSelection = document.getElementById("page_selection");
-			const postSelection = document.getElementById("post_selection");
-
-			if(pageSelection){
-				pageSelection.style.display = (type === "post") ? "none" : "block";
-			}
-
-			if(postSelection){
-				postSelection.style.display = (type === "post") ? "block" : "none";
+			document.querySelectorAll(".mksddn-mc-type-select").forEach((el)=>{
+				el.style.display = "none";
+			});
+			const target = document.querySelector(".mksddn-mc-type-" + type);
+			if(target){
+				target.style.display = "block";
 			}
 		};
 

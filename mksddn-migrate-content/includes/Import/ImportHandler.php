@@ -9,12 +9,12 @@ namespace Mksddn_MC\Import;
 
 use WP_Error;
 use WP_Post;
+use Mksddn_MC\Media\AttachmentRestorer;
+use Mksddn_MC\Options\OptionsImporter;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
-
-use Mksddn_MC\Media\AttachmentRestorer;
 
 /**
  * Handles importing pages, options pages, and forms.
@@ -26,6 +26,8 @@ class ImportHandler {
 	 */
 	private AttachmentRestorer $media_restorer;
 
+	private OptionsImporter $options_importer;
+
 	/**
 	 * Loader callback for media files (archives only).
 	 *
@@ -33,8 +35,9 @@ class ImportHandler {
 	 */
 	private $media_file_loader = null;
 
-	public function __construct( ?AttachmentRestorer $media_restorer = null ) {
-		$this->media_restorer = $media_restorer ?? new AttachmentRestorer();
+	public function __construct( ?AttachmentRestorer $media_restorer = null, ?OptionsImporter $options_importer = null ) {
+		$this->media_restorer  = $media_restorer ?? new AttachmentRestorer();
+		$this->options_importer = $options_importer ?? new OptionsImporter();
 	}
 
 	/**
@@ -78,38 +81,6 @@ class ImportHandler {
 	}
 
 	/**
-	 * Imports a form with fields configuration.
-	 *
-	 * @param array $data Data array containing form information.
-	 * @return bool True on success, false on failure.
-	 */
-	public function import_form( array $data ): bool {
-		if ( ! $this->validate_form_data( $data ) ) {
-			return false;
-		}
-
-		$existing_form = get_page_by_path( $data['slug'], OBJECT, 'forms' );
-		$form_data     = $this->prepare_form_data( $data );
-
-		$form_id = $existing_form ? $this->update_form( $existing_form, $form_data ) : $this->create_form( $form_data );
-
-		if ( is_wp_error( $form_id ) ) {
-			return false;
-		}
-
-		$this->import_fields_config( $data, $form_id );
-		$this->import_acf_fields( $data, $form_id );
-		$this->import_meta_data( $data, $form_id );
-		$this->restore_media( $data, $form_id );
-
-		// Force refresh and clear caches.
-		clean_post_cache( $form_id );
-		wp_cache_flush();
-
-		return true;
-	}
-
-	/**
 	 * Restore media attachments for the entity.
 	 *
 	 * @param array $data    Payload.
@@ -134,6 +105,11 @@ class ImportHandler {
 	}
 
 	/**
+	 * Import option/widget bundle.
+	 *
+	 * @param array $data Payload.
+	 */
+	/**
 	 * Validate page data.
 	 *
 	 * @param array $data Page payload.
@@ -154,16 +130,6 @@ class ImportHandler {
 	}
 
 	/**
-	 * Validate form data.
-	 *
-	 * @param array $data Form payload.
-	 * @return bool
-	 */
-	private function validate_form_data( array $data ): bool {
-		return isset( $data['title'], $data['slug'] );
-	}
-
-	/**
 	 * Prepare page data for insert/update.
 	 *
 	 * @param array $data Page payload.
@@ -179,23 +145,6 @@ class ImportHandler {
 			'post_status'  => sanitize_key( $data['status'] ?? 'publish' ),
 			'post_author'  => absint( $data['author'] ?? get_current_user_id() ),
 			'post_date_gmt'=> isset( $data['date'] ) ? sanitize_text_field( $data['date'] ) : current_time( 'mysql', true ),
-		);
-	}
-
-	/**
-	 * Prepare form data for insert/update.
-	 *
-	 * @param array $data Form payload.
-	 * @return array
-	 */
-	private function prepare_form_data( array $data ): array {
-		return array(
-			'post_title'   => sanitize_text_field( $data['title'] ),
-			'post_content' => wp_kses_post( $data['content'] ?? '' ),
-			'post_excerpt' => sanitize_text_field( $data['excerpt'] ?? '' ),
-			'post_name'    => sanitize_title( $data['slug'] ),
-			'post_type'    => 'forms',
-			'post_status'  => 'publish',
 		);
 	}
 
@@ -221,14 +170,6 @@ class ImportHandler {
 		return wp_insert_post( $post_data );
 	}
 
-	private function update_form( WP_Post $existing_form, array $form_data ): int|WP_Error {
-		$form_data['ID'] = $existing_form->ID;
-		return wp_update_post( $form_data );
-	}
-
-	private function create_form( array $form_data ): int|WP_Error {
-		return wp_insert_post( $form_data );
-	}
 	/**
 	 * Assign taxonomy terms for posts.
 	 *

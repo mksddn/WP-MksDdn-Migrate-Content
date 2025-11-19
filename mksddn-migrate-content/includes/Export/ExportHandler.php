@@ -10,6 +10,9 @@ namespace Mksddn_MC\Export;
 use Mksddn_MC\Archive\Packer;
 use Mksddn_MC\Media\AttachmentCollector;
 use Mksddn_MC\Media\AttachmentCollection;
+use Mksddn_MC\Options\OptionsExporter;
+use Mksddn_MC\Selection\SelectionBuilder;
+use Mksddn_MC\Selection\ContentSelection;
 use WP_Error;
 use WP_Post;
 
@@ -40,6 +43,7 @@ class ExportHandler {
 	 * Attachment collector.
 	 */
 	private AttachmentCollector $media_collector;
+
 
 	/**
 	 * Setup handler.
@@ -90,6 +94,39 @@ class ExportHandler {
 		$media = $this->collect_media_for_post( $post );
 		$data  = $this->prepare_post_data( $post, $media );
 		$this->deliver_payload( $data, $post->post_type . '-' . $target_id, $media );
+	}
+	private function export_selection_bundle( ContentSelection $selection ): void {
+		$bundle = array(
+			'type'    => 'bundle',
+			'items'   => array(),
+			'options' => array(
+				'options' => array(),
+				'widgets' => array(),
+			),
+		);
+
+		foreach ( $selection->get_items() as $type => $ids ) {
+			foreach ( $ids as $id ) {
+				$post = get_post( $id );
+				if ( ! $post ) {
+					continue;
+				}
+
+				$media = $this->collect_media_for_post( $post );
+				$bundle['items'][] = $this->prepare_post_data( $post, $media );
+
+				if ( $media && $media->has_items() ) {
+					$bundle['_mksddn_media'] = array_merge( $bundle['_mksddn_media'] ?? array(), $media->get_manifest() );
+				}
+			}
+		}
+
+		if ( $selection->has_options() ) {
+			$bundle['options']['options'] = $this->options_exporter->export_options( $selection->get_options() );
+			$bundle['options']['widgets'] = $this->options_exporter->export_widgets( $selection->get_widgets() );
+		}
+
+		$this->deliver_payload( $bundle, 'bundle-' . gmdate( 'Ymd-His' ), null );
 	}
 
 
