@@ -13,6 +13,7 @@ use Mksddn_MC\Import\ImportHandler;
 use Mksddn_MC\Options\OptionsHelper;
 use Mksddn_MC\Filesystem\FullContentExporter;
 use Mksddn_MC\Filesystem\FullContentImporter;
+use Mksddn_MC\Chunking\ChunkJobRepository;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -38,6 +39,7 @@ class ExportImportAdmin {
 		$this->extractor = $extractor ?? new Extractor();
 
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_export_single_page', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this, 'handle_full_import' ) );
@@ -79,6 +81,64 @@ class ExportImportAdmin {
 		echo '</div>';
 		$this->render_javascript();
 	}
+
+	/**
+	 * Enqueue admin assets.
+	 *
+	 * @param string $hook Current admin page hook.
+	 */
+	public function enqueue_assets( string $hook ): void {
+		if ( 'toplevel_page_' . MKSDDN_MC_TEXT_DOMAIN !== $hook ) {
+			return;
+		}
+
+		wp_enqueue_script(
+			'mksddn-chunk-transfer',
+			MKSDDN_MC_URL . 'assets/js/chunk-transfer.js',
+			array(),
+			MKSDDN_MC_VERSION,
+			true
+		);
+
+		$default_chunk = 1024 * 1024;
+		wp_localize_script(
+			'mksddn-chunk-transfer',
+			'mksddnChunk',
+			array(
+				'restUrl'                => esc_url_raw( rest_url( 'mksddn/v1/' ) ),
+				'nonce'                  => wp_create_nonce( 'wp_rest' ),
+				'chunkSize'              => 5 * 1024 * 1024,
+				'uploadChunkSize'        => $default_chunk,
+				'downloadFilenamePrefix' => 'full-site-',
+				'defaultChunkSizeLabel'  => size_format( $default_chunk, 2 ),
+				'i18n'                   => array(
+					'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
+					'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
+					'importReady'        => __( 'Ready for full import.', 'mksddn-migrate-content' ),
+					'importReadyDetailed'=> sprintf(
+						/* translators: %s chunk size */
+						__( 'Ready for full import (default chunk %s).', 'mksddn-migrate-content' ),
+						size_format( $default_chunk, 2 )
+					),
+					'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
+					'importBusy'         => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
+					'importDone'         => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
+					'importProcessing'   => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
+					'importError'        => __( 'Upload failed. Please retry.', 'mksddn-migrate-content' ),
+					'chunkInfo'          => __( '· %s chunks', 'mksddn-migrate-content' ),
+					'preparing'        => __( 'Preparing download…', 'mksddn-migrate-content' ),
+					'downloading'      => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
+					'downloadComplete' => __( 'Download complete.', 'mksddn-migrate-content' ),
+					'downloadError'    => __( 'Chunked download failed. Falling back to direct download.', 'mksddn-migrate-content' ),
+					'exportReady'      => __( 'Ready for full export.', 'mksddn-migrate-content' ),
+					'exportBusy'       => __( 'Preparing archive…', 'mksddn-migrate-content' ),
+					'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
+					'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
+					'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
+				),
+			)
+		);
+	}
 	/**
 	 * Display status notices after redirects.
 	 */
@@ -114,6 +174,7 @@ class ExportImportAdmin {
 		.mksddn-mc-card h3{margin-top:0;}
 		.mksddn-mc-multiselect{width:100%;}
 		.mksddn-mc-format-selector select{width:100%;}
+		.mksddn-mc-inline-status{margin-top:.5rem;font-size:13px;color:#555;}
 		</style>';
 
 		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
@@ -293,22 +354,24 @@ class ExportImportAdmin {
 		echo '<div class="mksddn-mc-card">';
 		echo '<h3>' . esc_html__( 'Full Site Export', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<p>' . esc_html__( 'Package uploads, plugins, and themes into a single archive. Large installs may take a while.', 'mksddn-migrate-content' ) . '</p>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" data-mksddn-full-export="true">';
 		wp_nonce_field( 'mksddn_mc_full_export' );
 		echo '<input type="hidden" name="action" value="mksddn_mc_export_full">';
 		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Export Full Site (.wpbkp)', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
+		echo '<p class="mksddn-mc-inline-status" data-mksddn-full-export-status aria-live="polite">' . esc_html__( 'Ready for full export.', 'mksddn-migrate-content' ) . '</p>';
 		echo '</div>';
 
 		echo '<div class="mksddn-mc-card">';
 		echo '<h3>' . esc_html__( 'Full Site Import', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<p>' . esc_html__( 'Restore uploads, plugins, and themes from a .wpbkp archive. Existing files with matching paths will be overwritten.', 'mksddn-migrate-content' ) . '</p>';
-		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="mksddn-mc-full-import-form" data-mksddn-full-import="true">';
 		wp_nonce_field( 'mksddn_mc_full_import' );
 		echo '<input type="hidden" name="action" value="mksddn_mc_import_full">';
 		echo '<input type="file" name="full_import_file" accept=".wpbkp" required><br><br>';
 		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Import Full Site', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
+		echo '<p class="mksddn-mc-inline-status" data-mksddn-full-import-status aria-live="polite">' . esc_html__( 'Ready for full import.', 'mksddn-migrate-content' ) . '</p>';
 		echo '</div>';
 		echo '</div>';
 	}
@@ -605,36 +668,59 @@ class ExportImportAdmin {
 
 		check_admin_referer( 'mksddn_mc_full_import' );
 
-		if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
-			$this->redirect_full_status( 'error', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
-		}
+		$chunk_job_id = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
+		$temp         = '';
+		$cleanup      = false;
+		$job          = null;
 
-		$file     = $_FILES['full_import_file'];
-		$tmp_name = sanitize_text_field( (string) $file['tmp_name'] );
-		$name     = sanitize_file_name( (string) $file['name'] );
-		$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
+		if ( $chunk_job_id ) {
+			$repo = new ChunkJobRepository();
+			$job  = $repo->get( $chunk_job_id );
+			$temp = $job->get_file_path();
 
-		if ( 0 >= $size ) {
-			$this->redirect_full_status( 'error', __( 'Invalid file size.', 'mksddn-migrate-content' ) );
-		}
+			if ( ! file_exists( $temp ) ) {
+				$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
+			}
+		} else {
+			if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
+				$this->redirect_full_status( 'error', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
+			}
 
-		$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
-		if ( 'wpbkp' !== $ext ) {
-			$this->redirect_full_status( 'error', __( 'Please upload a .wpbkp archive.', 'mksddn-migrate-content' ) );
-		}
+			$file     = $_FILES['full_import_file'];
+			$tmp_name = sanitize_text_field( (string) $file['tmp_name'] );
+			$name     = sanitize_file_name( (string) $file['name'] );
+			$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
 
-		$temp = wp_tempnam( 'mksddn-full-import-' );
-		if ( ! $temp ) {
-			$this->redirect_full_status( 'error', __( 'Unable to allocate temp file for import.', 'mksddn-migrate-content' ) );
-		}
+			if ( 0 >= $size ) {
+				$this->redirect_full_status( 'error', __( 'Invalid file size.', 'mksddn-migrate-content' ) );
+			}
 
-		if ( ! move_uploaded_file( $tmp_name, $temp ) ) {
-			$this->redirect_full_status( 'error', __( 'Failed to move uploaded file.', 'mksddn-migrate-content' ) );
+			$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
+			if ( 'wpbkp' !== $ext ) {
+				$this->redirect_full_status( 'error', __( 'Please upload a .wpbkp archive.', 'mksddn-migrate-content' ) );
+			}
+
+			$temp = wp_tempnam( 'mksddn-full-import-' );
+			if ( ! $temp ) {
+				$this->redirect_full_status( 'error', __( 'Unable to allocate temp file for import.', 'mksddn-migrate-content' ) );
+			}
+
+			if ( ! move_uploaded_file( $tmp_name, $temp ) ) {
+				$this->redirect_full_status( 'error', __( 'Failed to move uploaded file.', 'mksddn-migrate-content' ) );
+			}
+
+			$cleanup = true;
 		}
 
 		$importer = new FullContentImporter();
 		$result   = $importer->import_from( $temp );
-		unlink( $temp );
+		if ( $cleanup && file_exists( $temp ) ) {
+			unlink( $temp );
+		}
+
+		if ( $job ) {
+			$job->delete();
+		}
 
 		if ( is_wp_error( $result ) ) {
 			$this->redirect_full_status( 'error', $result->get_error_message() );

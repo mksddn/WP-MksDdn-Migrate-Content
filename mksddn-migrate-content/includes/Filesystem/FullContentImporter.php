@@ -53,7 +53,7 @@ class FullContentImporter {
 
 			$target = trailingslashit( ABSPATH ) . $name;
 
-			if ( str_ends_with( $name, '/' ) ) {
+			if ( '/' === substr( $name, -1 ) ) {
 				wp_mkdir_p( $target );
 				continue;
 			}
@@ -102,7 +102,7 @@ class FullContentImporter {
 	private function should_skip_path( string $path ): bool {
 		$ignored = array( '/.git/', '/.svn/', '/.hg/', '/.DS_Store' );
 		foreach ( $ignored as $needle ) {
-			if ( str_contains( $path, $needle ) ) {
+			if ( false !== strpos( $path, $needle ) ) {
 				return true;
 			}
 		}

@@ -22,6 +22,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullContentExporter {
 
 	/**
+	 * File extensions that should be stored without recompression.
+	 *
+	 * @var string[]
+	 */
+	private array $store_extensions = array( 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'zip', 'gz', 'rar', '7z', 'mp4', 'mov', 'mp3', 'ogg', 'pdf', 'wpbkp' );
+
+	/**
 	 * Build archive with uploads/plugins/themes.
 	 *
 	 * @param string $target_path Absolute temp filepath.
@@ -58,6 +65,10 @@ class FullContentExporter {
 		);
 
 		foreach ( $iterator as $path => $info ) {
+			if ( $this->should_skip_path( $path ) ) {
+				continue;
+			}
+
 			$relative = trim( str_replace( $source_dir, '', $path ), DIRECTORY_SEPARATOR );
 			$target   = trim( $archive_root . '/' . $relative, '/' );
 
@@ -69,8 +80,44 @@ class FullContentExporter {
 				$zip->addEmptyDir( $target . '/' );
 			} else {
 				$zip->addFile( $path, $target );
+				$this->maybe_adjust_compression( $zip, $target, $path );
 			}
 		}
+	}
+
+	private function maybe_adjust_compression( ZipArchive $zip, string $target, string $path ): void {
+		if ( ! method_exists( $zip, 'setCompressionName' ) ) {
+			return;
+		}
+
+		$extension = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+		if ( in_array( $extension, $this->store_extensions, true ) ) {
+			$zip->setCompressionName( $target, ZipArchive::CM_STORE );
+		}
+	}
+
+	private function should_skip_path( string $path ): bool {
+		$ignored = array(
+			'/mksddn-migrate-jobs/',
+			'/mksddn-migrate-jobs-legacy/',
+			'/.git/',
+			'/.svn/',
+			'/.hg/',
+			'/.DS_Store',
+		);
+
+		foreach ( $ignored as $needle ) {
+			if ( false !== strpos( $path, $needle ) ) {
+				return true;
+			}
+		}
+
+		$extension = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+		if ( in_array( $extension, array( 'wpbkp' ), true ) ) {
+			return true;
+		}
+
+		return false;
 	}
 }
 

@@ -20,6 +20,12 @@ add_action(
 		require_once __DIR__ . '/includes/Options/OptionsImporter.php';
 		require_once __DIR__ . '/includes/Selection/ContentSelection.php';
 		require_once __DIR__ . '/includes/Selection/SelectionBuilder.php';
+		require_once __DIR__ . '/includes/Chunking/ChunkJob.php';
+		require_once __DIR__ . '/includes/Chunking/ChunkJobRepository.php';
+		require_once __DIR__ . '/includes/Chunking/ChunkRestController.php';
+		require_once __DIR__ . '/includes/Chunking/ChunkServiceProvider.php';
+
+		Mksddn_MC\Chunking\ChunkServiceProvider::init();
 	}
 );
 
