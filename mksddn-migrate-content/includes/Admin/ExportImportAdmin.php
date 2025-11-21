@@ -11,6 +11,8 @@ use Mksddn_MC\Archive\Extractor;
 use Mksddn_MC\Export\ExportHandler;
 use Mksddn_MC\Import\ImportHandler;
 use Mksddn_MC\Options\OptionsHelper;
+use Mksddn_MC\Filesystem\FullContentExporter;
+use Mksddn_MC\Filesystem\FullContentImporter;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -37,6 +39,8 @@ class ExportImportAdmin {
 
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 		add_action( 'admin_post_export_single_page', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_mksddn_mc_export_full', array( $this, 'handle_full_export' ) );
+		add_action( 'admin_post_mksddn_mc_import_full', array( $this, 'handle_full_import' ) );
 	}
 
 	/**
@@ -64,16 +68,36 @@ class ExportImportAdmin {
 
 		echo '<div class="wrap">';
 		echo '<h1>' . esc_html__( 'Export & Import', 'mksddn-migrate-content' ) . '</h1>';
+		$this->render_status_notices();
 		$this->render_progress_container();
 
 		$this->render_export_form();
 		$this->render_import_form();
+		$this->render_full_site_cards();
 		$this->handle_import();
 
 		echo '</div>';
-
 		$this->render_javascript();
 	}
+	/**
+	 * Display status notices after redirects.
+	 */
+	private function render_status_notices(): void {
+		if ( empty( $_GET['mksddn_mc_full_status'] ) ) {
+			return;
+		}
+
+		$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) );
+		if ( 'success' === $status ) {
+			$this->show_success( __( 'Full site operation completed successfully.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		if ( 'error' === $status && ! empty( $_GET['mksddn_mc_full_error'] ) ) {
+			$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_full_error'] ) ) );
+		}
+	}
+
 
 	/**
 	 * Render progress container.
@@ -130,8 +154,11 @@ class ExportImportAdmin {
 		echo '<p>' . esc_html__( 'Select a content type to export.', 'mksddn-migrate-content' ) . '</p>';
 		echo '<label for="export_type">' . esc_html__( 'Content type:', 'mksddn-migrate-content' ) . '</label><br>';
 		echo '<select id="export_type" name="export_type" onchange="mksddnToggleType()" required>';
+		$first = true;
 		foreach ( $this->get_exportable_post_types() as $type => $label ) {
-			echo '<option value="' . esc_attr( $type ) . '">' . esc_html( $label ) . '</option>';
+			$selected = $first ? ' selected' : '';
+			echo '<option value="' . esc_attr( $type ) . '"' . $selected . '>' . esc_html( $label ) . '</option>';
+			$first = false;
 		}
 		echo '</select><br><br>';
 	}
@@ -256,6 +283,34 @@ class ExportImportAdmin {
 
 		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
+	}
+
+	/**
+	 * Render full-site action cards.
+	 */
+	private function render_full_site_cards(): void {
+		echo '<div class="mksddn-mc-grid">';
+		echo '<div class="mksddn-mc-card">';
+		echo '<h3>' . esc_html__( 'Full Site Export', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<p>' . esc_html__( 'Package uploads, plugins, and themes into a single archive. Large installs may take a while.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'mksddn_mc_full_export' );
+		echo '<input type="hidden" name="action" value="mksddn_mc_export_full">';
+		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Export Full Site (.wpbkp)', 'mksddn-migrate-content' ) . '</button>';
+		echo '</form>';
+		echo '</div>';
+
+		echo '<div class="mksddn-mc-card">';
+		echo '<h3>' . esc_html__( 'Full Site Import', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<p>' . esc_html__( 'Restore uploads, plugins, and themes from a .wpbkp archive. Existing files with matching paths will be overwritten.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'mksddn_mc_full_import' );
+		echo '<input type="hidden" name="action" value="mksddn_mc_import_full">';
+		echo '<input type="file" name="full_import_file" accept=".wpbkp" required><br><br>';
+		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Import Full Site', 'mksddn-migrate-content' ) . '</button>';
+		echo '</form>';
+		echo '</div>';
+		echo '</div>';
 	}
 
 	/**
@@ -512,5 +567,132 @@ class ExportImportAdmin {
 
 		$export_handler = new ExportHandler();
 		$export_handler->export_single_page();
+	}
+
+	/**
+	 * Handle full site export action.
+	 */
+	public function handle_full_export(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to export.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_full_export' );
+
+		$temp = wp_tempnam( 'mksddn-full-' );
+		if ( ! $temp ) {
+			wp_die( esc_html__( 'Unable to create temporary file.', 'mksddn-migrate-content' ) );
+		}
+
+		$exporter = new FullContentExporter();
+		$result   = $exporter->export_to( $temp );
+
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ) );
+		}
+
+		$filename = 'full-site-' . gmdate( 'Ymd-His' ) . '.wpbkp';
+		$this->stream_file_download( $temp, $filename );
+	}
+
+	/**
+	 * Handle full site import action.
+	 */
+	public function handle_full_import(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to import.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_full_import' );
+
+		if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
+			$this->redirect_full_status( 'error', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
+		}
+
+		$file     = $_FILES['full_import_file'];
+		$tmp_name = sanitize_text_field( (string) $file['tmp_name'] );
+		$name     = sanitize_file_name( (string) $file['name'] );
+		$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
+
+		if ( 0 >= $size ) {
+			$this->redirect_full_status( 'error', __( 'Invalid file size.', 'mksddn-migrate-content' ) );
+		}
+
+		$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
+		if ( 'wpbkp' !== $ext ) {
+			$this->redirect_full_status( 'error', __( 'Please upload a .wpbkp archive.', 'mksddn-migrate-content' ) );
+		}
+
+		$temp = wp_tempnam( 'mksddn-full-import-' );
+		if ( ! $temp ) {
+			$this->redirect_full_status( 'error', __( 'Unable to allocate temp file for import.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( ! move_uploaded_file( $tmp_name, $temp ) ) {
+			$this->redirect_full_status( 'error', __( 'Failed to move uploaded file.', 'mksddn-migrate-content' ) );
+		}
+
+		$importer = new FullContentImporter();
+		$result   = $importer->import_from( $temp );
+		unlink( $temp );
+
+		if ( is_wp_error( $result ) ) {
+			$this->redirect_full_status( 'error', $result->get_error_message() );
+		}
+
+		$this->redirect_full_status( 'success' );
+	}
+
+	/**
+	 * Output file download headers and contents.
+	 *
+	 * @param string $path     Absolute file path.
+	 * @param string $filename Download filename.
+	 */
+	private function stream_file_download( string $path, string $filename ): void {
+		if ( ! file_exists( $path ) ) {
+			wp_die( esc_html__( 'Export file not found.', 'mksddn-migrate-content' ) );
+		}
+
+		while ( ob_get_level() ) {
+			ob_end_clean();
+		}
+
+		$filesize = filesize( $path );
+		nocache_headers();
+		header( 'Content-Type: application/octet-stream' );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+		if ( false !== $filesize ) {
+			header( 'Content-Length: ' . $filesize );
+		}
+
+		$handle = fopen( $path, 'rb' );
+		if ( $handle ) {
+			fpassthru( $handle );
+			fclose( $handle );
+		}
+
+		unlink( $path );
+		exit;
+	}
+
+	/**
+	 * Redirect back with status parameters.
+	 *
+	 * @param string      $status success|error.
+	 * @param string|null $message Optional message.
+	 */
+	private function redirect_full_status( string $status, ?string $message = null ): void {
+		$base = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
+		$url  = add_query_arg(
+			array(
+				'mksddn_mc_full_status' => $status,
+				'mksddn_mc_full_error'  => $message,
+			),
+			$base
+		);
+
+		wp_safe_redirect( $url );
+		exit;
 	}
 }
