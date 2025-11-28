@@ -7,6 +7,7 @@
 
 namespace Mksddn_MC\Filesystem;
 
+use Mksddn_MC\Database\FullDatabaseExporter;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use WP_Error;
@@ -28,8 +29,19 @@ class FullContentExporter {
 	 */
 	private array $store_extensions = array( 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'zip', 'gz', 'rar', '7z', 'mp4', 'mov', 'mp3', 'ogg', 'pdf', 'wpbkp' );
 
+	private FullDatabaseExporter $db_exporter;
+
 	/**
-	 * Build archive with uploads/plugins/themes.
+	 * Setup exporter.
+	 *
+	 * @param FullDatabaseExporter|null $db_exporter Optional DB exporter.
+	 */
+	public function __construct( ?FullDatabaseExporter $db_exporter = null ) {
+		$this->db_exporter = $db_exporter ?? new FullDatabaseExporter();
+	}
+
+	/**
+	 * Build archive with uploads/plugins/themes and DB dump.
 	 *
 	 * @param string $target_path Absolute temp filepath.
 	 * @return string|WP_Error
@@ -40,22 +52,64 @@ class FullContentExporter {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
 		}
 
-		$paths = array(
-			'wp-content/uploads' => WP_CONTENT_DIR . '/uploads',
-			'wp-content/plugins' => WP_PLUGIN_DIR,
-			'wp-content/themes'  => get_theme_root(),
+		$payload = array(
+			'type'     => 'full-site',
+			'database' => $this->db_exporter->export(),
 		);
 
-		foreach ( $paths as $archive_root => $real_path ) {
+		$manifest = array(
+			'format_version' => 1,
+			'plugin_version' => MKSDDN_MC_VERSION,
+			'type'           => 'full-site',
+			'created_at_gmt' => gmdate( 'c' ),
+		);
+
+		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+		$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
+
+		if ( false === $manifest_json || false === $payload_json ) {
+			$zip->close();
+			return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
+		}
+
+		$zip->addFromString( 'manifest.json', $manifest_json );
+		$zip->addFromString( 'payload/content.json', $payload_json );
+
+		$this->append_wp_content( $zip, 'files' );
+		$zip->close();
+		return $target_path;
+	}
+
+	/**
+	 * Append wp-content directories to archive.
+	 *
+	 * @param ZipArchive $zip         Archive instance.
+	 * @param string     $base_prefix Base directory inside archive.
+	 */
+	private function append_wp_content( ZipArchive $zip, string $base_prefix = '' ): void {
+		foreach ( $this->get_wp_content_paths( $base_prefix ) as $archive_root => $real_path ) {
 			if ( ! is_dir( $real_path ) ) {
 				continue;
 			}
 
 			$this->add_directory_to_zip( $zip, $real_path, $archive_root );
 		}
+	}
 
-		$zip->close();
-		return $target_path;
+	/**
+	 * Map archive targets to physical directories.
+	 *
+	 * @param string $base_prefix Optional base folder.
+	 * @return array<string, string>
+	 */
+	private function get_wp_content_paths( string $base_prefix = '' ): array {
+		$prefix = '' === $base_prefix ? '' : trim( $base_prefix, '/' ) . '/';
+
+		return array(
+			$prefix . 'wp-content/uploads' => WP_CONTENT_DIR . '/uploads',
+			$prefix . 'wp-content/plugins' => WP_PLUGIN_DIR,
+			$prefix . 'wp-content/themes'  => get_theme_root(),
+		);
 	}
 
 	private function add_directory_to_zip( ZipArchive $zip, string $source_dir, string $archive_root ): void {

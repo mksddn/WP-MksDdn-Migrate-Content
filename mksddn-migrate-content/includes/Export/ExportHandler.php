@@ -11,7 +11,6 @@ use Mksddn_MC\Archive\Packer;
 use Mksddn_MC\Media\AttachmentCollector;
 use Mksddn_MC\Media\AttachmentCollection;
 use Mksddn_MC\Options\OptionsExporter;
-use Mksddn_MC\Selection\SelectionBuilder;
 use Mksddn_MC\Selection\ContentSelection;
 use WP_Error;
 use WP_Post;
@@ -44,16 +43,24 @@ class ExportHandler {
 	 */
 	private AttachmentCollector $media_collector;
 
+	private OptionsExporter $options_exporter;
+
+	/**
+	 * Whether to gather media files for the current export.
+	 */
+	private bool $collect_media = true;
 
 	/**
 	 * Setup handler.
 	 *
-	 * @param Packer|null             $packer          Optional packer.
-	 * @param AttachmentCollector|null $media_collector Optional collector.
+	 * @param Packer|null              $packer           Optional packer.
+	 * @param AttachmentCollector|null $media_collector  Optional collector.
+	 * @param OptionsExporter|null     $options_exporter Optional options exporter.
 	 */
-	public function __construct( ?Packer $packer = null, ?AttachmentCollector $media_collector = null ) {
-		$this->packer          = $packer ?? new Packer();
-		$this->media_collector = $media_collector ?? new AttachmentCollector();
+	public function __construct( ?Packer $packer = null, ?AttachmentCollector $media_collector = null, ?OptionsExporter $options_exporter = null ) {
+		$this->packer           = $packer ?? new Packer();
+		$this->media_collector  = $media_collector ?? new AttachmentCollector();
+		$this->options_exporter = $options_exporter ?? new OptionsExporter();
 	}
 
 	/**
@@ -61,16 +68,50 @@ class ExportHandler {
 	 */
 	public function export_single_page(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$export_type = sanitize_key( $_POST['export_type'] ?? '' );
+		$export_type = \sanitize_key( $_POST['export_type'] ?? '' );
 
 		if ( ! isset( self::EXPORT_TYPES[ $export_type ] ) ) {
-			wp_die( esc_html__( 'Invalid export type.', 'mksddn-migrate-content' ) );
+			\wp_die( \esc_html__( 'Invalid export type.', 'mksddn-migrate-content' ) );
 		}
 
 		$this->format = $this->resolve_format( $export_type );
 
 		$method = self::EXPORT_TYPES[ $export_type ];
 		$this->$method();
+	}
+
+	/**
+	 * Export arbitrary selection of content items.
+	 *
+	 * @param ContentSelection $selection Selection object.
+	 * @param string           $format    Requested format.
+	 * @return void
+	 */
+	public function export_selected_content( ContentSelection $selection, string $format = 'archive' ): void {
+		if ( ! $selection->has_items() && ! $selection->has_options() ) {
+			\wp_die( \esc_html__( 'Select at least one item to export.', 'mksddn-migrate-content' ) );
+		}
+
+		$this->format = $this->normalize_format( $format );
+
+		if ( 1 === $selection->count_items() && ! $selection->has_options() ) {
+			$first = $selection->first_item();
+			if ( $first ) {
+				$this->export_post_by_id( (int) $first['id'] );
+				return;
+			}
+		}
+
+		$this->export_selection_bundle( $selection );
+	}
+
+	/**
+	 * Toggle media collection for current export.
+	 *
+	 * @param bool $enabled Flag state.
+	 */
+	public function set_collect_media( bool $enabled ): void {
+		$this->collect_media = $enabled;
 	}
 
 
@@ -83,17 +124,46 @@ class ExportHandler {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
 		$target_id = $this->resolve_target_id();
 		if ( 0 === $target_id ) {
-			wp_die( esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
+			\wp_die( \esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
 		}
 
-		$post = get_post( $target_id );
-		if ( ! $post || ! in_array( $post->post_type, array( 'page', 'post' ), true ) ) {
-			wp_die( esc_html__( 'Invalid content ID.', 'mksddn-migrate-content' ) );
+		$this->export_post_by_id( $target_id, array( 'page', 'post' ) );
+	}
+
+	/**
+	 * Export a single post object by ID.
+	 *
+	 * @param int   $post_id      Target post ID.
+	 * @param array $allowed_types Optional whitelist (empty = allow all).
+	 */
+	private function export_post_by_id( int $post_id, array $allowed_types = array() ): void {
+		$post = \get_post( $post_id );
+		if ( ! $post ) {
+			\wp_die( \esc_html__( 'Invalid content ID.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( ! empty( $allowed_types ) && ! in_array( $post->post_type, $allowed_types, true ) ) {
+			\wp_die( \esc_html__( 'Requested type is not allowed for this export.', 'mksddn-migrate-content' ) );
 		}
 
 		$media = $this->collect_media_for_post( $post );
-		$data  = $this->prepare_post_data( $post, $media );
-		$this->deliver_payload( $data, $post->post_type . '-' . $target_id, $media );
+		$data  = $this->prepare_payload_for_post( $post, $media );
+		$this->deliver_payload( $data, $post->post_type . '-' . $post_id, $media );
+	}
+
+	/**
+	 * Prepare payload data for post/form entity.
+	 *
+	 * @param WP_Post                 $post  Post object.
+	 * @param AttachmentCollection|null $media Media bundle.
+	 * @return array
+	 */
+	private function prepare_payload_for_post( WP_Post $post, ?AttachmentCollection $media = null ): array {
+		if ( 'forms' === $post->post_type ) {
+			return $this->prepare_form_data( $post, $media );
+		}
+
+		return $this->prepare_post_data( $post, $media );
 	}
 	private function export_selection_bundle( ContentSelection $selection ): void {
 		$bundle = array(
@@ -105,18 +175,20 @@ class ExportHandler {
 			),
 		);
 
+		$combined_media = new AttachmentCollection();
+
 		foreach ( $selection->get_items() as $type => $ids ) {
 			foreach ( $ids as $id ) {
-				$post = get_post( $id );
+				$post = \get_post( $id );
 				if ( ! $post ) {
 					continue;
 				}
 
 				$media = $this->collect_media_for_post( $post );
-				$bundle['items'][] = $this->prepare_post_data( $post, $media );
+				$bundle['items'][] = $this->prepare_payload_for_post( $post, $media );
 
 				if ( $media && $media->has_items() ) {
-					$bundle['_mksddn_media'] = array_merge( $bundle['_mksddn_media'] ?? array(), $media->get_manifest() );
+					$combined_media->absorb( $media );
 				}
 			}
 		}
@@ -126,7 +198,8 @@ class ExportHandler {
 			$bundle['options']['widgets'] = $this->options_exporter->export_widgets( $selection->get_widgets() );
 		}
 
-		$this->deliver_payload( $bundle, 'bundle-' . gmdate( 'Ymd-His' ), null );
+		$media_payload = $combined_media->has_items() ? $combined_media : null;
+		$this->deliver_payload( $bundle, 'bundle-' . gmdate( 'Ymd-His' ), $media_payload );
 	}
 
 
@@ -137,14 +210,14 @@ class ExportHandler {
 	 */
 	private function export_form(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
-		$form_id = absint( $_POST['form_id'] ?? 0 );
+		$form_id = \absint( $_POST['form_id'] ?? 0 );
 		if ( 0 === $form_id ) {
-			wp_die( esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
+			\wp_die( \esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
 		}
 
-		$form = get_post( $form_id );
+		$form = \get_post( $form_id );
 		if ( ! $form || 'forms' !== $form->post_type ) {
-			wp_die( esc_html__( 'Invalid form ID.', 'mksddn-migrate-content' ) );
+			\wp_die( \esc_html__( 'Invalid form ID.', 'mksddn-migrate-content' ) );
 		}
 
 		$media = $this->collect_media_for_post( $form );
@@ -171,8 +244,8 @@ class ExportHandler {
 			'author'     => $post->post_author,
 			'date'       => $post->post_date_gmt,
 			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $post->ID ) : array(),
-			'meta'       => get_post_meta( $post->ID ),
-			'featured_media' => get_post_thumbnail_id( $post ),
+			'meta'       => \get_post_meta( $post->ID ),
+			'featured_media' => \get_post_thumbnail_id( $post ),
 		);
 
 		if ( 'post' === $post->post_type ) {
@@ -189,10 +262,10 @@ class ExportHandler {
 	 * Resolve target ID based on requested type.
 	 */
 	private function resolve_target_id(): int {
-		$type = sanitize_key( $_POST['export_type'] ?? 'page' );
+		$type = \sanitize_key( $_POST['export_type'] ?? 'page' );
 		return match ( $type ) {
-			'post' => absint( $_POST['post_id'] ?? 0 ),
-			default => absint( $_POST['page_id'] ?? 0 ),
+			'post' => \absint( $_POST['post_id'] ?? 0 ),
+			default => \absint( $_POST['page_id'] ?? 0 ),
 		};
 	}
 
@@ -203,12 +276,12 @@ class ExportHandler {
 	 * @return array
 	 */
 	private function collect_taxonomies( int $post_id ): array {
-		$taxonomies = get_object_taxonomies( 'post', 'names' );
+		$taxonomies = \get_object_taxonomies( 'post', 'names' );
 		$result     = array();
 
 		foreach ( $taxonomies as $taxonomy ) {
-			$terms = wp_get_object_terms( $post_id, $taxonomy );
-			if ( is_wp_error( $terms ) || empty( $terms ) ) {
+			$terms = \wp_get_object_terms( $post_id, $taxonomy );
+			if ( \is_wp_error( $terms ) || empty( $terms ) ) {
 				continue;
 			}
 
@@ -234,7 +307,7 @@ class ExportHandler {
 	 * @return array
 	 */
 	private function prepare_form_data( WP_Post $form, ?AttachmentCollection $media = null ): array {
-		$fields_config = get_post_meta( $form->ID, '_fields_config', true );
+		$fields_config = \get_post_meta( $form->ID, '_fields_config', true );
 
 		$data = array(
 			'type'          => 'forms',
@@ -246,7 +319,7 @@ class ExportHandler {
 			'fields_config' => $fields_config,
 			'fields'        => json_decode( $fields_config, true ),
 			'acf_fields'    => function_exists( 'get_fields' ) ? get_fields( $form->ID ) : array(),
-			'meta'          => get_post_meta( $form->ID ),
+			'meta'          => \get_post_meta( $form->ID ),
 		);
 
 		if ( $media && $media->has_items() ) {
@@ -281,8 +354,8 @@ class ExportHandler {
 			$media ? $media->get_assets() : array()
 		);
 
-		if ( is_wp_error( $archive ) ) {
-			wp_die( esc_html( $archive->get_error_message() ) );
+		if ( \is_wp_error( $archive ) ) {
+			\wp_die( \esc_html( $archive->get_error_message() ) );
 		}
 
 		$this->download_archive( $archive, $basename . '.wpbkp' );
@@ -296,7 +369,7 @@ class ExportHandler {
 			return true;
 		}
 
-		$toggle = defined( 'MKSDDN_MC_DEBUG_JSON_EXPORT' ) && MKSDDN_MC_DEBUG_JSON_EXPORT;
+		$toggle = defined( 'MKSDDN_MC_DEBUG_JSON_EXPORT' ) && \MKSDDN_MC_DEBUG_JSON_EXPORT;
 		/**
 		 * Filter enabling legacy JSON export output.
 		 *
@@ -304,7 +377,7 @@ class ExportHandler {
 		 *
 		 * @param bool $enabled JSON export enabled.
 		 */
-		return (bool) apply_filters( 'mksddn_mc_enable_json_export', $toggle );
+		return (bool) \apply_filters( 'mksddn_mc_enable_json_export', $toggle );
 	}
 
 	/**
@@ -317,7 +390,7 @@ class ExportHandler {
 		$handle = @fopen( $archive_path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
 
 		if ( ! $handle ) {
-			wp_die( esc_html__( 'Failed to open archive for download.', 'mksddn-migrate-content' ) );
+			\wp_die( \esc_html__( 'Failed to open archive for download.', 'mksddn-migrate-content' ) );
 		}
 
 		// Clear buffers.
@@ -327,7 +400,7 @@ class ExportHandler {
 
 		$filesize = filesize( $archive_path );
 
-		nocache_headers();
+		\nocache_headers();
 		header( 'Content-Type: application/octet-stream' );
 		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
 		if ( false !== $filesize ) {
@@ -349,13 +422,13 @@ class ExportHandler {
 	 * @return void
 	 */
 	private function download_json( array $data, string $filename ): void {
-		$json = wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+		$json = \wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 
 		while ( ob_get_level() ) {
 			ob_end_clean();
 		}
 
-		nocache_headers();
+		\nocache_headers();
 		header( 'Content-Type: application/json; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
 		header( 'Content-Length: ' . strlen( $json ) );
@@ -373,7 +446,7 @@ class ExportHandler {
 	 */
 	private function resolve_format( string $export_type ): string {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Checked upstream.
-		$requested = sanitize_key( $_POST['export_format'] ?? 'archive' );
+		$requested = \sanitize_key( $_POST['export_format'] ?? 'archive' );
 		$allowed   = array( 'archive', 'json' );
 
 		if ( ! in_array( $requested, $allowed, true ) ) {
@@ -385,6 +458,19 @@ class ExportHandler {
 		}
 
 		return $requested;
+	}
+
+	/**
+	 * Normalize raw format string (selection mode).
+	 *
+	 * @param string $format Requested format.
+	 * @return string
+	 */
+	private function normalize_format( string $format ): string {
+		$allowed = array( 'archive', 'json' );
+		$format  = \sanitize_key( $format );
+
+		return in_array( $format, $allowed, true ) ? $format : 'archive';
 	}
 
 	/**
@@ -401,7 +487,7 @@ class ExportHandler {
 		 *
 		 * @param array $allowed_types Types list.
 		 */
-		$allowed_types = apply_filters( 'mksddn_mc_json_export_types', $allowed_types );
+		$allowed_types = \apply_filters( 'mksddn_mc_json_export_types', $allowed_types );
 
 		return in_array( $export_type, $allowed_types, true );
 	}
@@ -414,6 +500,10 @@ class ExportHandler {
 	 */
 	private function collect_media_for_post( ?WP_Post $post ): ?AttachmentCollection {
 		if ( ! $post instanceof WP_Post ) {
+			return null;
+		}
+
+		if ( ! $this->collect_media ) {
 			return null;
 		}
 

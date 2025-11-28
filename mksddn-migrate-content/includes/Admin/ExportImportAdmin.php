@@ -14,6 +14,7 @@ use Mksddn_MC\Options\OptionsHelper;
 use Mksddn_MC\Filesystem\FullContentExporter;
 use Mksddn_MC\Filesystem\FullContentImporter;
 use Mksddn_MC\Chunking\ChunkJobRepository;
+use Mksddn_MC\Selection\SelectionBuilder;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -40,7 +41,7 @@ class ExportImportAdmin {
 
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_action( 'admin_post_export_single_page', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_mksddn_mc_export_selected', array( $this, 'handle_selected_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this, 'handle_full_import' ) );
 	}
@@ -73,10 +74,9 @@ class ExportImportAdmin {
 		$this->render_status_notices();
 		$this->render_progress_container();
 
-		$this->render_single_item_section();
-		$this->render_files_section();
 		$this->render_full_site_section();
-		$this->handle_import();
+		$this->render_selected_content_section();
+		$this->handle_selected_import();
 
 		echo '</div>';
 		$this->render_javascript();
@@ -188,6 +188,8 @@ class ExportImportAdmin {
 		.mksddn-mc-field input[type=\"file\"],
 		.mksddn-mc-format-selector select{width:100%;}
 		.mksddn-mc-inline-status{margin-top:.5rem;font-size:13px;color:#555;}
+		.mksddn-mc-selection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;}
+		.mksddn-mc-selection-grid select{min-height:140px;}
 		</style>';
 
 		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
@@ -196,47 +198,26 @@ class ExportImportAdmin {
 		echo '</div>';
 	}
 
-	private function render_single_item_export_card(): void {
+	private function render_selected_export_card(): void {
 		echo '<div class="mksddn-mc-card">';
 		echo '<h3>' . esc_html__( 'Export', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		wp_nonce_field( 'export_single_page_nonce' );
+		wp_nonce_field( 'mksddn_mc_selected_export' );
 
-		echo '<input type="hidden" name="action" value="export_single_page">';
+		echo '<input type="hidden" name="action" value="mksddn_mc_export_selected">';
 		echo '<div class="mksddn-mc-field">';
-		echo '<h4>' . esc_html__( 'Content Type', 'mksddn-migrate-content' ) . '</h4>';
-		$this->render_type_selector();
-		echo '</div>';
-
-		echo '<div class="mksddn-mc-field">';
-		echo '<h4>' . esc_html__( 'Select Item', 'mksddn-migrate-content' ) . '</h4>';
+		echo '<h4>' . esc_html__( 'Choose content', 'mksddn-migrate-content' ) . '</h4>';
+		echo '<p class="description">' . esc_html__( 'Hold Cmd/Ctrl to pick multiple entries inside each list.', 'mksddn-migrate-content' ) . '</p>';
 		$this->render_selection_fields();
 		echo '</div>';
 
 		echo '<div class="mksddn-mc-field">';
-		echo '<h4>' . esc_html__( 'File Format', 'mksddn-migrate-content' ) . '</h4>';
+		echo '<h4>' . esc_html__( 'File format', 'mksddn-migrate-content' ) . '</h4>';
 		$this->render_format_selector();
 		echo '</div>';
 
-		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Export', 'mksddn-migrate-content' ) . '</button>';
+		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Export selected', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
-		echo '</div>';
-	}
-
-	/**
-	 * Render export type selector.
-	 */
-	private function render_type_selector(): void {
-		echo '<div class="mksddn-mc-basic-selection">';
-		echo '<label for="export_type">' . esc_html__( 'Content type:', 'mksddn-migrate-content' ) . '</label>';
-		echo '<select id="export_type" name="export_type" onchange="mksddnToggleType()" required>';
-		$first = true;
-		foreach ( $this->get_exportable_post_types() as $type => $label ) {
-			$selected = $first ? ' selected' : '';
-			echo '<option value="' . esc_attr( $type ) . '"' . $selected . '>' . esc_html( $label ) . '</option>';
-			$first = false;
-		}
-		echo '</select><br><br>';
 		echo '</div>';
 	}
 
@@ -244,42 +225,60 @@ class ExportImportAdmin {
 	 * Render selection fields.
 	 */
 	private function render_selection_fields(): void {
-		echo '<div class="mksddn-mc-basic-selection">';
+		echo '<div class="mksddn-mc-selection-grid">';
 		foreach ( $this->get_exportable_post_types() as $type => $label ) {
-			$default = ( 'page' === $type );
-			$this->render_single_select(
+			$this->render_multi_select(
 				$type,
 				sprintf(
 					/* translators: %s type label */
-					__( 'Select %s:', 'mksddn-migrate-content' ),
-					strtolower( $label )
+					__( '%s entries', 'mksddn-migrate-content' ),
+					$label
 				),
-				$this->get_items_for_type( $type ),
-				! $default
+				$this->get_items_for_type( $type )
 			);
 		}
 		echo '</div>';
 	}
 
 	/**
-	 * Render a select for a specific post type.
+	 * Render a multi-select for specific post type.
 	 *
-	 * @param string  $type   Post type slug.
-	 * @param string  $label  Label text.
+	 * @param string    $type  Post type slug.
+	 * @param string    $label Label text.
 	 * @param WP_Post[] $items Items to populate.
-	 * @param bool    $hidden Hide by default.
 	 */
-	private function render_single_select( string $type, string $label, array $items, bool $hidden = false ): void {
-		$style = $hidden ? 'style="display:none;"' : '';
-		echo '<div class="mksddn-mc-type-select mksddn-mc-type-' . esc_attr( $type ) . '" ' . $style . '>';
-		echo '<label for="export_' . esc_attr( $type ) . '_id">' . esc_html( $label ) . '</label><br>';
-		echo '<select id="export_' . esc_attr( $type ) . '_id" name="' . esc_attr( $type ) . '_id">';
-		echo '<option value="">' . esc_html__( 'Select item...', 'mksddn-migrate-content' ) . '</option>';
-		foreach ( $items as $item ) {
-			echo '<option value="' . esc_attr( $item->ID ) . '">' . esc_html( $item->post_title ?: $item->ID ) . '</option>';
+	private function render_multi_select( string $type, string $label, array $items ): void {
+		echo '<div class="mksddn-mc-basic-selection">';
+		echo '<label for="selected_' . esc_attr( $type ) . '_ids">' . esc_html( $label ) . '</label>';
+		$size = $this->determine_select_size( $items );
+		$name = 'selected_' . $type . '_ids[]';
+		echo '<select id="selected_' . esc_attr( $type ) . '_ids" name="' . esc_attr( $name ) . '" multiple size="' . esc_attr( $size ) . '">';
+
+		if ( empty( $items ) ) {
+			echo '<option value="" disabled>' . esc_html__( 'No entries found', 'mksddn-migrate-content' ) . '</option>';
+		} else {
+			foreach ( $items as $item ) {
+				$label_text = $item->post_title ?: ( '#' . $item->ID );
+				echo '<option value="' . esc_attr( $item->ID ) . '">' . esc_html( $label_text ) . '</option>';
+			}
 		}
-		echo '</select><br><br>';
+
+		echo '</select>';
 		echo '</div>';
+	}
+
+	/**
+	 * Determine select box size based on available items.
+	 *
+	 * @param array $items Items list.
+	 * @return int
+	 */
+	private function determine_select_size( array $items ): int {
+		$count = count( $items );
+		$count = max( 4, $count );
+		$count = min( $count, 12 );
+
+		return $count;
 	}
 
 	/**
@@ -350,7 +349,7 @@ class ExportImportAdmin {
 	/**
 	 * Render import form.
 	 */
-	private function render_single_item_import_card(): void {
+	private function render_selected_import_card(): void {
 		echo '<div class="mksddn-mc-card">';
 		echo '<h3>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<form method="post" enctype="multipart/form-data">';
@@ -363,26 +362,26 @@ class ExportImportAdmin {
 		echo '<p class="description">' . esc_html__( 'Archives include media and integrity checks. JSON imports skip media restoration.', 'mksddn-migrate-content' ) . '</p><br>';
 		echo '</div>';
 
-		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</button>';
+		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Import selected file', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
 		echo '</div>';
 	}
 
-	private function render_single_item_section(): void {
+	private function render_selected_content_section(): void {
 		echo '<section class="mksddn-mc-section">';
-		echo '<h2>' . esc_html__( 'Single Item Migrate', 'mksddn-migrate-content' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Export or import a single page, post, or CPT entry with JSON or archive formats.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<h2>' . esc_html__( 'Selected Content', 'mksddn-migrate-content' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Pick one or many entries (pages, posts, CPT) and export them with or without media.', 'mksddn-migrate-content' ) . '</p>';
 		echo '<div class="mksddn-mc-grid">';
-		$this->render_single_item_export_card();
-		$this->render_single_item_import_card();
+		$this->render_selected_export_card();
+		$this->render_selected_import_card();
 		echo '</div>';
 		echo '</section>';
 	}
 
-	private function render_files_section(): void {
+	private function render_full_site_section(): void {
 		echo '<section class="mksddn-mc-section">';
-		echo '<h2>' . esc_html__( 'Files Directories Migrate', 'mksddn-migrate-content' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Bundle or restore the entire wp-content directory (uploads, plugins, themes) with chunked transfer.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<h2>' . esc_html__( 'Full Site Backup', 'mksddn-migrate-content' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Export or import everything (database + wp-content) via chunked transfer.', 'mksddn-migrate-content' ) . '</p>';
 		echo '<div class="mksddn-mc-grid">';
 
 		echo '<div class="mksddn-mc-card">';
@@ -410,32 +409,10 @@ class ExportImportAdmin {
 		echo '</section>';
 	}
 
-	private function render_full_site_section(): void {
-		echo '<section class="mksddn-mc-section">';
-		echo '<h2>' . esc_html__( 'Full Site Migrate', 'mksddn-migrate-content' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Stage 9 will combine database content and filesystem into a single .wpbkp with rollback support.', 'mksddn-migrate-content' ) . '</p>';
-		echo '<div class="mksddn-mc-grid">';
-
-		echo '<div class="mksddn-mc-card mksddn-mc-card--muted">';
-		echo '<h3>' . esc_html__( 'Export', 'mksddn-migrate-content' ) . '</h3>';
-		echo '<p>' . esc_html__( 'Unified exporter (DB + files) is planned. Stay tuned.', 'mksddn-migrate-content' ) . '</p>';
-		echo '<button type="button" class="button" disabled>' . esc_html__( 'Coming soon', 'mksddn-migrate-content' ) . '</button>';
-		echo '</div>';
-
-		echo '<div class="mksddn-mc-card mksddn-mc-card--muted">';
-		echo '<h3>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h3>';
-		echo '<p>' . esc_html__( 'Rollback-aware full site import arrives with Stage 9.', 'mksddn-migrate-content' ) . '</p>';
-		echo '<button type="button" class="button" disabled>' . esc_html__( 'Coming soon', 'mksddn-migrate-content' ) . '</button>';
-		echo '</div>';
-
-		echo '</div>';
-		echo '</section>';
-	}
-
 	/**
-	 * Handle import POST.
+	 * Handle selected content import.
 	 */
-	private function handle_import(): void {
+	private function handle_selected_import(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
@@ -584,6 +561,10 @@ class ExportImportAdmin {
 	 * @return bool
 	 */
 	private function process_import( ImportHandler $import_handler, string $type, array $data ): bool {
+		if ( 'bundle' === $type ) {
+			return $import_handler->import_bundle( $data );
+		}
+
 		return $import_handler->import_single_page( $data );
 	}
 
@@ -626,20 +607,6 @@ class ExportImportAdmin {
 			}
 		})();
 
-		window.mksddnToggleType = function(){
-			const exportType = document.getElementById("export_type");
-			if(!exportType){return;}
-			const type = exportType.value;
-			document.querySelectorAll(".mksddn-mc-type-select").forEach((el)=>{
-				el.style.display = "none";
-			});
-			const target = document.querySelector(".mksddn-mc-type-" + type);
-			if(target){
-				target.style.display = "block";
-			}
-		};
-
-		window.mksddnToggleType();
         </script>';
 	}
 
@@ -673,19 +640,25 @@ class ExportImportAdmin {
 	}
 
 	/**
-	 * Handle export POST.
+	 * Handle selected content export.
 	 */
-	public function handle_export(): void {
+	public function handle_selected_export(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to export.', 'mksddn-migrate-content' ) );
 		}
 
-		if ( ! check_admin_referer( 'export_single_page_nonce' ) ) {
-			wp_die( esc_html__( 'Invalid request', 'mksddn-migrate-content' ) );
+		if ( ! check_admin_referer( 'mksddn_mc_selected_export' ) ) {
+			wp_die( esc_html__( 'Invalid request.', 'mksddn-migrate-content' ) );
 		}
 
+		$builder    = new SelectionBuilder();
+		$selection  = $builder->from_request( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- already verified above.
+		$format     = sanitize_key( $_POST['export_format'] ?? 'archive' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$with_media = ( 'archive' === $format );
+
 		$export_handler = new ExportHandler();
-		$export_handler->export_single_page();
+		$export_handler->set_collect_media( $with_media );
+		$export_handler->export_selected_content( $selection, $format );
 	}
 
 	/**

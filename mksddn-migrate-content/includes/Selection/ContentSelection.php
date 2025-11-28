@@ -52,7 +52,9 @@ class ContentSelection {
 			$this->items[ $type ] = array();
 		}
 
-		$this->items[ $type ][] = $item_id;
+		if ( ! in_array( $item_id, $this->items[ $type ], true ) ) {
+			$this->items[ $type ][] = $item_id;
+		}
 	}
 
 	/**
@@ -120,6 +122,36 @@ class ContentSelection {
 	 */
 	public function has_options(): bool {
 		return ! empty( $this->options ) || ! empty( $this->widgets );
+	}
+
+	/**
+	 * Total number of selected post objects.
+	 */
+	public function count_items(): int {
+		$total = 0;
+		foreach ( $this->items as $ids ) {
+			$total += count( $ids );
+		}
+
+		return $total;
+	}
+
+	/**
+	 * Get the first selected item reference.
+	 *
+	 * @return array|null { type, id } or null.
+	 */
+	public function first_item(): ?array {
+		foreach ( $this->items as $type => $ids ) {
+			foreach ( $ids as $id ) {
+				return array(
+					'type' => $type,
+					'id'   => $id,
+				);
+			}
+		}
+
+		return null;
 	}
 }
 

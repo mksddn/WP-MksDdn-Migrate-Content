@@ -48,6 +48,32 @@ class ImportHandler {
 	public function set_media_file_loader( ?callable $loader ): void {
 		$this->media_file_loader = $loader;
 	}
+
+	/**
+	 * Import bundle containing multiple posts/options.
+	 *
+	 * @param array $data Bundle payload.
+	 * @return bool
+	 */
+	public function import_bundle( array $data ): bool {
+		$items = isset( $data['items'] ) && is_array( $data['items'] ) ? $data['items'] : array();
+
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+
+			if ( ! $this->import_single_page( $item ) ) {
+				return false;
+			}
+		}
+
+		if ( isset( $data['options'] ) && is_array( $data['options'] ) ) {
+			$this->import_bundle_options( $data['options'] );
+		}
+
+		return true;
+	}
 	/**
 	 * Imports a single page with ACF fields.
 	 *
@@ -269,6 +295,22 @@ class ImportHandler {
 					add_post_meta( $post_id, $meta_key, maybe_unserialize( $value ) );
 				}
 			}
+		}
+	}
+
+	/**
+	 * Import options/widgets portion of a bundle.
+	 *
+	 * @param array $options_bundle Bundle options structure.
+	 * @return void
+	 */
+	private function import_bundle_options( array $options_bundle ): void {
+		if ( isset( $options_bundle['options'] ) && is_array( $options_bundle['options'] ) ) {
+			$this->options_importer->import_options( $options_bundle['options'] );
+		}
+
+		if ( isset( $options_bundle['widgets'] ) && is_array( $options_bundle['widgets'] ) ) {
+			$this->options_importer->import_widgets( $options_bundle['widgets'] );
 		}
 	}
 }

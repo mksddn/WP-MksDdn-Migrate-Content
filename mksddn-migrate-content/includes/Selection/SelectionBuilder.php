@@ -25,11 +25,7 @@ class SelectionBuilder {
 	public function from_request( array $request ): ContentSelection {
 		$selection = new ContentSelection();
 
-		$post_types = array_filter(
-			array_map( 'sanitize_key', (array) ( $request['export_post_types'] ?? array() ) )
-		);
-
-		foreach ( $post_types as $type ) {
+		foreach ( $this->resolve_post_type_keys( $request ) as $type ) {
 			$field = sprintf( 'selected_%s_ids', $type );
 			if ( empty( $request[ $field ] ) ) {
 				continue;
@@ -52,6 +48,37 @@ class SelectionBuilder {
 		}
 
 		return $selection;
+	}
+
+	/**
+	 * Determine which post-type keys are present in the request.
+	 *
+	 * @param array $request Raw request.
+	 * @return string[]
+	 */
+	private function resolve_post_type_keys( array $request ): array {
+		$keys = array();
+
+		$legacy = array_map( 'sanitize_key', (array) ( $request['export_post_types'] ?? array() ) );
+		if ( ! empty( $legacy ) ) {
+			$keys = array_merge( $keys, $legacy );
+		}
+
+		foreach ( array_keys( $request ) as $field ) {
+			if ( ! preg_match( '/^selected_(.+)_ids$/', $field, $matches ) ) {
+				continue;
+			}
+
+			$type = sanitize_key( $matches[1] );
+
+			if ( '' === $type ) {
+				continue;
+			}
+
+			$keys[] = $type;
+		}
+
+		return array_values( array_unique( $keys ) );
 	}
 }
 
