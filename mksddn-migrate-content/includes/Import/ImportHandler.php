@@ -99,9 +99,12 @@ class ImportHandler {
 			$this->assign_taxonomies( $post_id, $data );
 		}
 
-		$this->import_acf_fields( $data, $post_id );
-		$this->import_meta_data( $data, $post_id );
-		$this->restore_media( $data, $post_id );
+		$media_maps = $this->restore_media( $data, $post_id );
+		$id_map     = $media_maps['id_map'] ?? array();
+		$url_map    = $media_maps['url_map'] ?? array();
+
+		$this->import_acf_fields( $data, $post_id, $id_map, $url_map );
+		$this->import_meta_data( $data, $post_id, $id_map, $url_map );
 
 		return true;
 	}
@@ -112,18 +115,21 @@ class ImportHandler {
 	 * @param array $data    Payload.
 	 * @param int   $post_id Target post ID.
 	 */
-	private function restore_media( array $data, int $post_id ): void {
+	private function restore_media( array $data, int $post_id ): array {
 		$entries = $data['_mksddn_media'] ?? array();
 
 		if ( empty( $entries ) || ! is_callable( $this->media_file_loader ) ) {
-			return;
+			return array(
+				'id_map'  => array(),
+				'url_map' => array(),
+			);
 		}
 
 		if ( isset( $data['featured_media'] ) ) {
 			update_post_meta( $post_id, '_mksddn_original_thumbnail', (int) $data['featured_media'] );
 		}
 
-		$this->media_restorer->restore(
+		return $this->media_restorer->restore(
 			$entries,
 			$this->media_file_loader,
 			$post_id
@@ -264,13 +270,14 @@ class ImportHandler {
 	 * @param int|string $post_id Target post ID.
 	 * @return void
 	 */
-	private function import_acf_fields( array $data, int|string $post_id ): void {
+	private function import_acf_fields( array $data, int|string $post_id, array $id_map = array(), array $url_map = array() ): void {
 		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
 			return;
 		}
 
 		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
-			update_field( sanitize_text_field( $field_name ), $field_value, $post_id );
+			$value = $this->remap_media_values( $field_value, $id_map, $url_map );
+			update_field( sanitize_text_field( $field_name ), $value, $post_id );
 		}
 	}
 
@@ -281,7 +288,7 @@ class ImportHandler {
 	 * @param int   $post_id Target post ID.
 	 * @return void
 	 */
-	private function import_meta_data( array $data, int $post_id ): void {
+	private function import_meta_data( array $data, int $post_id, array $id_map = array(), array $url_map = array() ): void {
 		if ( ! isset( $data['meta'] ) || ! is_array( $data['meta'] ) ) {
 			return;
 		}
@@ -292,10 +299,47 @@ class ImportHandler {
 
 			if ( is_array( $values ) ) {
 				foreach ( $values as $value ) {
-					add_post_meta( $post_id, $meta_key, maybe_unserialize( $value ) );
+					$value = maybe_unserialize( $value );
+					$value = $this->remap_media_values( $value, $id_map, $url_map );
+					add_post_meta( $post_id, $meta_key, $value );
 				}
 			}
 		}
+	}
+
+	private function remap_media_values( mixed $value, array $id_map, array $url_map ): mixed {
+		if ( is_array( $value ) ) {
+			if ( isset( $value['ID'] ) ) {
+				$old_id = (int) $value['ID'];
+				if ( isset( $id_map[ $old_id ] ) ) {
+					$new_id         = $id_map[ $old_id ];
+					$value['ID']    = $new_id;
+					$value['id']    = $new_id;
+					$value['url']   = \wp_get_attachment_url( $new_id );
+					$value['link']  = \get_permalink( $new_id );
+					$value['sizes'] = $this->remap_media_values( $value['sizes'] ?? array(), $id_map, $url_map );
+				}
+			}
+
+			foreach ( $value as $key => $child ) {
+				$value[ $key ] = $this->remap_media_values( $child, $id_map, $url_map );
+			}
+
+			return $value;
+		}
+
+		if ( is_numeric( $value ) ) {
+			$int = (int) $value;
+			if ( isset( $id_map[ $int ] ) ) {
+				return $id_map[ $int ];
+			}
+		}
+
+		if ( is_string( $value ) && isset( $url_map[ $value ] ) ) {
+			return $url_map[ $value ];
+		}
+
+		return $value;
 	}
 
 	/**

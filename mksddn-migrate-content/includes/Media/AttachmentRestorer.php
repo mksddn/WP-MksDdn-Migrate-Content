@@ -9,6 +9,22 @@ namespace Mksddn_MC\Media;
 
 use WP_Error;
 use WP_Post;
+use WP_Query;
+use const \ABSPATH;
+use function \delete_post_meta;
+use function \get_post;
+use function \get_post_meta;
+use function \get_post_thumbnail_id;
+use function \sanitize_file_name;
+use function \sanitize_text_field;
+use function \sanitize_textarea_field;
+use function \set_post_thumbnail;
+use function \update_post_meta;
+use function \wp_get_attachment_url;
+use function \wp_reset_postdata;
+use function \wp_update_post;
+use function \media_handle_sideload;
+use function \is_wp_error;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -25,10 +41,17 @@ class AttachmentRestorer {
 	 * @param array    $entries    Attachment manifest entries.
 	 * @param callable $file_loader Callback that accepts archive path and returns local temp path|WP_Error.
 	 * @param int      $parent_id  Newly created/updated post ID.
+	 * @return array{
+	 *     url_map: array<string,string>,
+	 *     id_map: array<int,int>
+	 * }
 	 */
-	public function restore( array $entries, callable $file_loader, int $parent_id ): void {
+	public function restore( array $entries, callable $file_loader, int $parent_id ): array {
 		if ( empty( $entries ) ) {
-			return;
+			return array(
+				'url_map' => array(),
+				'id_map'  => array(),
+			);
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -72,6 +95,11 @@ class AttachmentRestorer {
 
 		$this->update_content_references( $parent_id, $url_map, $id_map );
 		$this->maybe_update_thumbnail( $parent_id, $id_map );
+
+		return array(
+			'url_map' => $url_map,
+			'id_map'  => $id_map,
+		);
 	}
 
 	/**
@@ -81,7 +109,7 @@ class AttachmentRestorer {
 	 * @return int|null
 	 */
 	private function find_existing_attachment( string $checksum ): ?int {
-		$query = new \WP_Query(
+		$query = new WP_Query(
 			array(
 				'post_type'      => 'attachment',
 				'post_status'    => 'inherit',
