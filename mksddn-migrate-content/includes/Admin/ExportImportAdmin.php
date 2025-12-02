@@ -127,12 +127,6 @@ class ExportImportAdmin {
 				'i18n'                   => array(
 					'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
 					'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
-					'importReady'        => __( 'Ready for full import.', 'mksddn-migrate-content' ),
-					'importReadyDetailed'=> sprintf(
-						/* translators: %s chunk size */
-						__( 'Ready for full import (default chunk %s).', 'mksddn-migrate-content' ),
-						size_format( $default_chunk, 2 )
-					),
 					'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
 					'importBusy'         => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
 					'importDone'         => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
@@ -211,7 +205,6 @@ class ExportImportAdmin {
 		.mksddn-mc-field select,
 		.mksddn-mc-field input[type=\"file\"],
 		.mksddn-mc-format-selector select{width:100%;}
-		.mksddn-mc-inline-status{margin-top:.5rem;font-size:13px;color:#555;}
 		.mksddn-mc-selection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;}
 		.mksddn-mc-selection-grid select{min-height:140px;}
 		.mksddn-mc-history table{width:100%;border-collapse:collapse;margin-top:1rem;}
@@ -605,7 +598,6 @@ class ExportImportAdmin {
 		echo '<input type="hidden" name="action" value="mksddn_mc_export_full">';
 		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Export Full Site (.wpbkp)', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
-		echo '<p class="mksddn-mc-inline-status" data-mksddn-full-export-status aria-live="polite">' . esc_html__( 'Ready for full export.', 'mksddn-migrate-content' ) . '</p>';
 		echo '</div>';
 
 		echo '<div class="mksddn-mc-card">';
@@ -616,7 +608,6 @@ class ExportImportAdmin {
 		echo '<input type="file" name="full_import_file" accept=".wpbkp" required><br><br>';
 		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Import Full Site', 'mksddn-migrate-content' ) . '</button>';
 		echo '</form>';
-		echo '<p class="mksddn-mc-inline-status" data-mksddn-full-import-status aria-live="polite">' . esc_html__( 'Ready for full import.', 'mksddn-migrate-content' ) . '</p>';
 		echo '</div>';
 
 		echo '</div>';

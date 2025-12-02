@@ -115,6 +115,15 @@
 		return info ? `${ message } ${ info }` : message;
 	}
 
+function setProgressLabel( percent, message ) {
+	if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function' ) {
+		const clamped = typeof percent === 'number'
+			? Math.max( 0, Math.min( 100, percent ) )
+			: 0;
+		window.mksddnMcProgress.set( clamped, message || '' );
+	}
+}
+
 	async function initDownloadJob() {
 		const response = await fetch( settings.restUrl + 'chunk/download/init', {
 			method: 'POST',
@@ -163,10 +172,6 @@
 			totalChunks = Math.max( 1, Math.ceil( file.size / jobChunkSize ) );
 		}
 
-		updateFullImportStatus(
-			withChunkInfo( settings.i18n.importBusy.replace( '%d', 0 ), jobChunkSize )
-		);
-
 		let index = 0;
 		while ( index < totalChunks ) {
 			const start = index * jobChunkSize;
@@ -185,22 +190,17 @@
 					settings.i18n.uploading.replace( '%d', percent )
 				);
 			}
-			updateFullImportStatus(
-				withChunkInfo( settings.i18n.importBusy.replace( '%d', percent ), jobChunkSize )
-			);
 		}
 
-		updateFullImportStatus( settings.i18n.importDone );
+		setProgressLabel( 100, settings.i18n.importDone );
 		uploadInProgress = false;
 		return jobId;
 	}
 
 	async function downloadFullSite() {
 		try {
-			if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function' ) {
-				window.mksddnMcProgress.set( 1, settings.i18n.preparing );
-			}
-			updateFullExportStatus( settings.i18n.exportBusy );
+			setProgressLabel( 1, settings.i18n.preparing );
+			setProgressLabel( 5, settings.i18n.exportBusy );
 
 			const init = await initDownloadJob();
 			const totalChunks = init.total_chunks || 0;
@@ -217,7 +217,6 @@
 						settings.i18n.downloading.replace( '%d', percent )
 					);
 				}
-				updateFullExportStatus( settings.i18n.exportTransfer.replace( '%d', Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) ) ) );
 			}
 
 			const blob = new Blob( parts, { type: 'application/octet-stream' } );
@@ -234,47 +233,36 @@
 			if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function' ) {
 				window.mksddnMcProgress.set( 100, settings.i18n.downloadComplete );
 			}
-			updateFullExportStatus( settings.i18n.exportDone );
+			setProgressLabel( 100, settings.i18n.exportDone );
 		} catch ( error ) {
 			console.error( error );
 			alert( settings.i18n.downloadError );
 			throw error;
 		}
 	}
-	function updateFullExportStatus( text ) {
-		const el = document.querySelector( '[data-mksddn-full-export-status]' );
-		if ( el ) {
-			el.textContent = text || '';
-		}
-	}
-
 	function attachFullImportHandler() {
 		const form = document.querySelector( '[data-mksddn-full-import]' );
 		if ( ! form ) {
 			return;
 		}
 
-		updateFullImportStatus( settings.i18n.importReadyDetailed || settings.i18n.importReady );
 		const fileInput = form.querySelector( 'input[type="file"]' );
 		const submitButton = form.querySelector( 'button[type="submit"]' );
 
 		if ( fileInput ) {
 			fileInput.addEventListener( 'change', () => {
-				if ( ! fileInput.files.length ) {
-					updateFullImportStatus( settings.i18n.importReadyDetailed || settings.i18n.importReady );
-					return;
-				}
-
 				const file = fileInput.files[ 0 ];
 				const chunk = selectChunkSize( file.size );
 				if ( settings.i18n.importSelected ) {
-					updateFullImportStatus(
+					setProgressLabel(
+						0,
 						settings.i18n.importSelected
 							.replace( '%1$s', formatBytes( file.size ) )
 							.replace( '%2$s', formatBytes( chunk ) )
 					);
 				} else {
-					updateFullImportStatus(
+					setProgressLabel(
+						0,
 						withChunkInfo(
 							settings.i18n.importReady || '',
 							chunk
@@ -307,12 +295,12 @@
 				fileInput.value = '';
 				fileInput.disabled = true;
 
-				updateFullImportStatus( settings.i18n.importProcessing );
+				setProgressLabel( 100, settings.i18n.importProcessing );
 				form.submit();
 			} catch ( error ) {
 				console.error( error );
 				alert( settings.i18n.uploadError );
-				updateFullImportStatus( settings.i18n.importError );
+				setProgressLabel( 0, settings.i18n.importError );
 				cancelChunkJob( currentJobId );
 				if ( submitButton ) {
 					submitButton.disabled = false;
@@ -330,7 +318,7 @@
 			return;
 		}
 
-		updateFullExportStatus( settings.i18n.exportReady );
+		setProgressLabel( 0, settings.i18n.exportReady );
 		let busy = false;
 		form.addEventListener( 'submit', async ( event ) => {
 			if ( busy ) {
@@ -348,7 +336,7 @@
 			try {
 				await downloadFullSite();
 			} catch ( error ) {
-				updateFullExportStatus( settings.i18n.exportFallback );
+				setProgressLabel( 0, settings.i18n.exportFallback );
 				form.removeAttribute( 'data-mksddn-full-export' );
 				form.submit();
 			} finally {
@@ -358,13 +346,6 @@
 				busy = false;
 			}
 		} );
-	}
-
-	function updateFullImportStatus( text ) {
-		const el = document.querySelector( '[data-mksddn-full-import-status]' );
-		if ( el ) {
-			el.textContent = text || '';
-		}
 	}
 
 	function cancelChunkJob( jobId, keepAlive = false ) {
