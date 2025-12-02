@@ -16,7 +16,9 @@ class ChunkJobRepository {
 	private string $storage_dir;
 
 	public function __construct() {
-		$this->storage_dir = trailingslashit( WP_CONTENT_DIR ) . 'mksddn-migrate-jobs/';
+		$uploads          = wp_upload_dir();
+		$base_dir         = trailingslashit( $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads' ) . 'mksddn-mc/';
+		$this->storage_dir = $base_dir . 'jobs/';
 		$this->ensure_storage_dir();
 		$this->cleanup_expired();
 	}

@@ -15,6 +15,9 @@ use Mksddn_MC\Filesystem\FullContentExporter;
 use Mksddn_MC\Filesystem\FullContentImporter;
 use Mksddn_MC\Chunking\ChunkJobRepository;
 use Mksddn_MC\Selection\SelectionBuilder;
+use Mksddn_MC\Recovery\SnapshotManager;
+use Mksddn_MC\Recovery\HistoryRepository;
+use Mksddn_MC\Recovery\JobLock;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -33,17 +36,25 @@ class ExportImportAdmin {
 	 */
 	private Extractor $extractor;
 
+	private SnapshotManager $snapshot_manager;
+	private HistoryRepository $history;
+	private JobLock $job_lock;
+
 	/**
 	 * Hook admin actions.
 	 */
-	public function __construct( ?Extractor $extractor = null ) {
-		$this->extractor = $extractor ?? new Extractor();
+	public function __construct( ?Extractor $extractor = null, ?SnapshotManager $snapshot_manager = null, ?HistoryRepository $history = null, ?JobLock $job_lock = null ) {
+		$this->extractor        = $extractor ?? new Extractor();
+		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
+		$this->history          = $history ?? new HistoryRepository();
+		$this->job_lock         = $job_lock ?? new JobLock();
 
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_mksddn_mc_export_selected', array( $this, 'handle_selected_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this, 'handle_full_import' ) );
+		add_action( 'admin_post_mksddn_mc_rollback_snapshot', array( $this, 'handle_snapshot_rollback' ) );
 	}
 
 	/**
@@ -76,6 +87,7 @@ class ExportImportAdmin {
 
 		$this->render_full_site_section();
 		$this->render_selected_content_section();
+		$this->render_history_section();
 		$this->handle_selected_import();
 
 		echo '</div>';
@@ -143,18 +155,29 @@ class ExportImportAdmin {
 	 * Display status notices after redirects.
 	 */
 	private function render_status_notices(): void {
-		if ( empty( $_GET['mksddn_mc_full_status'] ) ) {
+		if ( ! empty( $_GET['mksddn_mc_full_status'] ) ) {
+			$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) );
+			if ( 'success' === $status ) {
+				$this->show_success( __( 'Full site operation completed successfully.', 'mksddn-migrate-content' ) );
+			} elseif ( 'error' === $status && ! empty( $_GET['mksddn_mc_full_error'] ) ) {
+				$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_full_error'] ) ) );
+			}
+		}
+
+		if ( empty( $_GET['mksddn_mc_notice'] ) ) {
 			return;
 		}
 
-		$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) );
-		if ( 'success' === $status ) {
-			$this->show_success( __( 'Full site operation completed successfully.', 'mksddn-migrate-content' ) );
+		$notice_status = sanitize_key( wp_unslash( $_GET['mksddn_mc_notice'] ) );
+		$message       = isset( $_GET['mksddn_mc_notice_message'] ) ? sanitize_text_field( wp_unslash( $_GET['mksddn_mc_notice_message'] ) ) : '';
+
+		if ( 'success' === $notice_status ) {
+			$this->show_success( $message ?: __( 'Operation completed successfully.', 'mksddn-migrate-content' ) );
 			return;
 		}
 
-		if ( 'error' === $status && ! empty( $_GET['mksddn_mc_full_error'] ) ) {
-			$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_full_error'] ) ) );
+		if ( 'error' === $notice_status ) {
+			$this->show_error( $message ?: __( 'Operation failed. Check logs for details.', 'mksddn-migrate-content' ) );
 		}
 	}
 
@@ -190,6 +213,16 @@ class ExportImportAdmin {
 		.mksddn-mc-inline-status{margin-top:.5rem;font-size:13px;color:#555;}
 		.mksddn-mc-selection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;}
 		.mksddn-mc-selection-grid select{min-height:140px;}
+		.mksddn-mc-history table{width:100%;border-collapse:collapse;margin-top:1rem;}
+		.mksddn-mc-history table th,
+		.mksddn-mc-history table td{padding:.5rem .75rem;border-bottom:1px solid #e5e7eb;text-align:left;font-size:13px;}
+		.mksddn-mc-history table th{background:#f9fafb;font-weight:600;color:#111827;}
+		.mksddn-mc-badge{display:inline-flex;align-items:center;padding:0.1rem 0.55rem;border-radius:999px;font-size:12px;line-height:1.4;}
+		.mksddn-mc-badge--success{background:#e6f4ea;color:#1f7a3f;}
+		.mksddn-mc-badge--error{background:#fdecea;color:#b42318;}
+		.mksddn-mc-badge--running{background:#e0ecff;color:#1d4ed8;}
+		.mksddn-mc-history__actions form{display:inline-block;margin-right:.5rem;}
+		.mksddn-mc-history__actions button{margin-top:0;}
 		</style>';
 
 		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
@@ -378,6 +411,186 @@ class ExportImportAdmin {
 		echo '</section>';
 	}
 
+	/**
+	 * Render job history and rollback actions.
+	 */
+	private function render_history_section(): void {
+		echo '<section class="mksddn-mc-section mksddn-mc-history">';
+		echo '<h2>' . esc_html__( 'History & Recovery', 'mksddn-migrate-content' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Recent imports, rollbacks, and available snapshots.', 'mksddn-migrate-content' ) . '</p>';
+
+		$entries = $this->history->all( 10 );
+		if ( empty( $entries ) ) {
+			echo '<p>' . esc_html__( 'History is empty for now.', 'mksddn-migrate-content' ) . '</p>';
+			echo '</section>';
+			return;
+		}
+
+		echo '<div class="mksddn-mc-history__table">';
+		echo '<table>';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Type', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Status', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Started', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Finished', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Snapshot', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'User', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Actions', 'mksddn-migrate-content' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ( $entries as $entry ) {
+			$context     = isset( $entry['context'] ) && is_array( $entry['context'] ) ? $entry['context'] : array();
+			$snapshot_id = $context['snapshot_id'] ?? '';
+			$snapshot_label = $context['snapshot_label'] ?? $snapshot_id;
+			$user_label  = $this->format_user_label( (int) ( $entry['user_id'] ?? 0 ) );
+
+			echo '<tr>';
+			echo '<td>' . esc_html( $this->describe_history_type( $entry ) ) . '</td>';
+			echo '<td>' . $this->format_status_badge( $entry['status'] ?? '' ) . '</td>';
+			echo '<td>' . esc_html( $this->format_history_date( $entry['started_at'] ?? '' ) ) . '</td>';
+			echo '<td>' . esc_html( $this->format_history_date( $entry['finished_at'] ?? '' ) ) . '</td>';
+			echo '<td>' . ( $snapshot_id ? esc_html( $snapshot_label ) : '&mdash;' ) . '</td>';
+			echo '<td>' . esc_html( $user_label ) . '</td>';
+			echo '<td>' . $this->render_history_actions( $entry ) . '</td>';
+			echo '</tr>';
+		}
+
+		echo '</tbody></table>';
+		echo '</div>';
+		echo '</section>';
+	}
+
+	/**
+	 * Format history entry type label.
+	 *
+	 * @param array $entry Entry payload.
+	 */
+	private function describe_history_type( array $entry ): string {
+		$type   = sanitize_key( $entry['type'] ?? '' );
+		$labels = array(
+			'import'   => __( 'Import', 'mksddn-migrate-content' ),
+			'export'   => __( 'Export', 'mksddn-migrate-content' ),
+			'rollback' => __( 'Rollback', 'mksddn-migrate-content' ),
+			'snapshot' => __( 'Snapshot', 'mksddn-migrate-content' ),
+		);
+
+		$label = $labels[ $type ] ?? ucfirst( $type );
+		$mode  = $entry['context']['mode'] ?? '';
+		if ( $mode ) {
+			$label .= ' · ' . ucfirst( sanitize_text_field( $mode ) );
+		}
+
+		return $label;
+	}
+
+	/**
+	 * Render status badge HTML.
+	 *
+	 * @param string $status Status slug.
+	 * @return string
+	 */
+	private function format_status_badge( string $status ): string {
+		$status = sanitize_key( $status );
+		$map    = array(
+			'success'   => array( 'class' => 'success', 'label' => __( 'Success', 'mksddn-migrate-content' ) ),
+			'running'   => array( 'class' => 'running', 'label' => __( 'Running', 'mksddn-migrate-content' ) ),
+			'cancelled' => array( 'class' => 'error', 'label' => __( 'Cancelled', 'mksddn-migrate-content' ) ),
+			'error'     => array( 'class' => 'error', 'label' => __( 'Error', 'mksddn-migrate-content' ) ),
+		);
+
+		$data = $map[ $status ] ?? $map['error'];
+
+		return sprintf(
+			'<span class="mksddn-mc-badge mksddn-mc-badge--%1$s">%2$s</span>',
+			esc_attr( $data['class'] ),
+			esc_html( $data['label'] )
+		);
+	}
+
+	/**
+	 * Convert ISO date to WP formatted string.
+	 *
+	 * @param string $date Date string.
+	 */
+	private function format_history_date( string $date ): string {
+		if ( empty( $date ) ) {
+			return '—';
+		}
+
+		$timestamp = strtotime( $date );
+		if ( false === $timestamp ) {
+			return $date;
+		}
+
+		$format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+
+		return wp_date( $format, $timestamp );
+	}
+
+	/**
+	 * Render action buttons for entry.
+	 *
+	 * @param array $entry Entry payload.
+	 * @return string
+	 */
+	private function render_history_actions( array $entry ): string {
+		if ( ! $this->can_rollback_entry( $entry ) ) {
+			return '&mdash;';
+		}
+
+		$context     = $entry['context'] ?? array();
+		$snapshot_id = sanitize_text_field( $context['snapshot_id'] ?? '' );
+		$history_id  = sanitize_text_field( $entry['id'] ?? '' );
+		$nonce       = wp_nonce_field( 'mksddn_mc_rollback_' . $history_id, '_wpnonce', true, false );
+
+		$form  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		$form .= $nonce;
+		$form .= '<input type="hidden" name="action" value="mksddn_mc_rollback_snapshot">';
+		$form .= '<input type="hidden" name="snapshot_id" value="' . esc_attr( $snapshot_id ) . '">';
+		$form .= '<input type="hidden" name="history_id" value="' . esc_attr( $history_id ) . '">';
+		$form .= '<button type="submit" class="button button-small">' . esc_html__( 'Rollback', 'mksddn-migrate-content' ) . '</button>';
+		$form .= '</form>';
+
+		return '<div class="mksddn-mc-history__actions">' . $form . '</div>';
+	}
+
+	/**
+	 * Determine if entry can be rolled back.
+	 *
+	 * @param array $entry Entry data.
+	 */
+	private function can_rollback_entry( array $entry ): bool {
+		$context = isset( $entry['context'] ) && is_array( $entry['context'] ) ? $entry['context'] : array();
+
+		return (
+			'import' === ( $entry['type'] ?? '' )
+			&& 'success' === ( $entry['status'] ?? '' )
+			&& ! empty( $context['snapshot_id'] )
+		);
+	}
+
+	/**
+	 * Format user label for history table.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	private function format_user_label( int $user_id ): string {
+		if ( $user_id <= 0 ) {
+			return __( 'System', 'mksddn-migrate-content' );
+		}
+
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			return sprintf(
+				/* translators: %d is user ID */
+				__( 'User #%d', 'mksddn-migrate-content' ),
+				$user_id
+			);
+		}
+
+		return $user->display_name ?: $user->user_login;
+	}
+
 	private function render_full_site_section(): void {
 		echo '<section class="mksddn-mc-section">';
 		echo '<h2>' . esc_html__( 'Full Site Backup', 'mksddn-migrate-content' ) . '</h2>';
@@ -422,62 +635,106 @@ class ExportImportAdmin {
 			return;
 		}
 
-		if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
-			$this->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
-			$this->progress_tick( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+		$lock_id = $this->job_lock->acquire( 'selected-import' );
+		if ( is_wp_error( $lock_id ) ) {
+			$this->show_error( esc_html( $lock_id->get_error_message() ) );
 			return;
 		}
 
-		$file     = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( (string) $_FILES['import_file']['tmp_name'] ) : '';
-		$filename = isset( $_FILES['import_file']['name'] ) ? sanitize_file_name( (string) $_FILES['import_file']['name'] ) : '';
-		$size     = isset( $_FILES['import_file']['size'] ) ? (int) $_FILES['import_file']['size'] : 0;
+		$history_id = null;
 
-		if ( 0 >= $size ) {
-			$this->show_error( esc_html__( 'Invalid file size.', 'mksddn-migrate-content' ) );
-			return;
-		}
+		try {
+			if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
+				$this->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
+				$this->progress_tick( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+				return;
+			}
 
-		$this->progress_tick( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
+			$file     = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( (string) $_FILES['import_file']['tmp_name'] ) : '';
+			$filename = isset( $_FILES['import_file']['name'] ) ? sanitize_file_name( (string) $_FILES['import_file']['name'] ) : '';
+			$size     = isset( $_FILES['import_file']['size'] ) ? (int) $_FILES['import_file']['size'] : 0;
 
-		$ext  = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
-		$mime = function_exists( 'mime_content_type' ) && '' !== $file ? mime_content_type( $file ) : '';
+			if ( 0 >= $size ) {
+				$this->show_error( esc_html__( 'Invalid file size.', 'mksddn-migrate-content' ) );
+				return;
+			}
 
-		$result = $this->prepare_import_payload( $ext, $mime, $file );
+			$this->progress_tick( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
 
-		if ( is_wp_error( $result ) ) {
-			$this->show_error( $result->get_error_message() );
-			$this->progress_tick( 100, __( 'Import aborted', 'mksddn-migrate-content' ) );
-			return;
-		}
+			$ext  = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+			$mime = function_exists( 'mime_content_type' ) && '' !== $file ? mime_content_type( $file ) : '';
 
-		$this->progress_tick( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
+			$result = $this->prepare_import_payload( $ext, $mime, $file );
 
-		$payload            = $result['payload'];
-		$payload_type       = $result['type'];
-		$payload['type']    = $payload_type;
-		$payload['_mksddn_media'] = $payload['_mksddn_media'] ?? $result['media'];
+			if ( is_wp_error( $result ) ) {
+				$this->show_error( $result->get_error_message() );
+				$this->progress_tick( 100, __( 'Import aborted', 'mksddn-migrate-content' ) );
+				return;
+			}
 
-		$import_handler = new ImportHandler();
+			$this->progress_tick( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
 
-		if ( 'archive' === $result['media_source'] ) {
-			$import_handler->set_media_file_loader(
-				function ( string $archive_path ) use ( $file ) {
-					return $this->extractor->extract_media_file( $archive_path, $file );
-				}
+			$snapshot = $this->snapshot_manager->create(
+				array(
+					'label' => 'pre-import-selected',
+					'meta'  => array( 'file' => $filename ),
+				)
 			);
-		}
 
-		$this->progress_tick( 70, __( 'Importing content…', 'mksddn-migrate-content' ) );
+			if ( is_wp_error( $snapshot ) ) {
+				$this->show_error( $snapshot->get_error_message() );
+				return;
+			}
 
-		$result = $this->process_import( $import_handler, $payload_type, $payload );
+			$history_id = $this->history->start(
+				'import',
+				array(
+					'mode'           => 'selected',
+					'file'           => $filename,
+					'snapshot_id'    => $snapshot['id'],
+					'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
+				)
+			);
 
-		if ( $result ) {
-			$this->progress_tick( 100, __( 'Completed', 'mksddn-migrate-content' ) );
-			// translators: %s is imported item type.
-			$this->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
-		} else {
-			$this->progress_tick( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
-			$this->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
+			$payload                 = $result['payload'];
+			$payload_type            = $result['type'];
+			$payload['type']         = $payload_type;
+			$payload['_mksddn_media'] = $payload['_mksddn_media'] ?? $result['media'];
+
+			$import_handler = new ImportHandler();
+
+			if ( 'archive' === $result['media_source'] ) {
+				$import_handler->set_media_file_loader(
+					function ( string $archive_path ) use ( $file ) {
+						return $this->extractor->extract_media_file( $archive_path, $file );
+					}
+				);
+			}
+
+			$this->progress_tick( 70, __( 'Importing content…', 'mksddn-migrate-content' ) );
+
+			$result = $this->process_import( $import_handler, $payload_type, $payload );
+
+			if ( $result ) {
+				$this->progress_tick( 100, __( 'Completed', 'mksddn-migrate-content' ) );
+				// translators: %s is imported item type.
+				$this->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
+				if ( $history_id ) {
+					$this->history->finish( $history_id, 'success' );
+				}
+			} else {
+				$this->progress_tick( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
+				$this->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
+				if ( $history_id ) {
+					$this->history->finish(
+						$history_id,
+						'error',
+						array( 'message' => __( 'Selected import failed.', 'mksddn-migrate-content' ) )
+					);
+				}
+			}
+		} finally {
+			$this->job_lock->release( $lock_id );
 		}
 	}
 
@@ -697,10 +954,11 @@ class ExportImportAdmin {
 
 		check_admin_referer( 'mksddn_mc_full_import' );
 
-		$chunk_job_id = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
-		$temp         = '';
-		$cleanup      = false;
-		$job          = null;
+		$chunk_job_id  = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
+		$temp          = '';
+		$cleanup       = false;
+		$job           = null;
+		$original_name = '';
 
 		if ( $chunk_job_id ) {
 			$repo = new ChunkJobRepository();
@@ -710,6 +968,8 @@ class ExportImportAdmin {
 			if ( ! file_exists( $temp ) ) {
 				$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
 			}
+
+			$original_name = sprintf( 'chunk:%s', $chunk_job_id );
 		} else {
 			if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
 				$this->redirect_full_status( 'error', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
@@ -738,24 +998,116 @@ class ExportImportAdmin {
 				$this->redirect_full_status( 'error', __( 'Failed to move uploaded file.', 'mksddn-migrate-content' ) );
 			}
 
-			$cleanup = true;
+			$cleanup       = true;
+			$original_name = $name;
 		}
+
+		$lock_id = $this->job_lock->acquire( 'full-import' );
+		if ( is_wp_error( $lock_id ) ) {
+			$this->cleanup_full_import( $temp, $cleanup, $job );
+			$this->redirect_full_status( 'error', $lock_id->get_error_message() );
+		}
+
+		$snapshot = $this->snapshot_manager->create(
+			array(
+				'label'            => 'pre-import-full',
+				'include_plugins'  => true,
+				'include_themes'   => true,
+				'meta'             => array( 'file' => $original_name ),
+			)
+		);
+
+		if ( is_wp_error( $snapshot ) ) {
+			$this->job_lock->release( $lock_id );
+			$this->cleanup_full_import( $temp, $cleanup, $job );
+			$this->redirect_full_status( 'error', $snapshot->get_error_message() );
+		}
+
+		$history_id = $this->history->start(
+			'import',
+			array(
+				'mode'           => 'full',
+				'file'           => $original_name,
+				'snapshot_id'    => $snapshot['id'],
+				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
+			)
+		);
 
 		$importer = new FullContentImporter();
 		$result   = $importer->import_from( $temp );
-		if ( $cleanup && file_exists( $temp ) ) {
-			unlink( $temp );
-		}
 
-		if ( $job ) {
-			$job->delete();
-		}
+		$status  = 'success';
+		$message = null;
 
 		if ( is_wp_error( $result ) ) {
-			$this->redirect_full_status( 'error', $result->get_error_message() );
+			$status  = 'error';
+			$message = $result->get_error_message();
+			$this->history->finish(
+				$history_id,
+				'error',
+				array( 'message' => $message )
+			);
+		} else {
+			$this->history->finish( $history_id, 'success' );
 		}
 
-		$this->redirect_full_status( 'success' );
+		$this->job_lock->release( $lock_id );
+		$this->cleanup_full_import( $temp, $cleanup, $job );
+		$this->redirect_full_status( $status, $message );
+	}
+
+	/**
+	 * Handle rollback action from history table.
+	 */
+	public function handle_snapshot_rollback(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		$history_id  = isset( $_POST['history_id'] ) ? sanitize_text_field( wp_unslash( $_POST['history_id'] ) ) : '';
+		$snapshot_id = isset( $_POST['snapshot_id'] ) ? sanitize_text_field( wp_unslash( $_POST['snapshot_id'] ) ) : '';
+
+		check_admin_referer( 'mksddn_mc_rollback_' . $history_id );
+
+		if ( '' === $snapshot_id ) {
+			$this->redirect_with_notice( 'error', __( 'Snapshot is missing.', 'mksddn-migrate-content' ) );
+		}
+
+		$snapshot = $this->snapshot_manager->get( $snapshot_id );
+		if ( ! $snapshot ) {
+			$this->redirect_with_notice( 'error', __( 'Snapshot not found on disk.', 'mksddn-migrate-content' ) );
+		}
+
+		$lock_id = $this->job_lock->acquire( 'rollback' );
+		if ( is_wp_error( $lock_id ) ) {
+			$this->redirect_with_notice( 'error', $lock_id->get_error_message() );
+		}
+
+		$history_entry = $this->history->start(
+			'rollback',
+			array(
+				'snapshot_id'    => $snapshot_id,
+				'snapshot_label' => $snapshot['label'] ?? $snapshot_id,
+				'action'         => 'rollback',
+			)
+		);
+
+		$importer = new FullContentImporter();
+		$result   = $importer->import_from( $snapshot['path'] );
+
+		if ( is_wp_error( $result ) ) {
+			$this->history->finish(
+				$history_entry,
+				'error',
+				array( 'message' => $result->get_error_message() )
+			);
+			$this->job_lock->release( $lock_id );
+			$this->redirect_with_notice( 'error', $result->get_error_message() );
+		}
+
+		$this->history->finish( $history_entry, 'success' );
+		$this->job_lock->release( $lock_id );
+		$this->redirect_with_notice( 'success', __( 'Snapshot restored successfully.', 'mksddn-migrate-content' ) );
 	}
 
 	/**
@@ -792,6 +1144,23 @@ class ExportImportAdmin {
 	}
 
 	/**
+	 * Cleanup temp files and chunk jobs.
+	 *
+	 * @param string     $temp    Temp file path.
+	 * @param bool       $cleanup Whether temp should be removed.
+	 * @param object|null $job    Chunk job instance.
+	 */
+	private function cleanup_full_import( string $temp, bool $cleanup, $job ): void {
+		if ( $cleanup && $temp && file_exists( $temp ) ) {
+			unlink( $temp );
+		}
+
+		if ( $job && method_exists( $job, 'delete' ) ) {
+			$job->delete();
+		}
+	}
+
+	/**
 	 * Redirect back with status parameters.
 	 *
 	 * @param string      $status success|error.
@@ -808,6 +1177,26 @@ class ExportImportAdmin {
 		);
 
 		wp_safe_redirect( $url );
+		exit;
+	}
+
+	/**
+	 * Redirect back to plugin page with generic notice.
+	 *
+	 * @param string      $status  success|error.
+	 * @param string|null $message Optional message.
+	 */
+	private function redirect_with_notice( string $status, ?string $message = null ): void {
+		$base = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
+		$args = array(
+			'mksddn_mc_notice' => $status,
+		);
+
+		if ( $message ) {
+			$args['mksddn_mc_notice_message'] = $message;
+		}
+
+		wp_safe_redirect( add_query_arg( $args, $base ) );
 		exit;
 	}
 }

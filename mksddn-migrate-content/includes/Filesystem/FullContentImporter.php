@@ -21,6 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullContentImporter {
 
 	private FullDatabaseImporter $db_importer;
+	private bool $database_imported = false;
 
 	/**
 	 * Setup importer.
@@ -43,6 +44,9 @@ class FullContentImporter {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to open archive for import.', 'mksddn-migrate-content' ) );
 		}
 
+		$siteurl_before = (string) get_option( 'siteurl' );
+		$home_before    = (string) get_option( 'home' );
+
 		$db_result = $this->maybe_import_database( $zip );
 		if ( is_wp_error( $db_result ) ) {
 			$zip->close();
@@ -51,6 +55,11 @@ class FullContentImporter {
 
 		$files_result = $this->extract_files( $zip );
 		$zip->close();
+
+		if ( $this->database_imported ) {
+			$this->restore_site_urls( $siteurl_before, $home_before );
+		}
+
 		return $files_result;
 	}
 
@@ -102,7 +111,12 @@ class FullContentImporter {
 			return true;
 		}
 
-		return $this->db_importer->import( $data['database'] );
+		$result = $this->db_importer->import( $data['database'] );
+		if ( true === $result ) {
+			$this->database_imported = true;
+		}
+
+		return $result;
 	}
 
 	/**
@@ -188,6 +202,22 @@ class FullContentImporter {
 		$path = ltrim( $path, '/' );
 
 		return '' === $path ? null : $path;
+	}
+
+	/**
+	 * Restore site/home URLs to original values after DB import.
+	 *
+	 * @param string $siteurl Original site URL.
+	 * @param string $home    Original home URL.
+	 */
+	private function restore_site_urls( string $siteurl, string $home ): void {
+		if ( '' !== $siteurl ) {
+			update_option( 'siteurl', esc_url_raw( $siteurl ) );
+		}
+
+		if ( '' !== $home ) {
+			update_option( 'home', esc_url_raw( $home ) );
+		}
 	}
 }
 
