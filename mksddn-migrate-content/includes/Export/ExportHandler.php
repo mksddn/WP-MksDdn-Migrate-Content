@@ -12,6 +12,7 @@ use Mksddn_MC\Media\AttachmentCollector;
 use Mksddn_MC\Media\AttachmentCollection;
 use Mksddn_MC\Options\OptionsExporter;
 use Mksddn_MC\Selection\ContentSelection;
+use Mksddn_MC\Support\FilenameBuilder;
 use WP_Error;
 use WP_Post;
 
@@ -148,7 +149,7 @@ class ExportHandler {
 
 		$media = $this->collect_media_for_post( $post );
 		$data  = $this->prepare_payload_for_post( $post, $media );
-		$this->deliver_payload( $data, $post->post_type . '-' . $post_id, $media );
+		$this->deliver_payload( $data, 'selected', $media );
 	}
 
 	/**
@@ -199,7 +200,7 @@ class ExportHandler {
 		}
 
 		$media_payload = $combined_media->has_items() ? $combined_media : null;
-		$this->deliver_payload( $bundle, 'bundle-' . gmdate( 'Ymd-His' ), $media_payload );
+		$this->deliver_payload( $bundle, 'selected', $media_payload );
 	}
 
 
@@ -222,7 +223,7 @@ class ExportHandler {
 
 		$media = $this->collect_media_for_post( $form );
 		$data  = $this->prepare_form_data( $form, $media );
-		$this->deliver_payload( $data, 'form-' . $form_id, $media );
+		$this->deliver_payload( $data, 'selected', $media );
 	}
 
 	/**
@@ -336,9 +337,14 @@ class ExportHandler {
 	 * @param string                 $basename Filename base without extension.
 	 * @param AttachmentCollection|null $media Media bundle.
 	 */
-	private function deliver_payload( array $data, string $basename, ?AttachmentCollection $media = null ): void {
-		if ( $this->should_output_json() ) {
-			$this->download_json( $data, $basename . '.json' );
+	private function deliver_payload( array $data, string $context, ?AttachmentCollection $media = null ): void {
+		$is_json   = $this->should_output_json();
+		$extension = $is_json ? 'json' : 'wpbkp';
+		$filename  = FilenameBuilder::build( $context, $extension );
+		$label     = pathinfo( $filename, PATHINFO_FILENAME );
+
+		if ( $is_json ) {
+			$this->download_json( $data, $filename );
 			return;
 		}
 
@@ -348,7 +354,7 @@ class ExportHandler {
 			$data,
 			array(
 				'type'  => $data['type'] ?? 'page',
-				'label' => $basename,
+				'label' => $label,
 				'media' => $media_manifest,
 			),
 			$media ? $media->get_assets() : array()
@@ -358,7 +364,7 @@ class ExportHandler {
 			\wp_die( \esc_html( $archive->get_error_message() ) );
 		}
 
-		$this->download_archive( $archive, $basename . '.wpbkp' );
+		$this->download_archive( $archive, $filename );
 	}
 
 	/**

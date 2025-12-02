@@ -18,6 +18,7 @@ use Mksddn_MC\Selection\SelectionBuilder;
 use Mksddn_MC\Recovery\SnapshotManager;
 use Mksddn_MC\Recovery\HistoryRepository;
 use Mksddn_MC\Recovery\JobLock;
+use Mksddn_MC\Support\FilenameBuilder;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -121,7 +122,7 @@ class ExportImportAdmin {
 				'nonce'                  => wp_create_nonce( 'wp_rest' ),
 				'chunkSize'              => 5 * 1024 * 1024,
 				'uploadChunkSize'        => $default_chunk,
-				'downloadFilenamePrefix' => 'full-site-',
+				'downloadFilename'       => FilenameBuilder::build( 'full-site', 'wpbkp' ),
 				'defaultChunkSizeLabel'  => size_format( $default_chunk, 2 ),
 				'i18n'                   => array(
 					'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
@@ -940,7 +941,7 @@ class ExportImportAdmin {
 			wp_die( esc_html( $result->get_error_message() ) );
 		}
 
-		$filename = 'full-site-' . gmdate( 'Ymd-His' ) . '.wpbkp';
+		$filename = FilenameBuilder::build( 'full-site', 'wpbkp' );
 		$this->stream_file_download( $temp, $filename );
 	}
 

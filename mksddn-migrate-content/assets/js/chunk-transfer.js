@@ -224,9 +224,8 @@
 			const url = URL.createObjectURL( blob );
 			const a = document.createElement( 'a' );
 			a.href = url;
-			a.download = settings.downloadFilenamePrefix
-				? `${ settings.downloadFilenamePrefix }${ Date.now() }.wpbkp`
-				: `full-site-${ Date.now() }.wpbkp`;
+			const fallbackName = `full-site-${ Date.now() }.wpbkp`;
+			a.download = settings.downloadFilename || fallbackName;
 			document.body.appendChild( a );
 			a.click();
 			document.body.removeChild( a );
