@@ -19,6 +19,7 @@ use Mksddn_MC\Recovery\SnapshotManager;
 use Mksddn_MC\Recovery\HistoryRepository;
 use Mksddn_MC\Recovery\JobLock;
 use Mksddn_MC\Support\FilenameBuilder;
+use Mksddn_MC\Support\SiteUrlGuard;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -151,9 +152,9 @@ class ExportImportAdmin {
 	 */
 	private function render_status_notices(): void {
 		if ( ! empty( $_GET['mksddn_mc_full_status'] ) ) {
-			$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) );
-			if ( 'success' === $status ) {
-				$this->show_success( __( 'Full site operation completed successfully.', 'mksddn-migrate-content' ) );
+		$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) );
+		if ( 'success' === $status ) {
+			$this->show_success( __( 'Full site operation completed successfully.', 'mksddn-migrate-content' ) );
 			} elseif ( 'error' === $status && ! empty( $_GET['mksddn_mc_full_error'] ) ) {
 				$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_full_error'] ) ) );
 			}
@@ -636,35 +637,35 @@ class ExportImportAdmin {
 		$history_id = null;
 
 		try {
-			if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
-				$this->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
-				$this->progress_tick( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
-				return;
-			}
+		if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
+			$this->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
+			$this->progress_tick( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+			return;
+		}
 
-			$file     = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( (string) $_FILES['import_file']['tmp_name'] ) : '';
-			$filename = isset( $_FILES['import_file']['name'] ) ? sanitize_file_name( (string) $_FILES['import_file']['name'] ) : '';
-			$size     = isset( $_FILES['import_file']['size'] ) ? (int) $_FILES['import_file']['size'] : 0;
+		$file     = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( (string) $_FILES['import_file']['tmp_name'] ) : '';
+		$filename = isset( $_FILES['import_file']['name'] ) ? sanitize_file_name( (string) $_FILES['import_file']['name'] ) : '';
+		$size     = isset( $_FILES['import_file']['size'] ) ? (int) $_FILES['import_file']['size'] : 0;
 
-			if ( 0 >= $size ) {
-				$this->show_error( esc_html__( 'Invalid file size.', 'mksddn-migrate-content' ) );
-				return;
-			}
+		if ( 0 >= $size ) {
+			$this->show_error( esc_html__( 'Invalid file size.', 'mksddn-migrate-content' ) );
+			return;
+		}
 
-			$this->progress_tick( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
+		$this->progress_tick( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
 
-			$ext  = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
-			$mime = function_exists( 'mime_content_type' ) && '' !== $file ? mime_content_type( $file ) : '';
+		$ext  = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+		$mime = function_exists( 'mime_content_type' ) && '' !== $file ? mime_content_type( $file ) : '';
 
-			$result = $this->prepare_import_payload( $ext, $mime, $file );
+		$result = $this->prepare_import_payload( $ext, $mime, $file );
 
-			if ( is_wp_error( $result ) ) {
-				$this->show_error( $result->get_error_message() );
-				$this->progress_tick( 100, __( 'Import aborted', 'mksddn-migrate-content' ) );
-				return;
-			}
+		if ( is_wp_error( $result ) ) {
+			$this->show_error( $result->get_error_message() );
+			$this->progress_tick( 100, __( 'Import aborted', 'mksddn-migrate-content' ) );
+			return;
+		}
 
-			$this->progress_tick( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
+		$this->progress_tick( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
 
 			$snapshot = $this->snapshot_manager->create(
 				array(
@@ -691,32 +692,32 @@ class ExportImportAdmin {
 			$payload                 = $result['payload'];
 			$payload_type            = $result['type'];
 			$payload['type']         = $payload_type;
-			$payload['_mksddn_media'] = $payload['_mksddn_media'] ?? $result['media'];
+		$payload['_mksddn_media'] = $payload['_mksddn_media'] ?? $result['media'];
 
-			$import_handler = new ImportHandler();
+		$import_handler = new ImportHandler();
 
-			if ( 'archive' === $result['media_source'] ) {
-				$import_handler->set_media_file_loader(
-					function ( string $archive_path ) use ( $file ) {
-						return $this->extractor->extract_media_file( $archive_path, $file );
-					}
-				);
-			}
+		if ( 'archive' === $result['media_source'] ) {
+			$import_handler->set_media_file_loader(
+				function ( string $archive_path ) use ( $file ) {
+					return $this->extractor->extract_media_file( $archive_path, $file );
+				}
+			);
+		}
 
-			$this->progress_tick( 70, __( 'Importing content…', 'mksddn-migrate-content' ) );
+		$this->progress_tick( 70, __( 'Importing content…', 'mksddn-migrate-content' ) );
 
-			$result = $this->process_import( $import_handler, $payload_type, $payload );
+		$result = $this->process_import( $import_handler, $payload_type, $payload );
 
-			if ( $result ) {
-				$this->progress_tick( 100, __( 'Completed', 'mksddn-migrate-content' ) );
-				// translators: %s is imported item type.
-				$this->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
+		if ( $result ) {
+			$this->progress_tick( 100, __( 'Completed', 'mksddn-migrate-content' ) );
+			// translators: %s is imported item type.
+			$this->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
 				if ( $history_id ) {
 					$this->history->finish( $history_id, 'success' );
 				}
-			} else {
-				$this->progress_tick( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
-				$this->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
+		} else {
+			$this->progress_tick( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
+			$this->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
 				if ( $history_id ) {
 					$this->history->finish(
 						$history_id,
@@ -824,6 +825,7 @@ class ExportImportAdmin {
 	 */
 	private function show_success( string $message ): void {
 		echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
+		echo '<script>window.mksddnMcProgress && window.mksddnMcProgress.hide && window.mksddnMcProgress.hide();</script>';
 	}
 
 	/**
@@ -833,6 +835,7 @@ class ExportImportAdmin {
 	 */
 	private function show_error( string $message ): void {
 		echo '<div class="error"><p>' . esc_html( $message ) . '</p></div>';
+		echo '<script>window.mksddnMcProgress && window.mksddnMcProgress.hide && window.mksddnMcProgress.hide();</script>';
 	}
 
 	/**
@@ -852,6 +855,12 @@ class ExportImportAdmin {
 					const clamped = Math.max(0, Math.min(100, percent));
 					bar.style.width = clamped + "%";
 					if(label){ label.textContent = text || ""; }
+				},
+				hide(){
+					if(!bar){return;}
+					container.setAttribute("aria-hidden","true");
+					bar.style.width = "0%";
+					if(label){ label.textContent = ""; }
 				}
 			}
 		})();
@@ -1025,8 +1034,9 @@ class ExportImportAdmin {
 			)
 		);
 
-		$importer = new FullContentImporter();
-		$result   = $importer->import_from( $temp );
+		$site_guard = new SiteUrlGuard();
+		$importer   = new FullContentImporter();
+		$result     = $importer->import_from( $temp, $site_guard );
 
 		$status  = 'success';
 		$message = null;
@@ -1040,6 +1050,7 @@ class ExportImportAdmin {
 				array( 'message' => $message )
 			);
 		} else {
+			$site_guard->restore();
 			$this->history->finish( $history_id, 'success' );
 		}
 
@@ -1084,8 +1095,9 @@ class ExportImportAdmin {
 			)
 		);
 
-		$importer = new FullContentImporter();
-		$result   = $importer->import_from( $snapshot['path'] );
+		$site_guard = new SiteUrlGuard();
+		$importer   = new FullContentImporter();
+		$result     = $importer->import_from( $snapshot['path'], $site_guard );
 
 		if ( is_wp_error( $result ) ) {
 			$this->history->finish(
@@ -1097,6 +1109,7 @@ class ExportImportAdmin {
 			$this->redirect_with_notice( 'error', $result->get_error_message() );
 		}
 
+		$site_guard->restore();
 		$this->history->finish( $history_entry, 'success' );
 		$this->job_lock->release( $lock_id );
 		$this->redirect_with_notice( 'success', __( 'Snapshot restored successfully.', 'mksddn-migrate-content' ) );

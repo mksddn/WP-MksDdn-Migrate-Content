@@ -8,6 +8,8 @@
 namespace Mksddn_MC\Filesystem;
 
 use Mksddn_MC\Database\FullDatabaseImporter;
+use Mksddn_MC\Support\DomainReplacer;
+use Mksddn_MC\Support\SiteUrlGuard;
 use WP_Error;
 use ZipArchive;
 
@@ -38,14 +40,12 @@ class FullContentImporter {
 	 * @param string $archive_path Uploaded archive.
 	 * @return true|WP_Error
 	 */
-	public function import_from( string $archive_path ) {
+	public function import_from( string $archive_path, ?SiteUrlGuard $url_guard = null ) {
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $archive_path ) ) {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to open archive for import.', 'mksddn-migrate-content' ) );
 		}
-
-		$siteurl_before = (string) get_option( 'siteurl' );
-		$home_before    = (string) get_option( 'home' );
+		$url_guard = $url_guard ?? new SiteUrlGuard();
 
 		$db_result = $this->maybe_import_database( $zip );
 		if ( is_wp_error( $db_result ) ) {
@@ -57,7 +57,7 @@ class FullContentImporter {
 		$zip->close();
 
 		if ( $this->database_imported ) {
-			$this->restore_site_urls( $siteurl_before, $home_before );
+			$url_guard->restore();
 		}
 
 		return $files_result;
@@ -110,6 +110,10 @@ class FullContentImporter {
 		if ( empty( $data['database'] ) || ! is_array( $data['database'] ) ) {
 			return true;
 		}
+
+		$current_base = function_exists( 'home_url' ) ? home_url() : (string) get_option( 'home' );
+		$replacer     = new DomainReplacer();
+		$replacer->replace_dump_domains( $data['database'], $current_base );
 
 		$result = $this->db_importer->import( $data['database'] );
 		if ( true === $result ) {
@@ -204,20 +208,5 @@ class FullContentImporter {
 		return '' === $path ? null : $path;
 	}
 
-	/**
-	 * Restore site/home URLs to original values after DB import.
-	 *
-	 * @param string $siteurl Original site URL.
-	 * @param string $home    Original home URL.
-	 */
-	private function restore_site_urls( string $siteurl, string $home ): void {
-		if ( '' !== $siteurl ) {
-			update_option( 'siteurl', esc_url_raw( $siteurl ) );
-		}
-
-		if ( '' !== $home ) {
-			update_option( 'home', esc_url_raw( $home ) );
-		}
-	}
 }
 

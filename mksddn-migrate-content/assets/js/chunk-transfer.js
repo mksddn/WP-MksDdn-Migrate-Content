@@ -124,6 +124,20 @@ function setProgressLabel( percent, message ) {
 	}
 }
 
+function hideProgressLabel( delay = 0 ) {
+	const hide = () => {
+		if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.hide === 'function' ) {
+			window.mksddnMcProgress.hide();
+		}
+	};
+
+	if ( delay > 0 ) {
+		setTimeout( hide, delay );
+	} else {
+		hide();
+	}
+}
+
 	async function initDownloadJob() {
 		const response = await fetch( settings.restUrl + 'chunk/download/init', {
 			method: 'POST',
@@ -172,6 +186,11 @@ function setProgressLabel( percent, message ) {
 			totalChunks = Math.max( 1, Math.ceil( file.size / jobChunkSize ) );
 		}
 
+		setProgressLabel(
+			0,
+			withChunkInfo( settings.i18n.importBusy.replace( '%d', 0 ), jobChunkSize )
+		);
+
 		let index = 0;
 		while ( index < totalChunks ) {
 			const start = index * jobChunkSize;
@@ -184,12 +203,10 @@ function setProgressLabel( percent, message ) {
 			index++;
 
 			const percent = Math.min( 100, Math.round( ( index / totalChunks ) * 100 ) );
-			if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function' ) {
-				window.mksddnMcProgress.set(
+			setProgressLabel(
 					percent,
 					settings.i18n.uploading.replace( '%d', percent )
-				);
-			}
+			);
 		}
 
 		setProgressLabel( 100, settings.i18n.importDone );
@@ -210,13 +227,11 @@ function setProgressLabel( percent, message ) {
 				const { chunk } = await fetchDownloadChunk( init.job_id, i );
 				parts.push( base64ToUint8( chunk ) );
 
-				if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function' ) {
 					const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
-					window.mksddnMcProgress.set(
+				setProgressLabel(
 						percent,
 						settings.i18n.downloading.replace( '%d', percent )
 					);
-				}
 			}
 
 			const blob = new Blob( parts, { type: 'application/octet-stream' } );
@@ -230,13 +245,14 @@ function setProgressLabel( percent, message ) {
 			document.body.removeChild( a );
 			URL.revokeObjectURL( url );
 
-			if ( window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function' ) {
-				window.mksddnMcProgress.set( 100, settings.i18n.downloadComplete );
-			}
+			setProgressLabel( 100, settings.i18n.downloadComplete );
 			setProgressLabel( 100, settings.i18n.exportDone );
+			hideProgressLabel( 2000 );
 		} catch ( error ) {
 			console.error( error );
 			alert( settings.i18n.downloadError );
+			setProgressLabel( 0, settings.i18n.downloadError );
+			hideProgressLabel( 2000 );
 			throw error;
 		}
 	}
@@ -248,29 +264,6 @@ function setProgressLabel( percent, message ) {
 
 		const fileInput = form.querySelector( 'input[type="file"]' );
 		const submitButton = form.querySelector( 'button[type="submit"]' );
-
-		if ( fileInput ) {
-			fileInput.addEventListener( 'change', () => {
-				const file = fileInput.files[ 0 ];
-				const chunk = selectChunkSize( file.size );
-				if ( settings.i18n.importSelected ) {
-					setProgressLabel(
-						0,
-						settings.i18n.importSelected
-							.replace( '%1$s', formatBytes( file.size ) )
-							.replace( '%2$s', formatBytes( chunk ) )
-					);
-				} else {
-					setProgressLabel(
-						0,
-						withChunkInfo(
-							settings.i18n.importReady || '',
-							chunk
-						)
-					);
-				}
-			} );
-		}
 
 		form.addEventListener( 'submit', async ( event ) => {
 			if ( ! fileInput || ! fileInput.files || ! fileInput.files.length ) {
@@ -301,6 +294,7 @@ function setProgressLabel( percent, message ) {
 				console.error( error );
 				alert( settings.i18n.uploadError );
 				setProgressLabel( 0, settings.i18n.importError );
+				hideProgressLabel( 2500 );
 				cancelChunkJob( currentJobId );
 				if ( submitButton ) {
 					submitButton.disabled = false;
@@ -318,7 +312,6 @@ function setProgressLabel( percent, message ) {
 			return;
 		}
 
-		setProgressLabel( 0, settings.i18n.exportReady );
 		let busy = false;
 		form.addEventListener( 'submit', async ( event ) => {
 			if ( busy ) {
