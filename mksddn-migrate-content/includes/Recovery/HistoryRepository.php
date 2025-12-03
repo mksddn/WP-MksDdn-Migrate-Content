@@ -129,6 +129,7 @@ class HistoryRepository {
 			'archive_path',
 			'message',
 			'action',
+			'user_selection',
 		);
 
 		$sanitized = array();

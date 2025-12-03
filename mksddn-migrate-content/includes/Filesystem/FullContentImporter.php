@@ -10,6 +10,7 @@ namespace Mksddn_MC\Filesystem;
 use Mksddn_MC\Database\FullDatabaseImporter;
 use Mksddn_MC\Support\DomainReplacer;
 use Mksddn_MC\Support\SiteUrlGuard;
+use Mksddn_MC\Users\UserMergeApplier;
 use WP_Error;
 use ZipArchive;
 
@@ -24,6 +25,7 @@ class FullContentImporter {
 
 	private FullDatabaseImporter $db_importer;
 	private bool $database_imported = false;
+	private array $user_merge_summary = array();
 
 	/**
 	 * Setup importer.
@@ -40,14 +42,15 @@ class FullContentImporter {
 	 * @param string $archive_path Uploaded archive.
 	 * @return true|WP_Error
 	 */
-	public function import_from( string $archive_path, ?SiteUrlGuard $url_guard = null ) {
+	public function import_from( string $archive_path, ?SiteUrlGuard $url_guard = null, array $options = array() ) {
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $archive_path ) ) {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to open archive for import.', 'mksddn-migrate-content' ) );
 		}
 		$url_guard = $url_guard ?? new SiteUrlGuard();
 
-		$db_result = $this->maybe_import_database( $zip );
+		$this->user_merge_summary = array();
+		$db_result = $this->maybe_import_database( $zip, $options );
 		if ( is_wp_error( $db_result ) ) {
 			$zip->close();
 			return $db_result;
@@ -61,6 +64,15 @@ class FullContentImporter {
 		}
 
 		return $files_result;
+	}
+
+	/**
+	 * Return summary for last user merge operation.
+	 *
+	 * @return array
+	 */
+	public function get_user_merge_summary(): array {
+		return $this->user_merge_summary;
 	}
 
 	private function is_allowed_path( string $path, array $allowed ): bool {
@@ -96,7 +108,7 @@ class FullContentImporter {
 	 * @param ZipArchive $zip Archive instance.
 	 * @return true|WP_Error
 	 */
-	private function maybe_import_database( ZipArchive $zip ) {
+	private function maybe_import_database( ZipArchive $zip, array $options = array() ) {
 		$payload_json = $zip->getFromName( 'payload/content.json' );
 		if ( false === $payload_json ) {
 			return true;
@@ -122,12 +134,36 @@ class FullContentImporter {
 		$replacer = new DomainReplacer();
 		$replacer->replace_dump_environment( $data['database'], $current_base, $current_paths );
 
-		$result = $this->db_importer->import( $data['database'] );
-		if ( true === $result ) {
-			$this->database_imported = true;
+		$user_merge      = isset( $options['user_merge'] ) && is_array( $options['user_merge'] ) ? $options['user_merge'] : array();
+		$merge_enabled   = ! empty( $user_merge['enabled'] );
+		$merge_plan      = isset( $user_merge['plan'] ) && is_array( $user_merge['plan'] ) ? $user_merge['plan'] : array();
+		$user_tables     = isset( $user_merge['tables'] ) && is_array( $user_merge['tables'] ) ? $user_merge['tables'] : array();
+		$user_applier    = null;
+		$remote_snapshot = array();
+
+		if ( $merge_enabled ) {
+			$user_applier    = new UserMergeApplier();
+			$remote_snapshot = $user_applier->extract_remote_users( $data['database'], $user_tables );
+			$user_applier->strip_user_tables( $data['database'], $user_tables );
 		}
 
-		return $result;
+		$result = $this->db_importer->import( $data['database'] );
+		if ( true !== $result ) {
+			return $result;
+		}
+
+		$this->database_imported = true;
+
+		if ( $user_applier ) {
+			$merge_result = $user_applier->merge( $remote_snapshot['users'], $merge_plan, $remote_snapshot['prefix'] ?? '' );
+			if ( is_wp_error( $merge_result ) ) {
+				return $merge_result;
+			}
+
+			$this->user_merge_summary = $merge_result;
+		}
+
+		return true;
 	}
 
 	/**
@@ -216,4 +252,5 @@ class FullContentImporter {
 	}
 
 }
+
 

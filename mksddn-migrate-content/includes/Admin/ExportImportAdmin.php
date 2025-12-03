@@ -20,6 +20,8 @@ use Mksddn_MC\Recovery\HistoryRepository;
 use Mksddn_MC\Recovery\JobLock;
 use Mksddn_MC\Support\FilenameBuilder;
 use Mksddn_MC\Support\SiteUrlGuard;
+use Mksddn_MC\Users\UserDiffBuilder;
+use Mksddn_MC\Users\UserPreviewStore;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -41,6 +43,8 @@ class ExportImportAdmin {
 	private SnapshotManager $snapshot_manager;
 	private HistoryRepository $history;
 	private JobLock $job_lock;
+	private UserPreviewStore $preview_store;
+	private ?array $pending_user_preview = null;
 
 	/**
 	 * Hook admin actions.
@@ -50,6 +54,7 @@ class ExportImportAdmin {
 		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
 		$this->history          = $history ?? new HistoryRepository();
 		$this->job_lock         = $job_lock ?? new JobLock();
+		$this->preview_store    = new UserPreviewStore();
 
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
@@ -57,6 +62,7 @@ class ExportImportAdmin {
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this, 'handle_full_import' ) );
 		add_action( 'admin_post_mksddn_mc_rollback_snapshot', array( $this, 'handle_snapshot_rollback' ) );
+		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this, 'handle_cancel_user_preview' ) );
 	}
 
 	/**
@@ -84,6 +90,7 @@ class ExportImportAdmin {
 
 		echo '<div class="wrap">';
 		echo '<h1>' . esc_html__( 'Migrate Content', 'mksddn-migrate-content' ) . '</h1>';
+		$this->maybe_load_user_preview();
 		$this->render_status_notices();
 		$this->render_progress_container();
 
@@ -183,6 +190,58 @@ class ExportImportAdmin {
 		}
 	}
 
+	/**
+	 * Load preview context when user selection query is present.
+	 */
+	private function maybe_load_user_preview(): void {
+		if ( empty( $_GET['mksddn_mc_user_review'] ) ) {
+			return;
+		}
+
+		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) );
+		$preview    = $this->preview_store->get( $preview_id );
+
+		if ( ! $preview ) {
+			$this->render_inline_notice( 'error', __( 'User selection session expired. Please upload the archive again.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		if ( (int) ( $preview['created_by'] ?? 0 ) !== get_current_user_id() ) {
+			$this->render_inline_notice( 'error', __( 'You are not allowed to continue this user selection.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		$summary = isset( $preview['summary'] ) && is_array( $preview['summary'] ) ? $preview['summary'] : array();
+		if ( empty( $summary['incoming'] ) ) {
+			$this->render_inline_notice( 'error', __( 'User selection data is empty. Restart the import.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		$this->pending_user_preview = array(
+			'id'            => $preview_id,
+			'original_name' => $preview['original_name'] ?? '',
+			'summary'       => $summary,
+		);
+	}
+
+	/**
+	 * Render inline admin notice.
+	 *
+	 * @param string $type    notice|error|warning|success.
+	 * @param string $message Message.
+	 */
+	private function render_inline_notice( string $type, string $message ): void {
+		$map = array(
+			'error'   => 'notice notice-error',
+			'success' => 'notice notice-success',
+			'warning' => 'notice notice-warning',
+			'info'    => 'notice notice-info',
+		);
+
+		$class = $map[ $type ] ?? $map['info'];
+		printf( '<div class="%1$s"><p>%2$s</p></div>', esc_attr( $class ), esc_html( $message ) );
+	}
+
 
 	/**
 	 * Render progress container.
@@ -224,6 +283,10 @@ class ExportImportAdmin {
 		.mksddn-mc-badge--running{background:#e0ecff;color:#1d4ed8;}
 		.mksddn-mc-history__actions form{display:inline-block;margin-right:.5rem;}
 		.mksddn-mc-history__actions button{margin-top:0;}
+		.mksddn-mc-user-table-wrapper{max-height:320px;overflow:auto;margin-top:1rem;}
+		.mksddn-mc-user-table td select{width:100%;}
+		.mksddn-mc-user-actions{margin-top:1rem;}
+		.mksddn-mc-inline-form{margin-top:0.75rem;}
 		</style>';
 
 		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
@@ -608,17 +671,121 @@ class ExportImportAdmin {
 		echo '</div>';
 
 		echo '<div class="mksddn-mc-card">';
-		echo '<h3>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h3>';
-		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="mksddn-mc-full-import-form" data-mksddn-full-import="true">';
-		wp_nonce_field( 'mksddn_mc_full_import' );
-		echo '<input type="hidden" name="action" value="mksddn_mc_import_full">';
-		echo '<input type="file" name="full_import_file" accept=".wpbkp" required><br><br>';
-		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Import Full Site', 'mksddn-migrate-content' ) . '</button>';
-		echo '</form>';
+		if ( $this->pending_user_preview ) {
+			$this->render_user_preview_card();
+		} else {
+			$this->render_full_import_form();
+		}
 		echo '</div>';
 
 		echo '</div>';
 		echo '</section>';
+	}
+
+	/**
+	 * Render default full import form (file upload or chunked).
+	 */
+	private function render_full_import_form(): void {
+		echo '<h3>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="mksddn-mc-full-import-form" data-mksddn-full-import="true">';
+		wp_nonce_field( 'mksddn_mc_full_import' );
+		echo '<input type="hidden" name="action" value="mksddn_mc_import_full">';
+		echo '<p>' . esc_html__( 'Upload a .wpbkp archive generated by this plugin. Large files will switch to chunked upload automatically.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<input type="file" name="full_import_file" accept=".wpbkp" required><br><br>';
+		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Import Full Site', 'mksddn-migrate-content' ) . '</button>';
+		echo '</form>';
+	}
+
+	/**
+	 * Render user preview card when archive contains user data.
+	 */
+	private function render_user_preview_card(): void {
+		$preview = $this->pending_user_preview;
+		$summary = $preview['summary'] ?? array();
+		$incoming = $summary['incoming'] ?? array();
+		$counts   = $summary['counts'] ?? array();
+		$total    = (int) ( $counts['incoming'] ?? count( $incoming ) );
+		$conflict = (int) ( $counts['conflicts'] ?? 0 );
+
+		echo '<h3>' . esc_html__( 'Review users before import', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<p>' . esc_html__( 'Pick which users from the archive should be added or overwrite existing accounts on this site.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Archive', 'mksddn-migrate-content' ) . ':</strong> ' . esc_html( $preview['original_name'] ?: __( 'uploaded file', 'mksddn-migrate-content' ) ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Users detected', 'mksddn-migrate-content' ) . ':</strong> ' . esc_html( $total ) . ' &middot; <strong>' . esc_html__( 'Conflicts', 'mksddn-migrate-content' ) . ':</strong> ' . esc_html( $conflict ) . '</p>';
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="mksddn-mc-user-plan">';
+		wp_nonce_field( 'mksddn_mc_full_import' );
+		echo '<input type="hidden" name="action" value="mksddn_mc_import_full">';
+		echo '<input type="hidden" name="preview_id" value="' . esc_attr( $preview['id'] ) . '">';
+
+		echo '<div class="mksddn-mc-user-table-wrapper">';
+		echo '<table class="widefat striped mksddn-mc-user-table">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Include', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Email', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Archive role', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Current role', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Status', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Conflict handling', 'mksddn-migrate-content' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ( $incoming as $entry ) {
+			$email = isset( $entry['email'] ) ? sanitize_email( $entry['email'] ) : '';
+			if ( ! $email ) {
+				continue;
+			}
+
+			$key       = md5( strtolower( $email ) );
+			$checkbox  = 'mksddn-mc-user-' . $key;
+			$status    = sanitize_text_field( $entry['status'] ?? 'new' );
+			$local     = $entry['local_role'] ?? '';
+			$role      = $entry['role'] ?? '';
+			$status_label = 'conflict' === $status ? __( 'Existing user', 'mksddn-migrate-content' ) : __( 'New user', 'mksddn-migrate-content' );
+
+			echo '<tr>';
+			echo '<td>';
+			echo '<input type="hidden" name="user_plan[' . esc_attr( $key ) . '][email]" value="' . esc_attr( $email ) . '">';
+			echo '<input type="hidden" name="user_plan[' . esc_attr( $key ) . '][import]" value="0">';
+			echo '<label class="screen-reader-text" for="' . esc_attr( $checkbox ) . '">' . sprintf( esc_html__( 'Include %s', 'mksddn-migrate-content' ), esc_html( $email ) ) . '</label>';
+			echo '<input type="checkbox" id="' . esc_attr( $checkbox ) . '" name="user_plan[' . esc_attr( $key ) . '][import]" value="1" checked>';
+			echo '</td>';
+			echo '<td><strong>' . esc_html( $email ) . '</strong><br><span class="description">' . esc_html( $entry['login'] ?? '' ) . '</span></td>';
+			echo '<td>' . esc_html( $role ?: '—' ) . '</td>';
+			echo '<td>' . esc_html( $local ?: '—' ) . '</td>';
+			echo '<td>' . esc_html( $status_label ) . '</td>';
+			echo '<td>';
+			if ( 'conflict' === $status ) {
+				$select_id = 'mksddn-mc-user-mode-' . $key;
+				echo '<label class="screen-reader-text" for="' . esc_attr( $select_id ) . '">' . esc_html__( 'Conflict handling', 'mksddn-migrate-content' ) . '</label>';
+				echo '<select id="' . esc_attr( $select_id ) . '" name="user_plan[' . esc_attr( $key ) . '][mode]">';
+				echo '<option value="keep">' . esc_html__( 'Keep current user', 'mksddn-migrate-content' ) . '</option>';
+				echo '<option value="replace">' . esc_html__( 'Replace with archive', 'mksddn-migrate-content' ) . '</option>';
+				echo '</select>';
+			} else {
+				echo '<input type="hidden" name="user_plan[' . esc_attr( $key ) . '][mode]" value="replace">';
+				echo '<span class="description">' . esc_html__( 'Will be created', 'mksddn-migrate-content' ) . '</span>';
+			}
+			echo '</td>';
+			echo '</tr>';
+		}
+
+		if ( empty( $incoming ) ) {
+			echo '<tr><td colspan="6">' . esc_html__( 'No users detected inside the archive.', 'mksddn-migrate-content' ) . '</td></tr>';
+		}
+
+		echo '</tbody></table>';
+		echo '</div>';
+
+		echo '<div class="mksddn-mc-user-actions">';
+		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Apply selection and import', 'mksddn-migrate-content' ) . '</button>';
+		echo '</div>';
+		echo '</form>';
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="mksddn-mc-inline-form">';
+		wp_nonce_field( 'mksddn_mc_cancel_preview_' . $preview['id'] );
+		echo '<input type="hidden" name="action" value="mksddn_mc_cancel_user_preview">';
+		echo '<input type="hidden" name="preview_id" value="' . esc_attr( $preview['id'] ) . '">';
+		echo '<button type="submit" class="button button-secondary">' . esc_html__( 'Cancel user selection', 'mksddn-migrate-content' ) . '</button>';
+		echo '</form>';
 	}
 
 	/**
@@ -961,77 +1128,245 @@ class ExportImportAdmin {
 
 		check_admin_referer( 'mksddn_mc_full_import' );
 
-		$chunk_job_id  = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
-		$temp          = '';
-		$cleanup       = false;
-		$job           = null;
-		$original_name = '';
+		$preview_id = isset( $_POST['preview_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preview_id'] ) ) : '';
+		if ( $preview_id ) {
+			$this->finalize_full_import_from_preview( $preview_id );
+			return;
+		}
 
-		if ( ! MKSDDN_MC_DISABLE_CHUNKED ) {
+		$chunk_job_id = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
+		$upload       = $this->resolve_full_import_upload( $chunk_job_id );
+
+		if ( is_wp_error( $upload ) ) {
+			$this->redirect_full_status( 'error', $upload->get_error_message() );
+		}
+
+		$diff_builder = new UserDiffBuilder();
+		$diff         = $diff_builder->build( $upload['temp'] );
+
+		if ( is_wp_error( $diff ) ) {
+			$this->cleanup_full_import( $upload['temp'], $upload['cleanup'], $upload['job'] );
+			$this->redirect_full_status( 'error', $diff->get_error_message() );
+		}
+
+		if ( empty( $diff['incoming'] ) ) {
+			$this->execute_full_import( $upload );
+			return;
+		}
+
+		$preview_id = $this->preview_store->create(
+			array(
+				'file_path'     => $upload['temp'],
+				'chunk_job_id'  => $upload['chunk_job_id'],
+				'cleanup'       => $upload['cleanup'],
+				'original_name' => $upload['original_name'],
+				'summary'       => $diff,
+			)
+		);
+
+		$this->redirect_user_preview( $preview_id );
+	}
+
+	/**
+	 * Continue import using stored preview selection.
+	 *
+	 * @param string $preview_id Preview identifier.
+	 */
+	private function finalize_full_import_from_preview( string $preview_id ): void {
+		$preview = $this->preview_store->get( $preview_id );
+		if ( ! $preview ) {
+			$this->redirect_full_status( 'error', __( 'User selection expired. Please upload the archive again.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( (int) ( $preview['created_by'] ?? 0 ) !== get_current_user_id() ) {
+			$this->redirect_full_status( 'error', __( 'You are not allowed to complete this user selection.', 'mksddn-migrate-content' ) );
+		}
+
+		$summary = isset( $preview['summary'] ) && is_array( $preview['summary'] ) ? $preview['summary'] : array();
+		$plan    = $this->build_user_plan_from_request( $summary );
+
+		if ( is_wp_error( $plan ) ) {
+			$this->redirect_full_status( 'error', $plan->get_error_message() );
+		}
+
+		$upload = array(
+			'temp'          => isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '',
+			'cleanup'       => ! empty( $preview['cleanup'] ),
+			'chunk_job_id'  => isset( $preview['chunk_job_id'] ) ? sanitize_text_field( (string) $preview['chunk_job_id'] ) : '',
+			'original_name' => $preview['original_name'] ?? '',
+			'job'           => null,
+		);
+
+		if ( $upload['chunk_job_id'] ) {
+			$repo          = new ChunkJobRepository();
+			$upload['job'] = $repo->get( $upload['chunk_job_id'] );
+		}
+
+		if ( empty( $upload['temp'] ) || ! file_exists( $upload['temp'] ) ) {
+			$this->preview_store->delete( $preview_id );
+			$this->redirect_full_status( 'error', __( 'Import file is missing. Restart the upload.', 'mksddn-migrate-content' ) );
+		}
+
+		$options = array(
+			'user_merge' => array(
+				'enabled' => true,
+				'plan'    => $plan,
+				'tables'  => $summary['tables'] ?? array(),
+			),
+		);
+
+		$this->preview_store->delete( $preview_id );
+		$this->execute_full_import( $upload, $options );
+	}
+
+	/**
+	 * Normalize plan payload from request input.
+	 *
+	 * @param array $summary Preview summary.
+	 * @return array|WP_Error
+	 */
+	private function build_user_plan_from_request( array $summary ) {
+		$incoming = isset( $summary['incoming'] ) && is_array( $summary['incoming'] ) ? $summary['incoming'] : array();
+		if ( empty( $incoming ) ) {
+			return array();
+		}
+
+		$defaults = array();
+		foreach ( $incoming as $entry ) {
+			$email = isset( $entry['email'] ) ? sanitize_email( $entry['email'] ) : '';
+			if ( ! $email ) {
+				continue;
+			}
+
+			$defaults[ strtolower( $email ) ] = $email;
+		}
+
+		if ( empty( $defaults ) ) {
+			return new WP_Error( 'mksddn_mc_user_plan_empty', __( 'No users available for selection.', 'mksddn-migrate-content' ) );
+		}
+
+		$raw_plan = isset( $_POST['user_plan'] ) && is_array( $_POST['user_plan'] ) ? wp_unslash( $_POST['user_plan'] ) : array();
+		$plan     = array();
+
+		foreach ( $defaults as $email ) {
+			$plan[ $email ] = array(
+				'import' => false,
+				'mode'   => 'replace',
+			);
+		}
+
+		foreach ( $raw_plan as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$email = isset( $row['email'] ) ? sanitize_email( $row['email'] ) : '';
+			if ( ! $email ) {
+				continue;
+			}
+
+			$lookup = strtolower( $email );
+			if ( ! isset( $defaults[ $lookup ] ) ) {
+				continue;
+			}
+
+			$import = ! empty( $row['import'] );
+			$mode   = isset( $row['mode'] ) && 'keep' === $row['mode'] ? 'keep' : 'replace';
+
+			$plan[ $email ] = array(
+				'import' => $import,
+				'mode'   => $mode,
+			);
+		}
+
+		return $plan;
+	}
+
+	/**
+	 * Resolve uploaded file or chunk job.
+	 *
+	 * @param string $chunk_job_id Chunk job identifier.
+	 * @return array|WP_Error
+	 */
+	private function resolve_full_import_upload( string $chunk_job_id ) {
+		$chunk_disabled = defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) && MKSDDN_MC_DISABLE_CHUNKED;
+		$result         = array(
+			'temp'          => '',
+			'cleanup'       => false,
+			'job'           => null,
+			'chunk_job_id'  => $chunk_job_id,
+			'original_name' => '',
+		);
+
 		if ( $chunk_job_id ) {
+			if ( $chunk_disabled ) {
+				return new WP_Error( 'mksddn_mc_chunk_disabled', __( 'Chunked uploads are disabled on this site.', 'mksddn-migrate-content' ) );
+			}
+
 			$repo = new ChunkJobRepository();
 			$job  = $repo->get( $chunk_job_id );
-			$temp = $job->get_file_path();
+			$path = $job->get_file_path();
 
-			if ( ! file_exists( $temp ) ) {
-				$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
+			if ( ! file_exists( $path ) ) {
+				return new WP_Error( 'mksddn_mc_chunk_missing', __( 'Chunked upload is incomplete. Please retry.', 'mksddn-migrate-content' ) );
 			}
 
-				$original_name = sprintf( 'chunk:%s', $chunk_job_id );
-			}
+			$result['temp']          = $path;
+			$result['job']           = $job;
+			$result['original_name'] = sprintf( 'chunk:%s', $chunk_job_id );
+
+			return $result;
 		}
 
+		if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
+			return new WP_Error( 'mksddn_mc_file_missing', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
+		}
+
+		$file     = $_FILES['full_import_file'];
+		$tmp_name = sanitize_text_field( (string) $file['tmp_name'] );
+		$name     = sanitize_file_name( (string) $file['name'] );
+		$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
+
+		if ( $size <= 0 ) {
+			return new WP_Error( 'mksddn_mc_invalid_size', __( 'Invalid file size.', 'mksddn-migrate-content' ) );
+		}
+
+		$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
+		if ( 'wpbkp' !== $ext ) {
+			return new WP_Error( 'mksddn_mc_invalid_type', __( 'Please upload a .wpbkp archive generated by this plugin.', 'mksddn-migrate-content' ) );
+		}
+
+		$temp = wp_tempnam( 'mksddn-full-import-' );
 		if ( ! $temp ) {
-			if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
-				$this->redirect_full_status( 'error', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
-			}
-
-			$file     = $_FILES['full_import_file'];
-			$tmp_name = sanitize_text_field( (string) $file['tmp_name'] );
-			$name     = sanitize_file_name( (string) $file['name'] );
-			$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
-
-			if ( 0 >= $size ) {
-				$this->redirect_full_status( 'error', __( 'Invalid file size.', 'mksddn-migrate-content' ) );
-			}
-
-			$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
-			if ( 'wpbkp' !== $ext ) {
-				$this->redirect_full_status( 'error', __( 'Please upload a .wpbkp archive.', 'mksddn-migrate-content' ) );
-			}
-
-			$temp = wp_tempnam( 'mksddn-full-import-' );
-			if ( ! $temp ) {
-				$this->redirect_full_status( 'error', __( 'Unable to allocate temp file for import.', 'mksddn-migrate-content' ) );
-			}
-
-			if ( ! move_uploaded_file( $tmp_name, $temp ) ) {
-				$this->redirect_full_status( 'error', __( 'Failed to move uploaded file.', 'mksddn-migrate-content' ) );
-			}
-
-			$cleanup       = true;
-			$original_name = $name;
+			return new WP_Error( 'mksddn_mc_temp_unavailable', __( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
 		}
 
-		if ( $chunk_job_id && ( defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) && MKSDDN_MC_DISABLE_CHUNKED ) ) {
-			$this->redirect_full_status( 'error', __( 'Chunked uploads are disabled.', 'mksddn-migrate-content' ) );
+		if ( ! move_uploaded_file( $tmp_name, $temp ) ) {
+			return new WP_Error( 'mksddn_mc_move_failed', __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
 		}
 
-		if ( ( ! defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) || ! MKSDDN_MC_DISABLE_CHUNKED ) && $chunk_job_id ) {
-			$repo = new ChunkJobRepository();
-			$job  = $repo->get( $chunk_job_id );
-			$temp = $job->get_file_path();
+		$result['temp']          = $temp;
+		$result['cleanup']       = true;
+		$result['original_name'] = $name;
 
-			if ( ! file_exists( $temp ) ) {
-				$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
-			}
+		return $result;
+	}
 
-			$original_name = sprintf( 'chunk:%s', $chunk_job_id );
-		} else {
-			if ( defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) && MKSDDN_MC_DISABLE_CHUNKED && $chunk_job_id ) {
-				$this->redirect_full_status( 'error', __( 'Chunked uploads are disabled.', 'mksddn-migrate-content' ) );
-			}
+	/**
+	 * Execute full import with optional user merge options.
+	 *
+	 * @param array $upload  Upload data.
+	 * @param array $options Import options.
+	 */
+	private function execute_full_import( array $upload, array $options = array() ): void {
+		$temp = $upload['temp'] ?? '';
+		if ( '' === $temp || ! file_exists( $temp ) ) {
+			$this->redirect_full_status( 'error', __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
 		}
+
+		$cleanup       = ! empty( $upload['cleanup'] );
+		$job           = $upload['job'] ?? null;
+		$original_name = $upload['original_name'] ?? '';
 
 		$lock_id = $this->job_lock->acquire( 'full-import' );
 		if ( is_wp_error( $lock_id ) ) {
@@ -1041,10 +1376,10 @@ class ExportImportAdmin {
 
 		$snapshot = $this->snapshot_manager->create(
 			array(
-				'label'            => 'pre-import-full',
-				'include_plugins'  => true,
-				'include_themes'   => true,
-				'meta'             => array( 'file' => $original_name ),
+				'label'           => 'pre-import-full',
+				'include_plugins' => true,
+				'include_themes'  => true,
+				'meta'            => array( 'file' => $original_name ),
 			)
 		);
 
@@ -1066,7 +1401,7 @@ class ExportImportAdmin {
 
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
-		$result     = $importer->import_from( $temp, $site_guard );
+		$result     = $importer->import_from( $temp, $site_guard, $options );
 
 		$status  = 'success';
 		$message = null;
@@ -1093,12 +1428,79 @@ class ExportImportAdmin {
 		} else {
 			$site_guard->restore();
 			$this->normalize_plugin_storage();
-			$this->history->finish( $history_id, 'success' );
+
+			$history_context = array();
+			$merge_summary   = $importer->get_user_merge_summary();
+			if ( ! empty( $merge_summary ) ) {
+				$history_context['user_selection'] = sprintf(
+					'created:%d updated:%d skipped:%d',
+					(int) ( $merge_summary['created'] ?? 0 ),
+					(int) ( $merge_summary['updated'] ?? 0 ),
+					(int) ( $merge_summary['skipped'] ?? 0 )
+				);
+			}
+
+			$this->history->finish( $history_id, 'success', $history_context );
 		}
 
 		$this->job_lock->release( $lock_id );
 		$this->cleanup_full_import( $temp, $cleanup, $job );
 		$this->redirect_full_status( $status, $message );
+	}
+
+	/**
+	 * Redirect back to admin page with preview query arg.
+	 *
+	 * @param string $preview_id Preview identifier.
+	 */
+	private function redirect_user_preview( string $preview_id ): void {
+		$base = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
+		$url  = add_query_arg( array( 'mksddn_mc_user_review' => $preview_id ), $base );
+		wp_safe_redirect( $url );
+		exit;
+	}
+
+	/**
+	 * Cancel stored user preview.
+	 */
+	public function handle_cancel_user_preview(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		$preview_id = isset( $_POST['preview_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preview_id'] ) ) : '';
+		if ( '' === $preview_id ) {
+			$this->redirect_with_notice( 'error', __( 'Preview identifier is missing.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_cancel_preview_' . $preview_id );
+
+		$preview = $this->preview_store->get( $preview_id );
+		if ( $preview ) {
+			$this->cleanup_preview_resources( $preview );
+			$this->preview_store->delete( $preview_id );
+		}
+
+		$this->redirect_with_notice( 'success', __( 'User selection cancelled.', 'mksddn-migrate-content' ) );
+	}
+
+	/**
+	 * Cleanup temp resources associated with preview.
+	 *
+	 * @param array $preview Preview payload.
+	 * @return void
+	 */
+	private function cleanup_preview_resources( array $preview ): void {
+		$temp    = isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '';
+		$cleanup = ! empty( $preview['cleanup'] );
+		$job     = null;
+
+		if ( ! empty( $preview['chunk_job_id'] ) ) {
+			$repo = new ChunkJobRepository();
+			$job  = $repo->get( sanitize_text_field( (string) $preview['chunk_job_id'] ) );
+		}
+
+		$this->cleanup_full_import( $temp, $cleanup, $job );
 	}
 
 	/**
