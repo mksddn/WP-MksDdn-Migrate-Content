@@ -106,46 +106,52 @@ class ExportImportAdmin {
 			return;
 		}
 
-		wp_enqueue_script(
-			'mksddn-chunk-transfer',
-			MKSDDN_MC_URL . 'assets/js/chunk-transfer.js',
-			array(),
-			MKSDDN_MC_VERSION,
-			true
-		);
+		if ( ! defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) ) {
+			define( 'MKSDDN_MC_DISABLE_CHUNKED', true );
+		}
 
-		$default_chunk = 1024 * 1024;
-		wp_localize_script(
-			'mksddn-chunk-transfer',
-			'mksddnChunk',
-			array(
-				'restUrl'                => esc_url_raw( rest_url( 'mksddn/v1/' ) ),
-				'nonce'                  => wp_create_nonce( 'wp_rest' ),
-				'chunkSize'              => 5 * 1024 * 1024,
-				'uploadChunkSize'        => $default_chunk,
-				'downloadFilename'       => FilenameBuilder::build( 'full-site', 'wpbkp' ),
-				'defaultChunkSizeLabel'  => size_format( $default_chunk, 2 ),
-				'i18n'                   => array(
-					'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
-					'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
-					'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
-					'importBusy'         => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
-					'importDone'         => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
-					'importProcessing'   => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
-					'importError'        => __( 'Upload failed. Please retry.', 'mksddn-migrate-content' ),
-					'chunkInfo'          => __( '· %s chunks', 'mksddn-migrate-content' ),
-					'preparing'        => __( 'Preparing download…', 'mksddn-migrate-content' ),
-					'downloading'      => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
-					'downloadComplete' => __( 'Download complete.', 'mksddn-migrate-content' ),
-					'downloadError'    => __( 'Chunked download failed. Falling back to direct download.', 'mksddn-migrate-content' ),
-					'exportReady'      => __( 'Ready for full export.', 'mksddn-migrate-content' ),
-					'exportBusy'       => __( 'Preparing archive…', 'mksddn-migrate-content' ),
-					'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
-					'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
-					'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
-				),
-			)
-		);
+		if ( ! MKSDDN_MC_DISABLE_CHUNKED ) {
+			wp_enqueue_script(
+				'mksddn-chunk-transfer',
+				MKSDDN_MC_URL . 'assets/js/chunk-transfer.js',
+				array(),
+				MKSDDN_MC_VERSION,
+				true
+			);
+
+			$default_chunk = 1024 * 1024;
+			wp_localize_script(
+				'mksddn-chunk-transfer',
+				'mksddnChunk',
+				array(
+					'restUrl'                => esc_url_raw( rest_url( 'mksddn/v1/' ) ),
+					'nonce'                  => wp_create_nonce( 'wp_rest' ),
+					'chunkSize'              => 5 * 1024 * 1024,
+					'uploadChunkSize'        => $default_chunk,
+					'downloadFilename'       => FilenameBuilder::build( 'full-site', 'wpbkp' ),
+					'defaultChunkSizeLabel'  => size_format( $default_chunk, 2 ),
+					'i18n'                   => array(
+						'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
+						'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
+						'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
+						'importBusy'         => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
+						'importDone'         => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
+						'importProcessing'   => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
+						'importError'        => __( 'Upload failed. Please retry.', 'mksddn-migrate-content' ),
+						'chunkInfo'          => __( '· %s chunks', 'mksddn-migrate-content' ),
+						'preparing'        => __( 'Preparing download…', 'mksddn-migrate-content' ),
+						'downloading'      => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
+						'downloadComplete' => __( 'Download complete.', 'mksddn-migrate-content' ),
+						'downloadError'    => __( 'Chunked download failed. Falling back to direct download.', 'mksddn-migrate-content' ),
+						'exportReady'      => __( 'Ready for full export.', 'mksddn-migrate-content' ),
+						'exportBusy'       => __( 'Preparing archive…', 'mksddn-migrate-content' ),
+						'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
+						'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
+						'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
+					),
+				)
+			);
+		}
 	}
 	/**
 	 * Display status notices after redirects.
@@ -961,17 +967,21 @@ class ExportImportAdmin {
 		$job           = null;
 		$original_name = '';
 
-		if ( $chunk_job_id ) {
-			$repo = new ChunkJobRepository();
-			$job  = $repo->get( $chunk_job_id );
-			$temp = $job->get_file_path();
+		if ( ! MKSDDN_MC_DISABLE_CHUNKED ) {
+			if ( $chunk_job_id ) {
+				$repo = new ChunkJobRepository();
+				$job  = $repo->get( $chunk_job_id );
+				$temp = $job->get_file_path();
 
-			if ( ! file_exists( $temp ) ) {
-				$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
+				if ( ! file_exists( $temp ) ) {
+					$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
+				}
+
+				$original_name = sprintf( 'chunk:%s', $chunk_job_id );
 			}
+		}
 
-			$original_name = sprintf( 'chunk:%s', $chunk_job_id );
-		} else {
+		if ( ! $temp ) {
 			if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
 				$this->redirect_full_status( 'error', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
 			}
@@ -1001,6 +1011,26 @@ class ExportImportAdmin {
 
 			$cleanup       = true;
 			$original_name = $name;
+		}
+
+		if ( $chunk_job_id && ( defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) && MKSDDN_MC_DISABLE_CHUNKED ) ) {
+			$this->redirect_full_status( 'error', __( 'Chunked uploads are disabled.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( ( ! defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) || ! MKSDDN_MC_DISABLE_CHUNKED ) && $chunk_job_id ) {
+			$repo = new ChunkJobRepository();
+			$job  = $repo->get( $chunk_job_id );
+			$temp = $job->get_file_path();
+
+			if ( ! file_exists( $temp ) ) {
+				$this->redirect_full_status( 'error', __( 'Chunked upload is incomplete.', 'mksddn-migrate-content' ) );
+			}
+
+			$original_name = sprintf( 'chunk:%s', $chunk_job_id );
+		} else {
+			if ( defined( 'MKSDDN_MC_DISABLE_CHUNKED' ) && MKSDDN_MC_DISABLE_CHUNKED && $chunk_job_id ) {
+				$this->redirect_full_status( 'error', __( 'Chunked uploads are disabled.', 'mksddn-migrate-content' ) );
+			}
 		}
 
 		$lock_id = $this->job_lock->acquire( 'full-import' );
