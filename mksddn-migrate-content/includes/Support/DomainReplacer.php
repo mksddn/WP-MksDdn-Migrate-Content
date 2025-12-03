@@ -125,9 +125,18 @@ class DomainReplacer {
 		}
 
 		if ( is_serialized( $value ) ) {
-			$data    = maybe_unserialize( $value );
+			$data = @unserialize( trim( $value ) );
+
+			if ( false === $data && 'b:0;' !== $value ) {
+				return str_replace( array_keys( $map ), array_values( $map ), $value );
+			}
+
+			if ( $data instanceof \__PHP_Incomplete_Class ) {
+				return str_replace( array_keys( $map ), array_values( $map ), $value );
+			}
+
 			$updated = $this->replace_recursive( $data, $map );
-			return maybe_serialize( $updated );
+			return serialize( $updated );
 		}
 
 		return str_replace( array_keys( $map ), array_values( $map ), $value );
@@ -150,6 +159,10 @@ class DomainReplacer {
 		}
 
 		if ( is_object( $data ) ) {
+			if ( $data instanceof \__PHP_Incomplete_Class ) {
+				return $data;
+			}
+
 			foreach ( $data as $property => $value ) {
 				$data->$property = $this->replace_recursive( $value, $map );
 			}
