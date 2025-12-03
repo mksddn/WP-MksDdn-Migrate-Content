@@ -1062,6 +1062,7 @@ class ExportImportAdmin {
 			}
 		} else {
 			$site_guard->restore();
+			$this->normalize_plugin_storage();
 			$this->history->finish( $history_id, 'success' );
 		}
 
@@ -1146,7 +1147,18 @@ class ExportImportAdmin {
 		$guard->restore();
 		$this->history->finish( $history_entry, 'success' );
 
+		$guard->restore();
+		$this->normalize_plugin_storage();
 		return true;
+	}
+
+	/**
+	 * Normalize storage paths for known plugins (AI1WM etc).
+	 */
+	private function normalize_plugin_storage(): void {
+		$target = trailingslashit( WP_CONTENT_DIR ) . 'ai1wm-backups';
+		wp_mkdir_p( $target );
+		update_option( 'ai1wm_storage_path', $target );
 	}
 
 	/**

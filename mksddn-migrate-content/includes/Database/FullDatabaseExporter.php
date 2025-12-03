@@ -28,9 +28,15 @@ class FullDatabaseExporter {
 		global $wpdb;
 
 		$tables = $this->detect_tables( $wpdb );
+		$uploads = wp_upload_dir();
 		$dump   = array(
 			'site_url' => \get_option( 'siteurl' ),
 			'home_url' => \home_url(),
+			'paths'    => array(
+				'root'    => ABSPATH,
+				'content' => WP_CONTENT_DIR,
+				'uploads' => isset( $uploads['basedir'] ) ? $uploads['basedir'] : WP_CONTENT_DIR . '/uploads',
+			),
 			'tables'   => array(),
 		);
 

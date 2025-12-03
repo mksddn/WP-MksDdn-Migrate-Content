@@ -111,9 +111,16 @@ class FullContentImporter {
 			return true;
 		}
 
-		$current_base = function_exists( 'home_url' ) ? home_url() : (string) get_option( 'home' );
-		$replacer     = new DomainReplacer();
-		$replacer->replace_dump_domains( $data['database'], $current_base );
+		$current_base  = function_exists( 'home_url' ) ? home_url() : (string) get_option( 'home' );
+		$uploads       = wp_upload_dir();
+		$current_paths = array(
+			'root'    => ABSPATH,
+			'content' => WP_CONTENT_DIR,
+			'uploads' => isset( $uploads['basedir'] ) ? $uploads['basedir'] : WP_CONTENT_DIR . '/uploads',
+		);
+
+		$replacer = new DomainReplacer();
+		$replacer->replace_dump_environment( $data['database'], $current_base, $current_paths );
 
 		$result = $this->db_importer->import( $data['database'] );
 		if ( true === $result ) {

@@ -17,25 +17,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 class DomainReplacer {
 
 	/**
-	 * Replace domain references inside exported dump array.
+	 * Replace environment references (domains, paths) inside exported dump array.
 	 *
-	 * @param array  $dump        Database dump structure.
-	 * @param string $target_base Target base URL (scheme + host + optional path).
+	 * @param array  $dump         Database dump structure.
+	 * @param string $target_base  Target base URL (scheme + host + optional path).
+	 * @param array  $target_paths Target filesystem paths.
 	 */
-	public function replace_dump_domains( array &$dump, string $target_base ): void {
+	public function replace_dump_environment( array &$dump, string $target_base, array $target_paths ): void {
 		if ( empty( $dump['tables'] ) || ! is_array( $dump['tables'] ) ) {
 			return;
 		}
 
-		$signatures = $this->collect_signatures( $dump );
-		if ( empty( $signatures ) ) {
-			return;
-		}
+		$domain_signatures = $this->collect_domain_signatures( $dump );
+		$path_signatures   = $this->collect_path_signatures( $dump );
+		$target            = untrailingslashit( $target_base );
 
-		$target = untrailingslashit( $target_base );
-		$map    = $this->build_replacement_map( $signatures, $target );
+		$domain_map = $this->build_domain_map( $domain_signatures, $target );
+		$path_map   = $this->build_path_map( $path_signatures, $target_paths );
 
-		if ( empty( $map ) ) {
+		$combined_map = $domain_map + $path_map;
+
+		if ( empty( $combined_map ) ) {
 			return;
 		}
 
@@ -50,7 +52,7 @@ class DomainReplacer {
 				}
 
 				foreach ( $row as $column => $value ) {
-					$row[ $column ] = $this->replace_value( $value, $map );
+					$row[ $column ] = $this->replace_value( $value, $combined_map );
 				}
 			}
 		}
@@ -62,7 +64,7 @@ class DomainReplacer {
 	 * @param array $dump Database dump.
 	 * @return array
 	 */
-	private function collect_signatures( array $dump ): array {
+	private function collect_domain_signatures( array $dump ): array {
 		$candidates = array(
 			$dump['site_url'] ?? '',
 			$dump['home_url'] ?? '',
@@ -99,6 +101,17 @@ class DomainReplacer {
 	 * @return array<string,string>
 	 */
 	private function build_replacement_map( array $signatures, string $target ): array {
+		return $this->build_domain_map( $signatures, $target );
+	}
+
+	/**
+	 * Build search/replace map for domain signatures.
+	 *
+	 * @param array  $signatures Domain signatures.
+	 * @param string $target     Target base.
+	 * @return array
+	 */
+	private function build_domain_map( array $signatures, string $target ): array {
 		$map = array();
 
 		foreach ( $signatures as $signature ) {
@@ -107,6 +120,57 @@ class DomainReplacer {
 				$map[ $base ]      = $target;
 				$map[ $base . '/' ] = trailingslashit( $target );
 			}
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Collect old filesystem paths from dump metadata.
+	 *
+	 * @param array $dump Dump data.
+	 * @return array<string,string>
+	 */
+	private function collect_path_signatures( array $dump ): array {
+		$paths = array();
+		if ( empty( $dump['paths'] ) || ! is_array( $dump['paths'] ) ) {
+			return $paths;
+		}
+
+		foreach ( $dump['paths'] as $key => $path ) {
+			if ( empty( $path ) || ! is_string( $path ) ) {
+				continue;
+			}
+
+			$paths[ $key ] = untrailingslashit( $path );
+		}
+
+		return $paths;
+	}
+
+	/**
+	 * Build replacement map for filesystem paths.
+	 *
+	 * @param array $old_paths    Old path signatures.
+	 * @param array $target_paths Target path values.
+	 * @return array
+	 */
+	private function build_path_map( array $old_paths, array $target_paths ): array {
+		$map = array();
+
+		foreach ( $old_paths as $key => $old_path ) {
+			if ( empty( $old_path ) ) {
+				continue;
+			}
+
+			$new_path = isset( $target_paths[ $key ] ) ? untrailingslashit( (string) $target_paths[ $key ] ) : '';
+
+			if ( '' === $new_path ) {
+				continue;
+			}
+
+			$map[ $old_path ]       = $new_path;
+			$map[ $old_path . '/' ] = trailingslashit( $new_path );
 		}
 
 		return $map;
