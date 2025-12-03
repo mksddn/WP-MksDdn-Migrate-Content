@@ -1049,6 +1049,17 @@ class ExportImportAdmin {
 				'error',
 				array( 'message' => $message )
 			);
+
+			$rollback = $this->restore_snapshot( $snapshot, 'auto' );
+			if ( is_wp_error( $rollback ) ) {
+				$message .= ' ' . sprintf(
+					/* translators: %s error message */
+					__( 'Automatic rollback failed: %s', 'mksddn-migrate-content' ),
+					$rollback->get_error_message()
+				);
+			} else {
+				$message .= ' ' . __( 'Previous state was restored automatically.', 'mksddn-migrate-content' );
+			}
 		} else {
 			$site_guard->restore();
 			$this->history->finish( $history_id, 'success' );
@@ -1086,18 +1097,41 @@ class ExportImportAdmin {
 			$this->redirect_with_notice( 'error', $lock_id->get_error_message() );
 		}
 
+		$result = $this->restore_snapshot( $snapshot, 'manual' );
+
+		if ( is_wp_error( $result ) ) {
+			$this->job_lock->release( $lock_id );
+			$this->redirect_with_notice( 'error', $result->get_error_message() );
+		}
+
+		$this->job_lock->release( $lock_id );
+		$this->redirect_with_notice( 'success', __( 'Snapshot restored successfully.', 'mksddn-migrate-content' ) );
+	}
+
+	/**
+	 * Restore snapshot either manually or automatically.
+	 *
+	 * @param array  $snapshot Snapshot metadata.
+	 * @param string $action   manual|auto.
+	 * @return true|WP_Error
+	 */
+	private function restore_snapshot( array $snapshot, string $action = 'manual' ) {
+		if ( empty( $snapshot['path'] ) || ! file_exists( $snapshot['path'] ) ) {
+			return new WP_Error( 'mksddn_snapshot_missing', __( 'Snapshot archive is missing on disk.', 'mksddn-migrate-content' ) );
+		}
+
 		$history_entry = $this->history->start(
 			'rollback',
 			array(
-				'snapshot_id'    => $snapshot_id,
-				'snapshot_label' => $snapshot['label'] ?? $snapshot_id,
-				'action'         => 'rollback',
+				'snapshot_id'    => $snapshot['id'] ?? '',
+				'snapshot_label' => $snapshot['label'] ?? '',
+				'action'         => $action,
 			)
 		);
 
-		$site_guard = new SiteUrlGuard();
-		$importer   = new FullContentImporter();
-		$result     = $importer->import_from( $snapshot['path'], $site_guard );
+		$guard    = new SiteUrlGuard();
+		$importer = new FullContentImporter();
+		$result   = $importer->import_from( $snapshot['path'], $guard );
 
 		if ( is_wp_error( $result ) ) {
 			$this->history->finish(
@@ -1105,14 +1139,14 @@ class ExportImportAdmin {
 				'error',
 				array( 'message' => $result->get_error_message() )
 			);
-			$this->job_lock->release( $lock_id );
-			$this->redirect_with_notice( 'error', $result->get_error_message() );
+
+			return $result;
 		}
 
-		$site_guard->restore();
+		$guard->restore();
 		$this->history->finish( $history_entry, 'success' );
-		$this->job_lock->release( $lock_id );
-		$this->redirect_with_notice( 'success', __( 'Snapshot restored successfully.', 'mksddn-migrate-content' ) );
+
+		return true;
 	}
 
 	/**
