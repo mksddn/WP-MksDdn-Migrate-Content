@@ -152,7 +152,7 @@ class FullContentImporter {
 			return $result;
 		}
 
-		$this->database_imported = true;
+			$this->database_imported = true;
 
 		if ( $user_applier ) {
 			$merge_result = $user_applier->merge( $remote_snapshot['users'], $merge_plan, $remote_snapshot['prefix'] ?? '' );
