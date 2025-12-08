@@ -537,13 +537,23 @@ class ExportImportAdmin {
 	 * Render automation/scheduling controls.
 	 */
 	private function render_automation_section(): void {
-		$settings     = $this->schedule_manager->get_settings();
-		$runs         = $this->schedule_manager->get_recent_runs();
-		$recurrences  = $this->schedule_manager->get_available_recurrences();
-		$next_run     = $this->schedule_manager->get_next_run_time();
-		$next_label   = $next_run ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_run ) : __( 'Not scheduled', 'mksddn-migrate-content' );
-		$last_run     = ! empty( $settings['last_run'] ) ? $this->format_history_date( $settings['last_run'] ) : __( 'Never', 'mksddn-migrate-content' );
+		$settings      = $this->schedule_manager->get_settings();
+		$runs          = $this->schedule_manager->get_recent_runs();
+		$recurrences   = $this->schedule_manager->get_available_recurrences();
+		$next_run      = $this->schedule_manager->get_next_run_time();
+		$next_label    = $next_run ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_run ) : __( 'Not scheduled', 'mksddn-migrate-content' );
+		$last_run      = ! empty( $settings['last_run'] ) ? $this->format_history_date( $settings['last_run'] ) : __( 'Never', 'mksddn-migrate-content' );
 		$enabled_label = $settings['enabled'] ? __( 'Enabled', 'mksddn-migrate-content' ) : __( 'Disabled', 'mksddn-migrate-content' );
+		$timezone      = $this->get_timezone_label();
+		$schedule_hint = $settings['enabled']
+			? sprintf(
+				/* translators: 1 recurrence label, 2 next run timestamp, 3 timezone */
+				__( '%1$s · next run %2$s (%3$s)', 'mksddn-migrate-content' ),
+				esc_html( $recurrences[ $settings['recurrence'] ] ?? ucfirst( $settings['recurrence'] ) ),
+				esc_html( $next_run ? $next_label : __( 'pending cron trigger', 'mksddn-migrate-content' ) ),
+				esc_html( $timezone )
+			)
+			: __( 'Schedule disabled', 'mksddn-migrate-content' );
 
 		echo '<section class="mksddn-mc-section">';
 		echo '<h2>' . esc_html__( 'Automation & Scheduling', 'mksddn-migrate-content' ) . '</h2>';
@@ -559,6 +569,8 @@ class ExportImportAdmin {
 		echo '<div class="mksddn-mc-field">';
 		echo '<label><input type="checkbox" name="schedule_enabled" value="1"' . checked( $settings['enabled'], true, false ) . '> ' . esc_html__( 'Enable automatic backups', 'mksddn-migrate-content' ) . '</label>';
 		echo '</div>';
+
+		echo '<p class="description"><strong>' . esc_html__( 'Schedule preview:', 'mksddn-migrate-content' ) . '</strong> ' . wp_kses_post( $schedule_hint ) . '</p>';
 
 		echo '<div class="mksddn-mc-field">';
 		echo '<label for="mksddn-mc-schedule-recurrence">' . esc_html__( 'Run frequency', 'mksddn-migrate-content' ) . '</label>';
@@ -588,7 +600,7 @@ class ExportImportAdmin {
 		echo '<h3>' . esc_html__( 'Status & history', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<p><strong>' . esc_html__( 'Current state:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $enabled_label ) . '</p>';
 		echo '<p><strong>' . esc_html__( 'Last run:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $last_run ) . '</p>';
-		echo '<p><strong>' . esc_html__( 'Next run:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $next_label ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Next run:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $next_label ) . ' <span class="description">' . esc_html( $timezone ) . '</span></p>';
 
 		if ( ! empty( $settings['last_message'] ) ) {
 			echo '<p><strong>' . esc_html__( 'Last message:', 'mksddn-migrate-content' ) . '</strong> ' . wp_kses_post( $settings['last_message'] ) . '</p>';
@@ -1975,5 +1987,27 @@ class ExportImportAdmin {
 
 		wp_safe_redirect( add_query_arg( $args, $base ) );
 		exit;
+	}
+
+	/**
+	 * Return human-readable timezone label.
+	 *
+	 * @return string
+	 */
+	private function get_timezone_label(): string {
+		$timezone = get_option( 'timezone_string' );
+		if ( $timezone ) {
+			return $timezone;
+		}
+
+		$offset = (float) get_option( 'gmt_offset', 0 );
+		if ( 0 === $offset ) {
+			return 'UTC';
+		}
+
+		$hours   = (int) $offset;
+		$minutes = abs( $offset - $hours ) * 60;
+
+		return sprintf( 'UTC%+d:%02d', $hours, $minutes );
 	}
 }
