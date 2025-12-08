@@ -70,6 +70,26 @@ class HistoryRepository {
 	}
 
 	/**
+	 * Update context for specific entry.
+	 *
+	 * @param string $id      Entry ID.
+	 * @param array  $context Context overrides.
+	 */
+	public function update_context( string $id, array $context ): void {
+		$entries = $this->load();
+		foreach ( $entries as &$entry ) {
+			if ( $entry['id'] !== $id ) {
+				continue;
+			}
+
+			$entry['context'] = array_merge( $entry['context'], $this->sanitize_context( $context ) );
+		}
+		unset( $entry );
+
+		$this->persist( $entries );
+	}
+
+	/**
 	 * Fetch all entries (descending).
 	 *
 	 * @param int $limit Optional limit.

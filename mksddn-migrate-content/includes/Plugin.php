@@ -8,6 +8,7 @@
 namespace Mksddn_MC;
 
 use Mksddn_MC\Admin\ExportImportAdmin;
+use Mksddn_MC\Automation\ScheduleManager;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -29,7 +30,10 @@ class Plugin {
 	 * Initialize services.
 	 */
 	public function boot(): void {
-		new ExportImportAdmin();
+		$schedule_manager = new ScheduleManager();
+		$schedule_manager->register();
+
+		new ExportImportAdmin( null, null, null, null, $schedule_manager );
 	}
 }
 

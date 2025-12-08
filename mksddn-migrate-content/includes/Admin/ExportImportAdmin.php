@@ -8,6 +8,7 @@
 namespace Mksddn_MC\Admin;
 
 use Mksddn_MC\Archive\Extractor;
+use Mksddn_MC\Automation\ScheduleManager;
 use Mksddn_MC\Export\ExportHandler;
 use Mksddn_MC\Import\ImportHandler;
 use Mksddn_MC\Options\OptionsHelper;
@@ -43,17 +44,19 @@ class ExportImportAdmin {
 	private SnapshotManager $snapshot_manager;
 	private HistoryRepository $history;
 	private JobLock $job_lock;
+	private ScheduleManager $schedule_manager;
 	private UserPreviewStore $preview_store;
 	private ?array $pending_user_preview = null;
 
 	/**
 	 * Hook admin actions.
 	 */
-	public function __construct( ?Extractor $extractor = null, ?SnapshotManager $snapshot_manager = null, ?HistoryRepository $history = null, ?JobLock $job_lock = null ) {
+	public function __construct( ?Extractor $extractor = null, ?SnapshotManager $snapshot_manager = null, ?HistoryRepository $history = null, ?JobLock $job_lock = null, ?ScheduleManager $schedule_manager = null ) {
 		$this->extractor        = $extractor ?? new Extractor();
 		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
 		$this->history          = $history ?? new HistoryRepository();
 		$this->job_lock         = $job_lock ?? new JobLock();
+		$this->schedule_manager = $schedule_manager ?? new ScheduleManager();
 		$this->preview_store    = new UserPreviewStore();
 
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
@@ -62,7 +65,12 @@ class ExportImportAdmin {
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this, 'handle_full_import' ) );
 		add_action( 'admin_post_mksddn_mc_rollback_snapshot', array( $this, 'handle_snapshot_rollback' ) );
+		add_action( 'admin_post_mksddn_mc_delete_snapshot', array( $this, 'handle_snapshot_delete' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this, 'handle_cancel_user_preview' ) );
+		add_action( 'admin_post_mksddn_mc_schedule_save', array( $this, 'handle_schedule_save' ) );
+		add_action( 'admin_post_mksddn_mc_schedule_run', array( $this, 'handle_schedule_run_now' ) );
+		add_action( 'admin_post_mksddn_mc_download_scheduled', array( $this, 'handle_download_scheduled_backup' ) );
+		add_action( 'admin_post_mksddn_mc_delete_scheduled', array( $this, 'handle_delete_scheduled_backup' ) );
 	}
 
 	/**
@@ -97,6 +105,7 @@ class ExportImportAdmin {
 		$this->render_full_site_section();
 		$this->render_selected_content_section();
 		$this->render_history_section();
+		$this->render_automation_section();
 		$this->handle_selected_import();
 
 		echo '</div>';
@@ -525,6 +534,147 @@ class ExportImportAdmin {
 	}
 
 	/**
+	 * Render automation/scheduling controls.
+	 */
+	private function render_automation_section(): void {
+		$settings     = $this->schedule_manager->get_settings();
+		$runs         = $this->schedule_manager->get_recent_runs();
+		$recurrences  = $this->schedule_manager->get_available_recurrences();
+		$next_run     = $this->schedule_manager->get_next_run_time();
+		$next_label   = $next_run ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_run ) : __( 'Not scheduled', 'mksddn-migrate-content' );
+		$last_run     = ! empty( $settings['last_run'] ) ? $this->format_history_date( $settings['last_run'] ) : __( 'Never', 'mksddn-migrate-content' );
+		$enabled_label = $settings['enabled'] ? __( 'Enabled', 'mksddn-migrate-content' ) : __( 'Disabled', 'mksddn-migrate-content' );
+
+		echo '<section class="mksddn-mc-section">';
+		echo '<h2>' . esc_html__( 'Automation & Scheduling', 'mksddn-migrate-content' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Schedule automatic full-site backups and keep storage tidy with retention.', 'mksddn-migrate-content' ) . '</p>';
+		echo '<div class="mksddn-mc-grid">';
+
+		echo '<div class="mksddn-mc-card">';
+		echo '<h3>' . esc_html__( 'Schedule settings', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'mksddn_mc_schedule_save' );
+		echo '<input type="hidden" name="action" value="mksddn_mc_schedule_save">';
+
+		echo '<div class="mksddn-mc-field">';
+		echo '<label><input type="checkbox" name="schedule_enabled" value="1"' . checked( $settings['enabled'], true, false ) . '> ' . esc_html__( 'Enable automatic backups', 'mksddn-migrate-content' ) . '</label>';
+		echo '</div>';
+
+		echo '<div class="mksddn-mc-field">';
+		echo '<label for="mksddn-mc-schedule-recurrence">' . esc_html__( 'Run frequency', 'mksddn-migrate-content' ) . '</label>';
+		echo '<select id="mksddn-mc-schedule-recurrence" name="schedule_recurrence">';
+		foreach ( $recurrences as $slug => $label ) {
+			printf(
+				'<option value="%1$s"%2$s>%3$s</option>',
+				esc_attr( $slug ),
+				selected( $settings['recurrence'], $slug, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+		echo '</div>';
+
+		echo '<div class="mksddn-mc-field">';
+		echo '<label for="mksddn-mc-schedule-retention">' . esc_html__( 'Keep last N archives', 'mksddn-migrate-content' ) . '</label>';
+		echo '<input type="number" min="1" id="mksddn-mc-schedule-retention" name="schedule_retention" value="' . esc_attr( $settings['retention'] ) . '">';
+		echo '<p class="description">' . esc_html__( 'Older scheduled backups will be removed automatically.', 'mksddn-migrate-content' ) . '</p>';
+		echo '</div>';
+
+		echo '<button type="submit" class="button button-primary">' . esc_html__( 'Save schedule', 'mksddn-migrate-content' ) . '</button>';
+		echo '</form>';
+		echo '</div>';
+
+		echo '<div class="mksddn-mc-card">';
+		echo '<h3>' . esc_html__( 'Status & history', 'mksddn-migrate-content' ) . '</h3>';
+		echo '<p><strong>' . esc_html__( 'Current state:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $enabled_label ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Last run:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $last_run ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Next run:', 'mksddn-migrate-content' ) . '</strong> ' . esc_html( $next_label ) . '</p>';
+
+		if ( ! empty( $settings['last_message'] ) ) {
+			echo '<p><strong>' . esc_html__( 'Last message:', 'mksddn-migrate-content' ) . '</strong> ' . wp_kses_post( $settings['last_message'] ) . '</p>';
+		}
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'mksddn_mc_schedule_run' );
+		echo '<input type="hidden" name="action" value="mksddn_mc_schedule_run">';
+		echo '<button type="submit" class="button">' . esc_html__( 'Run backup now', 'mksddn-migrate-content' ) . '</button>';
+		echo '</form>';
+
+		$this->render_schedule_runs_table( $runs );
+
+		echo '</div>';
+
+		echo '</div>';
+		echo '</section>';
+	}
+
+	/**
+	 * Render recent scheduled backups table.
+	 *
+	 * @param array $runs Run entries.
+	 */
+	private function render_schedule_runs_table( array $runs ): void {
+		if ( empty( $runs ) ) {
+			echo '<p>' . esc_html__( 'No scheduled backups have been created yet.', 'mksddn-migrate-content' ) . '</p>';
+			return;
+		}
+
+		echo '<div class="mksddn-mc-user-table-wrapper">';
+		echo '<table class="widefat striped">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Run time', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Status', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Archive', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Notes', 'mksddn-migrate-content' ) . '</th>';
+		echo '<th>' . esc_html__( 'Actions', 'mksddn-migrate-content' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ( $runs as $run ) {
+			$filename = isset( $run['file']['name'] ) ? sanitize_file_name( $run['file']['name'] ) : '';
+			$size     = isset( $run['file']['size'] ) ? size_format( (int) $run['file']['size'] ) : '—';
+			$download = '';
+
+			if ( $filename ) {
+				$download_url = wp_nonce_url(
+					add_query_arg(
+						array(
+							'action' => 'mksddn_mc_download_scheduled',
+							'file'   => $filename,
+						),
+						admin_url( 'admin-post.php' )
+					),
+					'mksddn_mc_download_scheduled_' . $filename
+				);
+
+				$delete_url = wp_nonce_url(
+					add_query_arg(
+						array(
+							'action' => 'mksddn_mc_delete_scheduled',
+							'file'   => $filename,
+						),
+						admin_url( 'admin-post.php' )
+					),
+					'mksddn_mc_delete_scheduled_' . $filename
+				);
+
+				$download = '<a class="button button-small" href="' . esc_url( $download_url ) . '">' . esc_html__( 'Download', 'mksddn-migrate-content' ) . '</a>';
+				$download .= ' <a class="button button-small button-secondary" href="' . esc_url( $delete_url ) . '" onclick="return confirm(\'' . esc_js( __( 'Delete this scheduled backup?', 'mksddn-migrate-content' ) ) . '\');">' . esc_html__( 'Delete', 'mksddn-migrate-content' ) . '</a>';
+			}
+
+			echo '<tr>';
+			echo '<td>' . esc_html( $this->format_history_date( $run['created_at'] ?? '' ) ) . '</td>';
+			echo '<td>' . $this->format_status_badge( $run['status'] ?? '' ) . '</td>';
+			echo '<td>' . ( $filename ? esc_html( $filename ) . '<br><span class="description">' . esc_html( $size ) . '</span>' : '&mdash;' ) . '</td>';
+			echo '<td>' . ( isset( $run['message'] ) && '' !== $run['message'] ? wp_kses_post( $run['message'] ) : '&mdash;' ) . '</td>';
+			echo '<td>' . ( $download ?: '&mdash;' ) . '</td>';
+			echo '</tr>';
+		}
+
+		echo '</tbody></table>';
+		echo '</div>';
+	}
+
+	/**
 	 * Format history entry type label.
 	 *
 	 * @param array $entry Entry payload.
@@ -598,24 +748,40 @@ class ExportImportAdmin {
 	 * @return string
 	 */
 	private function render_history_actions( array $entry ): string {
-		if ( ! $this->can_rollback_entry( $entry ) ) {
-			return '&mdash;';
-		}
-
 		$context     = $entry['context'] ?? array();
 		$snapshot_id = sanitize_text_field( $context['snapshot_id'] ?? '' );
 		$history_id  = sanitize_text_field( $entry['id'] ?? '' );
-		$nonce       = wp_nonce_field( 'mksddn_mc_rollback_' . $history_id, '_wpnonce', true, false );
+		$actions     = array();
 
-		$form  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		$form .= $nonce;
-		$form .= '<input type="hidden" name="action" value="mksddn_mc_rollback_snapshot">';
-		$form .= '<input type="hidden" name="snapshot_id" value="' . esc_attr( $snapshot_id ) . '">';
-		$form .= '<input type="hidden" name="history_id" value="' . esc_attr( $history_id ) . '">';
-		$form .= '<button type="submit" class="button button-small">' . esc_html__( 'Rollback', 'mksddn-migrate-content' ) . '</button>';
-		$form .= '</form>';
+		if ( $this->can_rollback_entry( $entry ) ) {
+			$nonce = wp_nonce_field( 'mksddn_mc_rollback_' . $history_id, '_wpnonce', true, false );
+			$form  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			$form .= $nonce;
+			$form .= '<input type="hidden" name="action" value="mksddn_mc_rollback_snapshot">';
+			$form .= '<input type="hidden" name="snapshot_id" value="' . esc_attr( $snapshot_id ) . '">';
+			$form .= '<input type="hidden" name="history_id" value="' . esc_attr( $history_id ) . '">';
+			$form .= '<button type="submit" class="button button-small">' . esc_html__( 'Rollback', 'mksddn-migrate-content' ) . '</button>';
+			$form .= '</form>';
+			$actions[] = $form;
+		}
 
-		return '<div class="mksddn-mc-history__actions">' . $form . '</div>';
+		if ( $snapshot_id ) {
+			$nonce = wp_nonce_field( 'mksddn_mc_delete_snapshot_' . $history_id, '_wpnonce', true, false );
+			$form  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			$form .= $nonce;
+			$form .= '<input type="hidden" name="action" value="mksddn_mc_delete_snapshot">';
+			$form .= '<input type="hidden" name="snapshot_id" value="' . esc_attr( $snapshot_id ) . '">';
+			$form .= '<input type="hidden" name="history_id" value="' . esc_attr( $history_id ) . '">';
+			$form .= '<button type="submit" class="button button-small button-secondary" onclick="return confirm(\'' . esc_js( __( 'Delete this backup permanently?', 'mksddn-migrate-content' ) ) . '\');">' . esc_html__( 'Delete backup', 'mksddn-migrate-content' ) . '</button>';
+			$form .= '</form>';
+			$actions[] = $form;
+		}
+
+		if ( empty( $actions ) ) {
+			return '&mdash;';
+		}
+
+		return '<div class="mksddn-mc-history__actions">' . implode( '', $actions ) . '</div>';
 	}
 
 	/**
@@ -1485,6 +1651,42 @@ class ExportImportAdmin {
 	}
 
 	/**
+	 * Delete stored snapshot archive.
+	 */
+	public function handle_snapshot_delete(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		$history_id  = isset( $_POST['history_id'] ) ? sanitize_text_field( wp_unslash( $_POST['history_id'] ) ) : '';
+		$snapshot_id = isset( $_POST['snapshot_id'] ) ? sanitize_text_field( wp_unslash( $_POST['snapshot_id'] ) ) : '';
+
+		check_admin_referer( 'mksddn_mc_delete_snapshot_' . $history_id );
+
+		if ( '' === $snapshot_id ) {
+			$this->redirect_with_notice( 'error', __( 'Snapshot identifier is missing.', 'mksddn-migrate-content' ) );
+		}
+
+		$snapshot = $this->snapshot_manager->get( $snapshot_id );
+		if ( $snapshot ) {
+			$this->snapshot_manager->delete( $snapshot_id );
+		}
+
+		if ( $history_id ) {
+			$this->history->update_context(
+				$history_id,
+				array(
+					'snapshot_id'    => '',
+					'snapshot_label' => '',
+					'action'         => 'snapshot_deleted',
+				)
+			);
+		}
+
+		$this->redirect_with_notice( 'success', __( 'Backup deleted successfully.', 'mksddn-migrate-content' ) );
+	}
+
+	/**
 	 * Cleanup temp resources associated with preview.
 	 *
 	 * @param array $preview Preview payload.
@@ -1539,6 +1741,96 @@ class ExportImportAdmin {
 
 		$this->job_lock->release( $lock_id );
 		$this->redirect_with_notice( 'success', __( 'Snapshot restored successfully.', 'mksddn-migrate-content' ) );
+	}
+
+	/**
+	 * Save schedule settings.
+	 */
+	public function handle_schedule_save(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_schedule_save' );
+
+		$payload = array(
+			'enabled'   => isset( $_POST['schedule_enabled'] ),
+			'recurrence'=> sanitize_key( $_POST['schedule_recurrence'] ?? 'daily' ),
+			'retention' => absint( $_POST['schedule_retention'] ?? 5 ),
+		);
+
+		$this->schedule_manager->update_settings( $payload );
+		$this->redirect_with_notice( 'success', __( 'Schedule settings updated.', 'mksddn-migrate-content' ) );
+	}
+
+	/**
+	 * Run scheduled export immediately.
+	 */
+	public function handle_schedule_run_now(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_schedule_run' );
+
+		$result = $this->schedule_manager->run_manually();
+		if ( is_wp_error( $result ) ) {
+			$this->redirect_with_notice( 'error', $result->get_error_message() );
+		}
+
+		$filename = $result['file']['name'] ?? '';
+		$message  = $filename
+			? sprintf(
+				/* translators: %s archive filename */
+				__( 'Scheduled backup %s created.', 'mksddn-migrate-content' ),
+				$filename
+			)
+			: __( 'Scheduled backup completed.', 'mksddn-migrate-content' );
+
+		$this->redirect_with_notice( 'success', $message );
+	}
+
+	/**
+	 * Download stored scheduled backup.
+	 */
+	public function handle_download_scheduled_backup(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		$filename = isset( $_GET['file'] ) ? sanitize_file_name( wp_unslash( $_GET['file'] ) ) : '';
+		if ( '' === $filename ) {
+			$this->redirect_with_notice( 'error', __( 'Backup file is missing.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_download_scheduled_' . $filename );
+
+		$path = $this->schedule_manager->resolve_backup_path( $filename );
+		if ( ! $path ) {
+			$this->redirect_with_notice( 'error', __( 'Backup file was not found on disk.', 'mksddn-migrate-content' ) );
+		}
+
+		$this->stream_file_download( $path, $filename, false );
+	}
+
+	/**
+	 * Delete stored scheduled backup.
+	 */
+	public function handle_delete_scheduled_backup(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		$filename = isset( $_GET['file'] ) ? sanitize_file_name( wp_unslash( $_GET['file'] ) ) : '';
+		if ( '' === $filename ) {
+			$this->redirect_with_notice( 'error', __( 'Backup file is missing.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_delete_scheduled_' . $filename );
+
+		$this->schedule_manager->delete_backup( $filename );
+
+		$this->redirect_with_notice( 'success', __( 'Scheduled backup deleted.', 'mksddn-migrate-content' ) );
 	}
 
 	/**
@@ -1599,7 +1891,7 @@ class ExportImportAdmin {
 	 * @param string $path     Absolute file path.
 	 * @param string $filename Download filename.
 	 */
-	private function stream_file_download( string $path, string $filename ): void {
+	private function stream_file_download( string $path, string $filename, bool $delete_after = true ): void {
 		if ( ! file_exists( $path ) ) {
 			wp_die( esc_html__( 'Export file not found.', 'mksddn-migrate-content' ) );
 		}
@@ -1622,7 +1914,9 @@ class ExportImportAdmin {
 			fclose( $handle );
 		}
 
-		unlink( $path );
+		if ( $delete_after && file_exists( $path ) ) {
+			unlink( $path );
+		}
 		exit;
 	}
 

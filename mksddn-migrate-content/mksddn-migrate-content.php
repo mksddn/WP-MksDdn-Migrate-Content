@@ -58,7 +58,9 @@ register_activation_hook(
 register_deactivation_hook(
 	__FILE__,
 	function (): void {
-		// Reserved for cleanup (e.g., cron unscheduling).
+		if ( class_exists( '\Mksddn_MC\Automation\ScheduleManager' ) ) {
+			\Mksddn_MC\Automation\ScheduleManager::deactivate();
+		}
 	}
 );
 
