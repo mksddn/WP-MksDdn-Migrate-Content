@@ -12,6 +12,7 @@ use WP_Post;
 use WP_Query;
 use const \ABSPATH;
 use function \delete_post_meta;
+use function \get_attached_file;
 use function \get_post;
 use function \get_post_meta;
 use function \get_post_thumbnail_id;
@@ -69,7 +70,7 @@ class AttachmentRestorer {
 				continue;
 			}
 
-			$existing = $this->find_existing_attachment( $checksum );
+			$existing = $this->find_existing_attachment( $entry );
 			if ( $existing ) {
 				$id_map[ (int) $entry['original_id'] ]    = $existing;
 				$url_map[ (string) ( $entry['source_url'] ?? '' ) ] = wp_get_attachment_url( $existing );
@@ -103,12 +104,17 @@ class AttachmentRestorer {
 	}
 
 	/**
-	 * Try to find existing attachment by checksum.
+	 * Try to find existing attachment by checksum (and fallback to filename/hash).
 	 *
-	 * @param string $checksum SHA-256.
+	 * @param array $entry Manifest entry.
 	 * @return int|null
 	 */
-	private function find_existing_attachment( string $checksum ): ?int {
+	private function find_existing_attachment( array $entry ): ?int {
+		$checksum = isset( $entry['checksum'] ) ? sanitize_text_field( (string) $entry['checksum'] ) : '';
+		if ( '' === $checksum ) {
+			return null;
+		}
+
 		$query = new WP_Query(
 			array(
 				'post_type'      => 'attachment',
@@ -126,13 +132,59 @@ class AttachmentRestorer {
 
 		if ( empty( $query->posts ) ) {
 			wp_reset_postdata();
+		} else {
+			$attachment_id = (int) $query->posts[0];
+			wp_reset_postdata();
+
+			return $attachment_id;
+		}
+
+		// Fallback: search by filename and compare actual file hash.
+		$filename = isset( $entry['filename'] ) ? sanitize_file_name( (string) $entry['filename'] ) : '';
+		if ( '' === $filename ) {
 			return null;
 		}
 
-		$attachment_id = (int) $query->posts[0];
-		wp_reset_postdata();
+		$by_file = new WP_Query(
+			array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+				'posts_per_page' => 10,
+				'fields'         => 'ids',
+				'meta_query'     => array(
+					array(
+						'key'     => '_wp_attached_file',
+						'value'   => $filename,
+						'compare' => 'LIKE',
+					),
+				),
+			)
+		);
 
-		return $attachment_id;
+		if ( empty( $by_file->posts ) ) {
+			wp_reset_postdata();
+			return null;
+		}
+
+		foreach ( $by_file->posts as $attachment_id ) {
+			$path = get_attached_file( $attachment_id );
+			if ( ! $path || ! file_exists( $path ) ) {
+				continue;
+			}
+
+			$hash = hash_file( 'sha256', $path );
+			if ( ! $hash || ! hash_equals( $checksum, $hash ) ) {
+				continue;
+			}
+
+			update_post_meta( $attachment_id, '_mksddn_mc_checksum', $checksum );
+			wp_reset_postdata();
+
+			return (int) $attachment_id;
+		}
+
+		wp_reset_postdata();
+		return null;
 	}
 
 	/**
