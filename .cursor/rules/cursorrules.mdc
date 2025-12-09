@@ -113,76 +113,6 @@ alwaysApply: true
 - **Nonce**: `wp_nonce_field`, `check_admin_referer` для всех форм и AJAX
 - **Права**: `current_user_can('manage_options')` для админ-функций
 
-### Валидация данных
-```php
-// Правильно
-$email = sanitize_email($_POST['email']);
-if (!is_email($email)) {
-    wp_die('Invalid email');
-}
-
-// Неправильно
-$email = $_POST['email'];
-```
-
-### Проверка прав
-```php
-// Правильно
-if (!current_user_can('manage_options')) {
-    wp_die('Insufficient permissions');
-}
-
-// Неправильно
-// Отсутствие проверки прав
-```
-
-### Nonce проверки
-```php
-// Правильно
-if (!wp_verify_nonce($_POST['_wpnonce'], 'form_submit')) {
-    wp_die('Security check failed');
-}
-
-// Неправильно
-// Отсутствие nonce проверки
-   ```
-
-## Производительность
-
-### Оптимизация запросов
-```php
-// Правильно - один запрос
-$forms = get_posts([
-    'post_type' => 'mksddn_form',
-    'numberposts' => -1,
-    'meta_query' => [
-        [
-            'key' => 'status',
-            'value' => 'active'
-        ]
-    ]
-]);
-
-// Неправильно - N+1 проблема
-foreach ($form_ids as $id) {
-    $form = get_post($id);
-    $meta = get_post_meta($id, 'status');
-}
-```
-
-### Кэширование
-```php
-// Правильно
-$cached_data = wp_cache_get('forms_list');
-if (false === $cached_data) {
-    $cached_data = get_forms_data();
-    wp_cache_set('forms_list', $cached_data, '', 3600);
-}
-
-// Неправильно
-// Отсутствие кэширования
-```
-
 ## Документирование кода и структуры
 
 1. При создании нового файла добавляй в его начало: 
@@ -195,7 +125,7 @@ if (false === $cached_data) {
     * @created: [дата]
     */
    ```
-2. После реализации нового функционала актуализируй `mksddn-forms-handler/trunk/readme.txt`, включая: 
+2. После реализации нового функционала актуализируй `mksddn-migrate-content/trunk/readme.txt`, включая: 
    - Обновленную архитектуру проекта
    - Описание новых компонентов и их взаимодействий
    - При необходимости, диаграммы и схемы в формате Mermaid
@@ -222,7 +152,7 @@ if (false === $cached_data) {
 - **Линтеры**: Используй несколько подходящих линтеров для проверки кода
 
 ### Плагины
-- **Популярные плагины**: WooCommerce, Contact Form 7, Yoast SEO, ACF
+- **Популярные плагины**: WooCommerce, Yoast SEO, ACF
 - **Конфликты**: Избегай конфликтов с другими плагинами
 - **Хуки**: Используй уникальные префиксы для хуков
 
