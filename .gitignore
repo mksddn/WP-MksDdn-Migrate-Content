@@ -88,8 +88,4 @@ docs/temp/
 .gitignore.bak 
 
 
-/*
-!/mksddn-migrate-content
-.cursor/
 tasktracker.md
-mvp.md
