@@ -11,6 +11,7 @@ use Mksddn_MC\Filesystem\FullContentExporter;
 use Mksddn_MC\Recovery\HistoryRepository;
 use Mksddn_MC\Recovery\JobLock;
 use Mksddn_MC\Support\FilenameBuilder;
+use Mksddn_MC\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -83,23 +84,23 @@ class ScheduledBackupRunner {
 
 		$result = $this->exporter->export_to( $temp );
 		if ( is_wp_error( $result ) ) {
-			@unlink( $temp );
+			FilesystemHelper::delete( $temp );
 			return $this->fail_run( $history_id, $result->get_error_message() );
 		}
 
 		$dir = $this->settings->get_storage_dir();
 		if ( ! wp_mkdir_p( $dir ) ) {
-			@unlink( $temp );
+			FilesystemHelper::delete( $temp );
 			return $this->fail_run( $history_id, __( 'Unable to create storage directory for scheduled backups.', 'mksddn-migrate-content' ) );
 		}
 
 		$filename = FilenameBuilder::build( 'scheduled-backup', 'wpbkp' );
 		$target   = trailingslashit( $dir ) . $filename;
 
-		$move = @rename( $temp, $target );
+		$move = FilesystemHelper::move( $temp, $target, true );
 		if ( ! $move ) {
-			$copied = @copy( $temp, $target );
-			@unlink( $temp );
+			$copied = FilesystemHelper::copy( $temp, $target, true );
+			FilesystemHelper::delete( $temp );
 			if ( ! $copied ) {
 				return $this->fail_run( $history_id, __( 'Unable to store scheduled backup file. Check permissions.', 'mksddn-migrate-content' ) );
 			}
@@ -173,7 +174,7 @@ class ScheduledBackupRunner {
 
 		$excess = array_slice( $files, $limit );
 		foreach ( $excess as $file ) {
-			@unlink( $file );
+			FilesystemHelper::delete( $file );
 		}
 	}
 }

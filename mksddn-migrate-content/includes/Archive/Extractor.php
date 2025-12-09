@@ -9,6 +9,7 @@ namespace Mksddn_MC\Archive;
 
 use WP_Error;
 use ZipArchive;
+use Mksddn_MC\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -151,10 +152,12 @@ class Extractor {
 				}
 
 				$tmp_path = wp_tempnam( 'mksddn-media-' );
-				$target   = fopen( $tmp_path, 'wb' );
-				stream_copy_to_stream( $stream, $target );
-				fclose( $target );
-				fclose( $stream );
+				if ( ! $tmp_path || ! FilesystemHelper::put_stream( $tmp_path, $stream ) ) {
+					fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with ZipArchive stream
+					$zip->close();
+					return new WP_Error( 'mksddn_mc_media_write_error', __( 'Unable to extract media file to temporary storage.', 'mksddn-migrate-content' ) );
+				}
+				fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with ZipArchive stream
 				$zip->close();
 
 				return $tmp_path;
@@ -175,7 +178,9 @@ class Extractor {
 
 		$content = $files[0]['content'] ?? '';
 		$tmp     = wp_tempnam( 'mksddn-media-' );
-		file_put_contents( $tmp, $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_file_put_contents
+		if ( ! $tmp || ! FilesystemHelper::put_contents( $tmp, $content ) ) {
+			return new WP_Error( 'mksddn_mc_media_write_error', __( 'Unable to extract media file to temporary storage.', 'mksddn-migrate-content' ) );
+		}
 
 		return $tmp;
 	}

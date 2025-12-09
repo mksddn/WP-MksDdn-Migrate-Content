@@ -20,6 +20,7 @@ use Mksddn_MC\Recovery\SnapshotManager;
 use Mksddn_MC\Recovery\HistoryRepository;
 use Mksddn_MC\Recovery\JobLock;
 use Mksddn_MC\Support\FilenameBuilder;
+use Mksddn_MC\Support\FilesystemHelper;
 use Mksddn_MC\Support\SiteUrlGuard;
 use Mksddn_MC\Users\UserDiffBuilder;
 use Mksddn_MC\Users\UserPreviewStore;
@@ -146,21 +147,27 @@ class ExportImportAdmin {
 				'uploadChunkSize'        => $default_chunk,
 					'downloadFilename'       => FilenameBuilder::build( 'full-site', 'wpbkp' ),
 				'defaultChunkSizeLabel'  => size_format( $default_chunk, 2 ),
-				'i18n'                   => array(
+					'i18n'                   => array(
+						/* translators: %d: upload progress percent. */
 					'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
 					'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
+						/* translators: 1: selected label, 2: chunk size label. */
 					'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
+						/* translators: %d: upload progress percent. */
 					'importBusy'         => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
 					'importDone'         => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
 					'importProcessing'   => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
 					'importError'        => __( 'Upload failed. Please retry.', 'mksddn-migrate-content' ),
+						/* translators: %s: chunk size label. */
 					'chunkInfo'          => __( '· %s chunks', 'mksddn-migrate-content' ),
 					'preparing'        => __( 'Preparing download…', 'mksddn-migrate-content' ),
+						/* translators: %d: download progress percent. */
 					'downloading'      => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
 					'downloadComplete' => __( 'Download complete.', 'mksddn-migrate-content' ),
 					'downloadError'    => __( 'Chunked download failed. Falling back to direct download.', 'mksddn-migrate-content' ),
 					'exportReady'      => __( 'Ready for full export.', 'mksddn-migrate-content' ),
 					'exportBusy'       => __( 'Preparing archive…', 'mksddn-migrate-content' ),
+						/* translators: %d: streaming progress percent. */
 					'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
 					'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
 					'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
@@ -173,21 +180,23 @@ class ExportImportAdmin {
 	 * Display status notices after redirects.
 	 */
 	private function render_status_notices(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only status flag after redirect.
 		if ( ! empty( $_GET['mksddn_mc_full_status'] ) ) {
-		$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) );
+			$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 'success' === $status ) {
 			$this->show_success( __( 'Full site operation completed successfully.', 'mksddn-migrate-content' ) );
-			} elseif ( 'error' === $status && ! empty( $_GET['mksddn_mc_full_error'] ) ) {
-				$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_full_error'] ) ) );
+			} elseif ( 'error' === $status && ! empty( $_GET['mksddn_mc_full_error'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only after redirect
+				$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_full_error'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			}
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only notice flag after redirect.
 		if ( empty( $_GET['mksddn_mc_notice'] ) ) {
 			return;
 		}
 
-		$notice_status = sanitize_key( wp_unslash( $_GET['mksddn_mc_notice'] ) );
-		$message       = isset( $_GET['mksddn_mc_notice_message'] ) ? sanitize_text_field( wp_unslash( $_GET['mksddn_mc_notice_message'] ) ) : '';
+		$notice_status = sanitize_key( wp_unslash( $_GET['mksddn_mc_notice'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$message       = isset( $_GET['mksddn_mc_notice_message'] ) ? sanitize_text_field( wp_unslash( $_GET['mksddn_mc_notice_message'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		if ( 'success' === $notice_status ) {
 			$this->show_success( $message ?: __( 'Operation completed successfully.', 'mksddn-migrate-content' ) );
@@ -203,11 +212,12 @@ class ExportImportAdmin {
 	 * Load preview context when user selection query is present.
 	 */
 	private function maybe_load_user_preview(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- preview key arrives via redirect, read-only.
 		if ( empty( $_GET['mksddn_mc_user_review'] ) ) {
 			return;
 		}
 
-		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) );
+		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$preview    = $this->preview_store->get( $preview_id );
 
 		if ( ! $preview ) {
@@ -519,12 +529,12 @@ class ExportImportAdmin {
 
 			echo '<tr>';
 			echo '<td>' . esc_html( $this->describe_history_type( $entry ) ) . '</td>';
-			echo '<td>' . $this->format_status_badge( $entry['status'] ?? '' ) . '</td>';
+			echo '<td>' . wp_kses_post( $this->format_status_badge( $entry['status'] ?? '' ) ) . '</td>';
 			echo '<td>' . esc_html( $this->format_history_date( $entry['started_at'] ?? '' ) ) . '</td>';
 			echo '<td>' . esc_html( $this->format_history_date( $entry['finished_at'] ?? '' ) ) . '</td>';
 			echo '<td>' . ( $snapshot_id ? esc_html( $snapshot_label ) : '&mdash;' ) . '</td>';
 			echo '<td>' . esc_html( $user_label ) . '</td>';
-			echo '<td>' . $this->render_history_actions( $entry ) . '</td>';
+			echo '<td>' . wp_kses_post( $this->render_history_actions( $entry ) ) . '</td>';
 			echo '</tr>';
 		}
 
@@ -675,10 +685,10 @@ class ExportImportAdmin {
 
 			echo '<tr>';
 			echo '<td>' . esc_html( $this->format_history_date( $run['created_at'] ?? '' ) ) . '</td>';
-			echo '<td>' . $this->format_status_badge( $run['status'] ?? '' ) . '</td>';
+			echo '<td>' . wp_kses_post( $this->format_status_badge( $run['status'] ?? '' ) ) . '</td>';
 			echo '<td>' . ( $filename ? esc_html( $filename ) . '<br><span class="description">' . esc_html( $size ) . '</span>' : '&mdash;' ) . '</td>';
 			echo '<td>' . ( isset( $run['message'] ) && '' !== $run['message'] ? wp_kses_post( $run['message'] ) : '&mdash;' ) . '</td>';
-			echo '<td>' . ( $download ?: '&mdash;' ) . '</td>';
+			echo '<td>' . wp_kses_post( $download ?: '&mdash;' ) . '</td>';
 			echo '</tr>';
 		}
 
@@ -923,6 +933,7 @@ class ExportImportAdmin {
 			echo '<td>';
 			echo '<input type="hidden" name="user_plan[' . esc_attr( $key ) . '][email]" value="' . esc_attr( $email ) . '">';
 			echo '<input type="hidden" name="user_plan[' . esc_attr( $key ) . '][import]" value="0">';
+			/* translators: %s: user email. */
 			echo '<label class="screen-reader-text" for="' . esc_attr( $checkbox ) . '">' . sprintf( esc_html__( 'Include %s', 'mksddn-migrate-content' ), esc_html( $email ) ) . '</label>';
 			echo '<input type="checkbox" id="' . esc_attr( $checkbox ) . '" name="user_plan[' . esc_attr( $key ) . '][import]" value="1" checked>';
 			echo '</td>';
@@ -1312,6 +1323,7 @@ class ExportImportAdmin {
 			return;
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in handle_full_import.
 		$chunk_job_id = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
 		$upload       = $this->resolve_full_import_upload( $chunk_job_id );
 
@@ -1423,8 +1435,22 @@ class ExportImportAdmin {
 			return new WP_Error( 'mksddn_mc_user_plan_empty', __( 'No users available for selection.', 'mksddn-migrate-content' ) );
 		}
 
-		$raw_plan = isset( $_POST['user_plan'] ) && is_array( $_POST['user_plan'] ) ? wp_unslash( $_POST['user_plan'] ) : array();
-		$plan     = array();
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce checked in handle_full_import(); raw plan sanitized below.
+		$raw_plan_input = isset( $_POST['user_plan'] ) && is_array( $_POST['user_plan'] ) ? wp_unslash( $_POST['user_plan'] ) : array();
+		$raw_plan       = array();
+		foreach ( $raw_plan_input as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$raw_plan[] = array(
+				'email'  => isset( $row['email'] ) ? sanitize_email( $row['email'] ) : '',
+				'import' => ! empty( $row['import'] ),
+				'mode'   => isset( $row['mode'] ) ? sanitize_text_field( $row['mode'] ) : '',
+			);
+		}
+
+		$plan = array();
 
 		foreach ( $defaults as $email ) {
 			$plan[ $email ] = array(
@@ -1434,11 +1460,7 @@ class ExportImportAdmin {
 		}
 
 		foreach ( $raw_plan as $row ) {
-			if ( ! is_array( $row ) ) {
-				continue;
-			}
-
-			$email = isset( $row['email'] ) ? sanitize_email( $row['email'] ) : '';
+			$email = $row['email'];
 			if ( ! $email ) {
 				continue;
 			}
@@ -1449,7 +1471,7 @@ class ExportImportAdmin {
 			}
 
 			$import = ! empty( $row['import'] );
-			$mode   = isset( $row['mode'] ) && 'keep' === $row['mode'] ? 'keep' : 'replace';
+			$mode   = 'keep' === $row['mode'] ? 'keep' : 'replace';
 
 			$plan[ $email ] = array(
 				'import' => $import,
@@ -1496,13 +1518,15 @@ class ExportImportAdmin {
 			return $result;
 		}
 
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in handle_full_import().
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in handle_full_import().
 			if ( ! isset( $_FILES['full_import_file'], $_FILES['full_import_file']['tmp_name'] ) ) {
 			return new WP_Error( 'mksddn_mc_file_missing', __( 'No file uploaded.', 'mksddn-migrate-content' ) );
 			}
 
-			$file     = $_FILES['full_import_file'];
-			$tmp_name = sanitize_text_field( (string) $file['tmp_name'] );
-			$name     = sanitize_file_name( (string) $file['name'] );
+			$file     = $_FILES['full_import_file']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- sanitized below, nonce verified upstream
+			$tmp_name = isset( $file['tmp_name'] ) ? sanitize_text_field( wp_unslash( (string) $file['tmp_name'] ) ) : '';
+			$name     = isset( $file['name'] ) ? sanitize_file_name( wp_unslash( (string) $file['name'] ) ) : '';
 			$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
 
 		if ( $size <= 0 ) {
@@ -1519,8 +1543,12 @@ class ExportImportAdmin {
 			return new WP_Error( 'mksddn_mc_temp_unavailable', __( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
 			}
 
-			if ( ! move_uploaded_file( $tmp_name, $temp ) ) {
-			return new WP_Error( 'mksddn_mc_move_failed', __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
+			if ( ! wp_is_uploaded_file( $tmp_name ) ) {
+				return new WP_Error( 'mksddn_mc_move_failed', __( 'Uploaded file could not be verified.', 'mksddn-migrate-content' ) );
+			}
+
+			if ( ! FilesystemHelper::move( $tmp_name, $temp, true ) ) {
+				return new WP_Error( 'mksddn_mc_move_failed', __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
 			}
 
 		$result['temp']          = $temp;
@@ -1920,14 +1948,14 @@ class ExportImportAdmin {
 			header( 'Content-Length: ' . $filesize );
 		}
 
-		$handle = fopen( $path, 'rb' );
+		$handle = fopen( $path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming large archives requires native handle
 		if ( $handle ) {
 			fpassthru( $handle );
-			fclose( $handle );
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen for streaming
 		}
 
 		if ( $delete_after && file_exists( $path ) ) {
-			unlink( $path );
+			FilesystemHelper::delete( $path );
 		}
 		exit;
 	}
@@ -1941,7 +1969,7 @@ class ExportImportAdmin {
 	 */
 	private function cleanup_full_import( string $temp, bool $cleanup, $job ): void {
 		if ( $cleanup && $temp && file_exists( $temp ) ) {
-			unlink( $temp );
+			FilesystemHelper::delete( $temp );
 		}
 
 		if ( $job && method_exists( $job, 'delete' ) ) {

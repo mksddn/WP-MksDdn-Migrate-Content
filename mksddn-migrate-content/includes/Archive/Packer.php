@@ -8,6 +8,7 @@
 namespace Mksddn_MC\Archive;
 
 use WP_Error;
+use Mksddn_MC\Support\FilesystemHelper;
 use ZipArchive;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -174,7 +175,7 @@ class Packer {
 			return new WP_Error( 'mksddn_mc_tempdir_error', __( 'Unable to allocate temporary directory.', 'mksddn-migrate-content' ) );
 		}
 
-		@unlink( $temp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		FilesystemHelper::delete( $temp_file );
 
 		$temp_dir = $temp_file . '-dir';
 
@@ -195,16 +196,7 @@ class Packer {
 			return;
 		}
 
-		$files = new \FilesystemIterator( $dir, \FilesystemIterator::SKIP_DOTS );
-		foreach ( $files as $file_info ) {
-			if ( $file_info->isDir() ) {
-				$this->cleanup_temp_dir( $file_info->getPathname() );
-			} else {
-				@unlink( $file_info->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			}
-		}
-
-		@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		FilesystemHelper::delete( $dir, true );
 	}
 }
 

@@ -9,6 +9,7 @@ namespace Mksddn_MC\Recovery;
 
 use Mksddn_MC\Database\FullDatabaseExporter;
 use Mksddn_MC\Filesystem\ContentCollector;
+use Mksddn_MC\Support\FilesystemHelper;
 use WP_Error;
 use ZipArchive;
 
@@ -244,21 +245,7 @@ class SnapshotManager {
 			return;
 		}
 
-		$files = new \RecursiveIteratorIterator(
-			new \RecursiveDirectoryIterator( $dir, \RecursiveDirectoryIterator::SKIP_DOTS ),
-			\RecursiveIteratorIterator::CHILD_FIRST
-		);
-
-		foreach ( $files as $fileinfo ) {
-			$real = $fileinfo->getRealPath();
-			if ( $fileinfo->isDir() ) {
-				@rmdir( $real );
-			} else {
-				@unlink( $real );
-			}
-		}
-
-		@rmdir( $dir );
+		FilesystemHelper::delete( $dir, true );
 	}
 }
 

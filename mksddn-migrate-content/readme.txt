@@ -1,8 +1,8 @@
 === MksDdn Migrate Content ===
 Contributors: mksddn
-Tags: migration, export, import, backup, wpbkp, staging
+Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 7.4
 Stable tag: 1.0.0
 License: GPLv2 or later

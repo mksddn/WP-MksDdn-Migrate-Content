@@ -11,6 +11,7 @@ use WP_Error;
 use WP_REST_Server;
 use WP_REST_Request;
 use Mksddn_MC\Filesystem\FullContentExporter;
+use Mksddn_MC\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -134,14 +135,10 @@ class ChunkRestController {
 			return new WP_Error( 'mksddn_chunk_decode', __( 'Invalid chunk payload.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
 		}
 
-		$resource = fopen( $file, $index > 0 ? 'ab' : 'wb' );
-
-		if ( ! $resource ) {
+		$reset = 0 === $index;
+		if ( ! FilesystemHelper::write_bytes( $file, $bytes, $reset ) ) {
 			return new WP_Error( 'mksddn_chunk_write', __( 'Unable to write chunk.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
 		}
-
-		fwrite( $resource, $bytes ); // phpcs:ignore WordPress.PHP.NonStrictBeforeStrict.Warning
-		fclose( $resource );
 
 		$job->update(
 			array(
@@ -211,15 +208,8 @@ class ChunkRestController {
 			return new WP_Error( 'mksddn_job_file_missing', __( 'Job data not found.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
 		}
 
-		$handle = fopen( $file, 'rb' );
-		if ( ! $handle ) {
-			return new WP_Error( 'mksddn_chunk_read', __( 'Unable to read chunk.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
-		}
-
 		$chunk_size = $data['chunk_size'] ?? $this->chunk_size;
-		fseek( $handle, $index * $chunk_size );
-		$data = fread( $handle, $chunk_size );
-		fclose( $handle );
+		$data = FilesystemHelper::read_bytes( $file, $index * $chunk_size, $chunk_size );
 
 		if ( false === $data ) {
 			return new WP_Error( 'mksddn_chunk_read', __( 'Unable to read chunk.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );

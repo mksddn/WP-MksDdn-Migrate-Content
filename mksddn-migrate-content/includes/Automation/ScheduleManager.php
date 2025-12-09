@@ -7,6 +7,7 @@
 
 namespace Mksddn_MC\Automation;
 
+use Mksddn_MC\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -208,7 +209,7 @@ class ScheduleManager {
 	public function delete_backup( string $filename ): bool {
 		$path = $this->resolve_backup_path( $filename );
 		if ( $path && file_exists( $path ) ) {
-			@unlink( $path );
+			FilesystemHelper::delete( $path );
 		}
 
 		$this->settings->remove_run_by_file( $filename );

@@ -13,6 +13,7 @@ use Mksddn_MC\Media\AttachmentCollection;
 use Mksddn_MC\Options\OptionsExporter;
 use Mksddn_MC\Selection\ContentSelection;
 use Mksddn_MC\Support\FilenameBuilder;
+use Mksddn_MC\Support\FilesystemHelper;
 use WP_Error;
 use WP_Post;
 
@@ -263,10 +264,11 @@ class ExportHandler {
 	 * Resolve target ID based on requested type.
 	 */
 	private function resolve_target_id(): int {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce checked in admin controller before calling handler.
 		$type = \sanitize_key( $_POST['export_type'] ?? 'page' );
 		return match ( $type ) {
-			'post' => \absint( $_POST['post_id'] ?? 0 ),
-			default => \absint( $_POST['page_id'] ?? 0 ),
+			'post' => \absint( $_POST['post_id'] ?? 0 ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- validated upstream
+			default => \absint( $_POST['page_id'] ?? 0 ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- validated upstream
 		};
 	}
 
@@ -393,7 +395,7 @@ class ExportHandler {
 	 * @param string $filename     Download filename.
 	 */
 	private function download_archive( string $archive_path, string $filename ): void {
-		$handle = @fopen( $archive_path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+		$handle = fopen( $archive_path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming download requires native handle
 
 		if ( ! $handle ) {
 			\wp_die( \esc_html__( 'Failed to open archive for download.', 'mksddn-migrate-content' ) );
@@ -415,8 +417,8 @@ class ExportHandler {
 
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Binary stream output.
 		fpassthru( $handle );
-		fclose( $handle );
-		unlink( $archive_path );
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen
+		FilesystemHelper::delete( $archive_path );
 		exit;
 	}
 

@@ -9,6 +9,7 @@ namespace Mksddn_MC\Filesystem;
 
 use Mksddn_MC\Database\FullDatabaseImporter;
 use Mksddn_MC\Support\DomainReplacer;
+use Mksddn_MC\Support\FilesystemHelper;
 use Mksddn_MC\Support\SiteUrlGuard;
 use Mksddn_MC\Users\UserMergeApplier;
 use WP_Error;
@@ -209,18 +210,17 @@ class FullContentImporter {
 
 			$stream = $zip->getStream( $name );
 			if ( ! $stream ) {
+				/* translators: %s: path inside archive. */
 				return new WP_Error( 'mksddn_zip_stream', sprintf( __( 'Unable to read "%s" from archive.', 'mksddn-migrate-content' ), $name ) );
 			}
 
-			$file = fopen( $target, 'wb' );
-			if ( ! $file ) {
-				fclose( $stream );
+			$write_ok = FilesystemHelper::put_stream( $target, $stream );
+			fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with ZipArchive stream
+
+			if ( ! $write_ok ) {
+				/* translators: %s: target filesystem path. */
 				return new WP_Error( 'mksddn_fs_write', sprintf( __( 'Unable to write "%s". Check permissions.', 'mksddn-migrate-content' ), $target ) );
 			}
-
-			stream_copy_to_stream( $stream, $file );
-			fclose( $stream );
-			fclose( $file );
 		}
 
 		return true;

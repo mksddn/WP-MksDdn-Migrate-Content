@@ -292,7 +292,7 @@ class UserMergeApplier {
 		}
 
 		global $wpdb;
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->users,
 			array( 'user_pass' => $hash ),
 			array( 'ID' => $user_id )

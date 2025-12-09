@@ -47,7 +47,8 @@ class SiteUrlGuard {
 		if ( '' === $target ) {
 			$target = $original;
 		} elseif ( '' !== $original ) {
-			$path = parse_url( $original, PHP_URL_PATH );
+			$parts = wp_parse_url( $original );
+			$path  = $parts['path'] ?? '';
 			if ( $path ) {
 				$target = rtrim( $this->request_url, '/' ) . '/' . ltrim( $path, '/' );
 			}
@@ -75,10 +76,11 @@ class SiteUrlGuard {
 		}
 
 		$scheme = is_ssl() ? 'https' : 'http';
-		$host   = wp_unslash( $_SERVER['HTTP_HOST'] );
+		$host   = sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) );
 
 		$reference = $this->home ?: site_url();
-		$path      = parse_url( $reference, PHP_URL_PATH );
+		$parts     = wp_parse_url( $reference );
+		$path      = $parts['path'] ?? '';
 		$path      = $path ? '/' . trim( $path, '/' ) : '';
 
 		return rtrim( sprintf( '%s://%s%s', $scheme, $host, $path ), '/' );

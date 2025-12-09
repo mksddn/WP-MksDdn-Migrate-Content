@@ -7,6 +7,8 @@
 
 namespace Mksddn_MC\Chunking;
 
+use Mksddn_MC\Support\FilesystemHelper;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -42,8 +44,8 @@ class ChunkJob {
 	}
 
 	public function delete(): void {
-		@unlink( $this->dir . $this->id . '.json' );
-		@unlink( $this->get_file_path() );
+		FilesystemHelper::delete( $this->dir . $this->id . '.json' );
+		FilesystemHelper::delete( $this->get_file_path() );
 	}
 
 	private function load(): void {
@@ -51,8 +53,8 @@ class ChunkJob {
 		$path = $this->dir . $this->id . '.json';
 
 		if ( file_exists( $path ) ) {
-			$json       = file_get_contents( $path ); // phpcs:ignore
-			$this->data = json_decode( $json, true ) ?: array();
+			$json       = FilesystemHelper::instance()->get_contents( $path );
+			$this->data = json_decode( $json ?: '', true ) ?: array();
 			return;
 		}
 
@@ -73,7 +75,7 @@ class ChunkJob {
 
 	private function save(): void {
 		$path = $this->dir . $this->id . '.json';
-		file_put_contents( $path, wp_json_encode( $this->data ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_file_put_contents
+		FilesystemHelper::put_contents( $path, wp_json_encode( $this->data ) ?: '{}' );
 	}
 }
 

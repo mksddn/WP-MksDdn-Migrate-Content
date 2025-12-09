@@ -7,6 +7,7 @@
 
 namespace Mksddn_MC\Media;
 
+use Mksddn_MC\Support\FilesystemHelper;
 use WP_Error;
 use WP_Post;
 use WP_Query;
@@ -84,7 +85,7 @@ class AttachmentRestorer {
 
 			$attachment_id = $this->sideload_attachment( $file_path, $entry, $parent_id );
 			if ( is_wp_error( $attachment_id ) ) {
-				@unlink( $file_path );
+				FilesystemHelper::delete( $file_path );
 				continue;
 			}
 
@@ -219,7 +220,7 @@ class AttachmentRestorer {
 
 			wp_update_post( $post_data );
 			if ( file_exists( $file_path ) ) {
-				@unlink( $file_path );
+				FilesystemHelper::delete( $file_path );
 			}
 		}
 
