@@ -190,11 +190,13 @@ class ExportHandler implements ExporterInterface {
 
 		$combined_media = new AttachmentCollection();
 
-		// Collect all post IDs first for batch loading.
+		// Collect all post IDs grouped by post type for batch loading.
 		$all_post_ids = array();
 		$posts_by_id  = array();
+		$post_types   = array();
 
 		foreach ( $selection->get_items() as $type => $ids ) {
+			$post_types[] = $type;
 			foreach ( $ids as $id ) {
 				$all_post_ids[] = (int) $id;
 			}
@@ -205,6 +207,7 @@ class ExportHandler implements ExporterInterface {
 			$posts = \get_posts(
 				array(
 					'post__in'       => $all_post_ids,
+					'post_type'      => array_unique( $post_types ),
 					'posts_per_page' => -1,
 					'post_status'    => 'any',
 				)
