@@ -8,6 +8,9 @@
 
 namespace MksDdn\MigrateContent\Core\ServiceProviders;
 
+use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ExporterInterface;
+use MksDdn\MigrateContent\Contracts\MediaCollectorInterface;
 use MksDdn\MigrateContent\Core\BatchLoader;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
@@ -35,11 +38,17 @@ class ExportServiceProvider implements ServiceProviderInterface {
 	 */
 	public function register( ServiceContainer $container ): void {
 		$container->register(
-			AttachmentCollector::class,
+			MediaCollectorInterface::class,
 			function ( ServiceContainer $container ) {
 				return new AttachmentCollector(
 					$container->get( BatchLoader::class )
 				);
+			}
+		);
+		$container->register(
+			AttachmentCollector::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( MediaCollectorInterface::class );
 			}
 		);
 
@@ -51,14 +60,20 @@ class ExportServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
-			ExportHandler::class,
+			ExporterInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ExportHandler(
 					$container->get( \MksDdn\MigrateContent\Archive\Packer::class ),
-					$container->get( AttachmentCollector::class ),
+					$container->get( MediaCollectorInterface::class ),
 					$container->get( OptionsExporter::class ),
 					$container->get( BatchLoader::class )
 				);
+			}
+		);
+		$container->register(
+			ExportHandler::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ExporterInterface::class );
 			}
 		);
 	}

@@ -13,6 +13,11 @@ use MksDdn\MigrateContent\Archive\Packer;
 use MksDdn\MigrateContent\Automation\ScheduleManager;
 use MksDdn\MigrateContent\Automation\ScheduleSettings;
 use MksDdn\MigrateContent\Automation\ScheduledBackupRunner;
+use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
+use MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface;
+use MksDdn\MigrateContent\Contracts\ScheduleManagerInterface;
+use MksDdn\MigrateContent\Contracts\SnapshotManagerInterface;
+use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
@@ -77,9 +82,15 @@ class CoreServiceProvider implements ServiceProviderInterface {
 		);
 		// Archive services.
 		$container->register(
-			Extractor::class,
+			ArchiveHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new Extractor();
+			}
+		);
+		$container->register(
+			Extractor::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ArchiveHandlerInterface::class );
 			}
 		);
 
@@ -92,9 +103,15 @@ class CoreServiceProvider implements ServiceProviderInterface {
 
 		// Recovery services.
 		$container->register(
-			HistoryRepository::class,
+			HistoryRepositoryInterface::class,
 			function ( ServiceContainer $container ) {
 				return new HistoryRepository();
+			}
+		);
+		$container->register(
+			HistoryRepository::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( HistoryRepositoryInterface::class );
 			}
 		);
 
@@ -106,17 +123,29 @@ class CoreServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
-			SnapshotManager::class,
+			SnapshotManagerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new SnapshotManager();
+			}
+		);
+		$container->register(
+			SnapshotManager::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( SnapshotManagerInterface::class );
 			}
 		);
 
 		// User services.
 		$container->register(
-			UserPreviewStore::class,
+			UserPreviewStoreInterface::class,
 			function ( ServiceContainer $container ) {
 				return new UserPreviewStore();
+			}
+		);
+		$container->register(
+			UserPreviewStore::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( UserPreviewStoreInterface::class );
 			}
 		);
 
@@ -141,12 +170,18 @@ class CoreServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
-			ScheduleManager::class,
+			ScheduleManagerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ScheduleManager(
 					$container->get( ScheduleSettings::class ),
 					$container->get( ScheduledBackupRunner::class )
 				);
+			}
+		);
+		$container->register(
+			ScheduleManager::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ScheduleManagerInterface::class );
 			}
 		);
 	}

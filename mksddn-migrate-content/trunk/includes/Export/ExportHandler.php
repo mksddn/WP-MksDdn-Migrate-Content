@@ -8,9 +8,10 @@
 namespace MksDdn\MigrateContent\Export;
 
 use MksDdn\MigrateContent\Archive\Packer;
+use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ExporterInterface;
+use MksDdn\MigrateContent\Contracts\MediaCollectorInterface;
 use MksDdn\MigrateContent\Core\BatchLoader;
-use MksDdn\MigrateContent\Media\AttachmentCollector;
 use MksDdn\MigrateContent\Media\AttachmentCollection;
 use MksDdn\MigrateContent\Options\OptionsExporter;
 use MksDdn\MigrateContent\Selection\ContentSelection;
@@ -47,7 +48,7 @@ class ExportHandler implements ExporterInterface {
 	/**
 	 * Attachment collector.
 	 */
-	private AttachmentCollector $media_collector;
+	private MediaCollectorInterface $media_collector;
 
 	private OptionsExporter $options_exporter;
 
@@ -66,15 +67,15 @@ class ExportHandler implements ExporterInterface {
 	/**
 	 * Setup handler.
 	 *
-	 * @param Packer|null              $packer           Optional packer.
-	 * @param AttachmentCollector|null $media_collector  Optional collector.
-	 * @param OptionsExporter|null     $options_exporter Optional options exporter.
-	 * @param BatchLoader|null         $batch_loader     Optional batch loader.
+	 * @param Packer|null                  $packer           Optional packer.
+	 * @param MediaCollectorInterface|null $media_collector  Optional collector.
+	 * @param OptionsExporter|null         $options_exporter Optional options exporter.
+	 * @param BatchLoader|null             $batch_loader     Optional batch loader.
 	 * @since 1.0.0
 	 */
-	public function __construct( ?Packer $packer = null, ?AttachmentCollector $media_collector = null, ?OptionsExporter $options_exporter = null, ?BatchLoader $batch_loader = null ) {
+	public function __construct( ?Packer $packer = null, ?MediaCollectorInterface $media_collector = null, ?OptionsExporter $options_exporter = null, ?BatchLoader $batch_loader = null ) {
 		$this->packer           = $packer ?? new Packer();
-		$this->media_collector  = $media_collector ?? new AttachmentCollector();
+		$this->media_collector  = $media_collector ?? new \MksDdn\MigrateContent\Media\AttachmentCollector();
 		$this->options_exporter = $options_exporter ?? new OptionsExporter();
 		$this->batch_loader     = $batch_loader ?? new BatchLoader();
 	}

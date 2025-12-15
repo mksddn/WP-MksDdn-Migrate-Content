@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Core\ServiceProviders;
 
+use MksDdn\MigrateContent\Contracts\ImporterInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapperInterface;
@@ -34,7 +35,7 @@ class ImportServiceProvider implements ServiceProviderInterface {
 	 */
 	public function register( ServiceContainer $container ): void {
 		$container->register(
-			ImportHandler::class,
+			ImporterInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ImportHandler(
 					null,
@@ -42,6 +43,12 @@ class ImportServiceProvider implements ServiceProviderInterface {
 					$container->get( WpFunctionsWrapperInterface::class ),
 					$container->get( WpUserFunctionsWrapperInterface::class )
 				);
+			}
+		);
+		$container->register(
+			ImportHandler::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ImporterInterface::class );
 			}
 		);
 	}

@@ -7,6 +7,8 @@
 
 namespace MksDdn\MigrateContent\Users;
 
+use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -14,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Lightweight transient-based storage for preview state.
  */
-class UserPreviewStore {
+class UserPreviewStore implements UserPreviewStoreInterface {
 
 	private const KEY_PREFIX = 'mksddn_mc_user_preview_';
 	private const TTL        = HOUR_IN_SECONDS;

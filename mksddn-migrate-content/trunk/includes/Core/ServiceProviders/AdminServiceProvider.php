@@ -24,6 +24,8 @@ use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
+use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
 use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
@@ -51,16 +53,28 @@ class AdminServiceProvider implements ServiceProviderInterface {
 	public function register( ServiceContainer $container ): void {
 		// Services.
 		$container->register(
-			NotificationService::class,
+			NotificationServiceInterface::class,
 			function ( ServiceContainer $container ) {
 				return new NotificationService();
 			}
 		);
+		$container->register(
+			NotificationService::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( NotificationServiceInterface::class );
+			}
+		);
 
+		$container->register(
+			ProgressServiceInterface::class,
+			function ( ServiceContainer $container ) {
+				return new ProgressService();
+			}
+		);
 		$container->register(
 			ProgressService::class,
 			function ( ServiceContainer $container ) {
-				return new ProgressService();
+				return $container->get( ProgressServiceInterface::class );
 			}
 		);
 
@@ -68,7 +82,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			ResponseHandler::class,
 			function ( ServiceContainer $container ) {
 				return new ResponseHandler(
-					$container->get( NotificationService::class )
+					$container->get( NotificationServiceInterface::class )
 				);
 			}
 		);
@@ -94,11 +108,11 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			function ( ServiceContainer $container ) {
 				return new SelectedContentImportService(
 					$container->get( \MksDdn\MigrateContent\Archive\Extractor::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\SnapshotManager::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\HistoryRepository::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\SnapshotManagerInterface::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
 					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
-					$container->get( NotificationService::class ),
-					$container->get( ProgressService::class ),
+					$container->get( NotificationServiceInterface::class ),
+					$container->get( ProgressServiceInterface::class ),
 					$container->get( ImportFileValidator::class ),
 					$container->get( ImportPayloadPreparer::class )
 				);
@@ -109,11 +123,11 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			FullSiteImportService::class,
 			function ( ServiceContainer $container ) {
 				return new FullSiteImportService(
-					$container->get( \MksDdn\MigrateContent\Recovery\SnapshotManager::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\HistoryRepository::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\SnapshotManagerInterface::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
 					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
-					$container->get( \MksDdn\MigrateContent\Users\UserPreviewStore::class ),
-					$container->get( NotificationService::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class ),
+					$container->get( NotificationServiceInterface::class ),
 					$container->get( ResponseHandler::class )
 				);
 			}
@@ -124,9 +138,9 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			AdminPageView::class,
 			function ( ServiceContainer $container ) {
 				return new AdminPageView(
-					$container->get( \MksDdn\MigrateContent\Recovery\HistoryRepository::class ),
-					$container->get( \MksDdn\MigrateContent\Automation\ScheduleManager::class ),
-					$container->get( \MksDdn\MigrateContent\Users\UserPreviewStore::class )
+					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\ScheduleManagerInterface::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class )
 				);
 			}
 		);
@@ -136,7 +150,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			ExportRequestHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ExportRequestHandler(
-					$container->get( NotificationService::class )
+					$container->get( NotificationServiceInterface::class )
 				);
 			}
 		);
@@ -167,8 +181,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			ScheduleRequestHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ScheduleRequestHandler(
-					$container->get( \MksDdn\MigrateContent\Automation\ScheduleManager::class ),
-					$container->get( NotificationService::class )
+					$container->get( \MksDdn\MigrateContent\Contracts\ScheduleManagerInterface::class ),
+					$container->get( NotificationServiceInterface::class )
 				);
 			}
 		);
@@ -183,10 +197,10 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			RecoveryRequestHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new RecoveryRequestHandler(
-					$container->get( \MksDdn\MigrateContent\Recovery\SnapshotManager::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\HistoryRepository::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\SnapshotManagerInterface::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
 					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
-					$container->get( NotificationService::class )
+					$container->get( NotificationServiceInterface::class )
 				);
 			}
 		);
@@ -201,8 +215,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			UserMergeRequestHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new UserMergeRequestHandler(
-					$container->get( \MksDdn\MigrateContent\Users\UserPreviewStore::class ),
-					$container->get( NotificationService::class )
+					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class ),
+					$container->get( NotificationServiceInterface::class )
 				);
 			}
 		);

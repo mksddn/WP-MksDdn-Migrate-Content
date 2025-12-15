@@ -8,6 +8,8 @@
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
+use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -17,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @since 1.0.0
  */
-class ProgressService {
+class ProgressService implements ProgressServiceInterface {
 
 	/**
 	 * Render progress container HTML.

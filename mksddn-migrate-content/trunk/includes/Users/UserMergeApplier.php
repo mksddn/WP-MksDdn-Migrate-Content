@@ -7,6 +7,7 @@
 
 namespace MksDdn\MigrateContent\Users;
 
+use MksDdn\MigrateContent\Contracts\UserMergeApplierInterface;
 use WP_Error;
 use WP_User;
 
@@ -17,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles importing/updating users from archive payload.
  */
-class UserMergeApplier {
+class UserMergeApplier implements UserMergeApplierInterface {
 
 	/**
 	 * Summary of last merge operation.

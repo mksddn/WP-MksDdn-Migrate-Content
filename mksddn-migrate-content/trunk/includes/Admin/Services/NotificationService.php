@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
+use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Config\PluginConfig;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -19,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @since 1.0.0
  */
-class NotificationService {
+class NotificationService implements NotificationServiceInterface {
 
 	/**
 	 * Show success notice.

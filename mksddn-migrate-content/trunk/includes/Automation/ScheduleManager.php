@@ -7,6 +7,7 @@
 
 namespace MksDdn\MigrateContent\Automation;
 
+use MksDdn\MigrateContent\Contracts\ScheduleManagerInterface;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
@@ -17,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles cron setup and manual runs.
  */
-class ScheduleManager {
+class ScheduleManager implements ScheduleManagerInterface {
 
 	public const CRON_HOOK = 'mksddn_mc_cron_run';
 

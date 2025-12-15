@@ -8,18 +8,18 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
-use MksDdn\MigrateContent\Admin\Services\NotificationService;
-use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
+use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
 use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
-use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Support\FilenameBuilder;
-use MksDdn\MigrateContent\Users\UserPreviewStore;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -77,23 +77,23 @@ class AdminPageController {
 	/**
 	 * Notification service.
 	 *
-	 * @var NotificationService
+	 * @var NotificationServiceInterface
 	 */
-	private NotificationService $notifications;
+	private NotificationServiceInterface $notifications;
 
 	/**
 	 * Progress service.
 	 *
-	 * @var ProgressService
+	 * @var ProgressServiceInterface
 	 */
-	private ProgressService $progress;
+	private ProgressServiceInterface $progress;
 
 	/**
 	 * User preview store.
 	 *
-	 * @var UserPreviewStore
+	 * @var UserPreviewStoreInterface
 	 */
-	private UserPreviewStore $preview_store;
+	private UserPreviewStoreInterface $preview_store;
 
 	/**
 	 * Constructor.
@@ -108,9 +108,9 @@ class AdminPageController {
 		$this->schedule_handler  = $container->get( ScheduleRequestHandlerInterface::class );
 		$this->recovery_handler  = $container->get( RecoveryRequestHandlerInterface::class );
 		$this->user_merge_handler = $container->get( UserMergeRequestHandlerInterface::class );
-		$this->notifications     = $container->get( NotificationService::class );
-		$this->progress          = $container->get( ProgressService::class );
-		$this->preview_store     = $container->get( UserPreviewStore::class );
+		$this->notifications     = $container->get( NotificationServiceInterface::class );
+		$this->progress          = $container->get( ProgressServiceInterface::class );
+		$this->preview_store     = $container->get( UserPreviewStoreInterface::class );
 	}
 
 	/**

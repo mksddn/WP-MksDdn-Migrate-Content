@@ -7,6 +7,7 @@
 
 namespace MksDdn\MigrateContent\Users;
 
+use MksDdn\MigrateContent\Contracts\UserDiffBuilderInterface;
 use MksDdn\MigrateContent\Filesystem\FullArchivePayload;
 use WP_Error;
 use WP_Roles;
@@ -19,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Generates normalized structures for user selection UI.
  */
-class UserDiffBuilder {
+class UserDiffBuilder implements UserDiffBuilderInterface {
 
 	/**
 	 * Build diff data based on archive payload and current site users.

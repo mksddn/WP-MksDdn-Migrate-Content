@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Chunking;
 
+use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 
@@ -32,9 +33,15 @@ class ChunkServiceProvider implements ServiceProviderInterface {
 	public function register( ServiceContainer $container ): void {
 		// Register ChunkJobRepository.
 		$container->register(
-			ChunkJobRepository::class,
+			ChunkJobRepositoryInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ChunkJobRepository();
+			}
+		);
+		$container->register(
+			ChunkJobRepository::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ChunkJobRepositoryInterface::class );
 			}
 		);
 
@@ -43,7 +50,7 @@ class ChunkServiceProvider implements ServiceProviderInterface {
 			ChunkRestController::class,
 			function ( ServiceContainer $container ) {
 				return new ChunkRestController(
-					$container->get( ChunkJobRepository::class )
+					$container->get( ChunkJobRepositoryInterface::class )
 				);
 			}
 		);

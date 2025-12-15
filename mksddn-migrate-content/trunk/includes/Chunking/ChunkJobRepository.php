@@ -7,11 +7,13 @@
 
 namespace MksDdn\MigrateContent\Chunking;
 
+use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ChunkJobRepository {
+class ChunkJobRepository implements ChunkJobRepositoryInterface {
 
 	private string $storage_dir;
 
