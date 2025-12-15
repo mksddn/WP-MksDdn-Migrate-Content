@@ -7,7 +7,7 @@
 
 namespace MksDdn\MigrateContent;
 
-use MksDdn\MigrateContent\Admin\ExportImportAdmin;
+use MksDdn\MigrateContent\Admin\AdminPageController;
 use MksDdn\MigrateContent\Automation\ScheduleManager;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -33,7 +33,8 @@ class Plugin {
 		$schedule_manager = new ScheduleManager();
 		$schedule_manager->register();
 
-		new ExportImportAdmin( null, null, null, null, $schedule_manager );
+		$admin_controller = new AdminPageController();
+		$admin_controller->register();
 	}
 }
 
