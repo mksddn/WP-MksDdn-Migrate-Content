@@ -1,7 +1,7 @@
 <?php
 /**
- * @file: UserMergeHandler.php
- * @description: Handler for user merge operations
+ * @file: UserMergeRequestHandler.php
+ * @description: Handler for user merge request operations
  * @dependencies: Users\UserPreviewStore, Admin\Services\NotificationService, Support\FilesystemHelper, Chunking\ChunkJobRepository
  * @created: 2024-12-15
  */
@@ -10,6 +10,7 @@ namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
+use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 
@@ -18,11 +19,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Handler for user merge operations.
+ * Handler for user merge request operations.
  *
  * @since 1.0.0
  */
-class UserMergeHandler {
+class UserMergeRequestHandler implements UserMergeRequestHandlerInterface {
 
 	/**
 	 * User preview store.

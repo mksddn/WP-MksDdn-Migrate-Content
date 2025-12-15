@@ -1,7 +1,7 @@
 <?php
 /**
- * @file: ExportHandler.php
- * @description: Handler for export operations
+ * @file: ExportRequestHandler.php
+ * @description: Handler for export request operations
  * @dependencies: ExportHandler (service), SelectionBuilder, FullContentExporter, FilenameBuilder, NotificationService
  * @created: 2024-12-15
  */
@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
+use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Export\ExportHandler as ExportService;
 use MksDdn\MigrateContent\Filesystem\FullContentExporter;
 use MksDdn\MigrateContent\Selection\SelectionBuilder;
@@ -21,11 +22,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Handler for export operations.
+ * Handler for export request operations.
  *
  * @since 1.0.0
  */
-class ExportHandler {
+class ExportRequestHandler implements ExportRequestHandlerInterface {
 
 	/**
 	 * Notification service.

@@ -1,7 +1,7 @@
 <?php
 /**
- * @file: RecoveryHandler.php
- * @description: Handler for recovery operations (snapshots, rollback)
+ * @file: RecoveryRequestHandler.php
+ * @description: Handler for recovery request operations (snapshots, rollback)
  * @dependencies: Recovery\SnapshotManager, Recovery\HistoryRepository, Recovery\JobLock, Filesystem\FullContentImporter, Support\SiteUrlGuard, Admin\Services\NotificationService
  * @created: 2024-12-15
  */
@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
+use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
 use MksDdn\MigrateContent\Filesystem\FullContentImporter;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Recovery\JobLock;
@@ -21,11 +22,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Handler for recovery operations.
+ * Handler for recovery request operations.
  *
  * @since 1.0.0
  */
-class RecoveryHandler {
+class RecoveryRequestHandler implements RecoveryRequestHandlerInterface {
 
 	/**
 	 * Snapshot manager.

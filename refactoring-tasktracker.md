@@ -1,952 +1,609 @@
 # План рефакторинга плагина MksDdn Migrate Content
 
-## Контекст проекта
+## Общая информация
 
-**Плагин**: MksDdn Migrate Content  
-**Версия**: 1.0.0  
-**Тип**: WordPress Plugin для миграции контента  
-**Основные функции**: Экспорт/импорт контента, полный бэкап сайта, chunked transfers, snapshots, rollback, scheduled backups
+**Дата создания**: 2024-12-15  
+**Версия плагина**: 1.0.0  
+**Цель**: Улучшить архитектуру, читаемость, поддерживаемость и соответствие принципам SOLID, DRY, KISS
 
-## Текущее состояние архитектуры
+## Текущее состояние проекта
 
-### Структура проекта
-```
-mksddn-migrate-content/trunk/
-├── includes/
-│   ├── Admin/              # UI контроллер (2041 строка - слишком большой)
-│   ├── Archive/            # Работа с архивами
-│   ├── Automation/         # Планировщик бэкапов
-│   ├── Chunking/           # Chunked transfers
-│   ├── Database/           # Экспорт/импорт БД
-│   ├── Export/             # Обработчики экспорта
-│   ├── Filesystem/         # Работа с файловой системой
-│   ├── Import/             # Обработчики импорта
-│   ├── Media/              # Работа с медиафайлами
-│   ├── Options/            # Работа с опциями
-│   ├── Recovery/           # Snapshots и rollback
-│   ├── Selection/          # Выбор контента
-│   ├── Support/            # Вспомогательные классы
-│   └── Users/               # Работа с пользователями
-├── assets/js/              # JavaScript
-├── languages/              # Переводы
-└── mksddn-migrate-content.php  # Главный файл плагина
-```
+### Архитектура
+- Используется Service Container для dependency injection
+- Есть Service Providers для регистрации сервисов
+- Разделение на Admin Handlers, Services, Views
+- Есть Contracts (интерфейсы) для основных компонентов
+- Используются Wrappers для WordPress функций
 
 ### Выявленные проблемы
 
-1. **Нарушение Single Responsibility Principle**
-   - `ExportImportAdmin` (2041 строка) объединяет UI, бизнес-логику, валидацию, обработку форм
-   - Смешивание concerns: представление, контроллер, сервисный слой
+1. **Дублирование имен классов**
+   - `ExportHandler` существует в `Admin/Handlers/` и `Export/`
+   - `ImportHandler` существует в `Admin/Handlers/` и `Import/`
+   - Это создает путаницу и нарушает принцип единственной ответственности
 
-2. **Несогласованность namespace**
-   - Правила: `MksDdn\MigrateContent`
-   - Реализация: `Mksddn_MC`
-   - Требуется унификация
+2. **Несогласованность Dependency Injection**
+   - `AdminPageController` имеет конструктор с множеством nullable параметров
+   - Некоторые классы создают зависимости напрямую вместо использования контейнера
+   - `ChunkServiceProvider` не интегрирован в основную систему Service Providers
 
-3. **Отсутствие Dependency Injection контейнера**
-   - Прямое создание зависимостей в конструкторах
-   - Сложность тестирования и замены компонентов
+3. **Нарушение Single Responsibility Principle**
+   - `Admin\Handlers\ImportHandler` слишком большой (770+ строк)
+   - Handlers смешивают валидацию, обработку, редиректы и уведомления
+   - Отсутствует четкое разделение между HTTP-обработкой и бизнес-логикой
 
-4. **Дублирование кода**
-   - Повторяющаяся логика валидации файлов
-   - Дублирование обработки ошибок
-   - Повторяющиеся паттерны редиректов и уведомлений
+4. **Отсутствие интерфейсов**
+   - Handlers не имеют интерфейсов
+   - Некоторые ключевые компоненты не используют контракты
 
-5. **Отсутствие интерфейсов**
-   - Нет контрактов для основных компонентов
-   - Сложно создавать моки для тестирования
-
-6. **Неоптимальная загрузка файлов**
-   - В `mksddn-migrate-content-core.php` много `require_once` вместо использования autoloader
-
-7. **Хардкод значений**
-   - Магические строки и числа
-   - Отсутствие конфигурационных классов
-
-8. **Смешивание логики и представления**
-   - HTML генерируется внутри PHP классов
-   - Отсутствие шаблонов/views
-
-9. **Отсутствие валидации на уровне сервисов**
-   - Валидация только в контроллерах
-   - Нет централизованной валидации
-
-10. **Неоптимальная обработка ошибок**
-    - Разные способы обработки ошибок в разных местах
-    - Нет единого подхода к логированию
-
----
+5. **Неоптимальная структура**
+   - `ChunkServiceProvider` инициализируется отдельно через `plugins_loaded`
+   - Недостаточное использование существующих Contracts
 
 ## План рефакторинга
 
-### Этап 1: Подготовка и инфраструктура
+### Этап 1: Рефакторинг именования и структуры классов
 
-#### Задача 1.1: Унификация namespace
+#### Задача 1.1: Переименование Admin Handlers
 **Приоритет**: Высокий  
-**Сложность**: Средняя  
-**Время**: 2-3 часа
+**Оценка**: 2-3 часа  
+**Зависимости**: Нет
 
 **Описание**:
-Привести namespace к единому стандарту согласно правилам проекта: `MksDdn\MigrateContent`
+Переименовать классы в `Admin/Handlers/` для устранения конфликта имен и улучшения ясности:
 
-**Шаги**:
-1. Создать скрипт для массовой замены namespace во всех файлах
-2. Заменить `Mksddn_MC` на `MksDdn\MigrateContent` во всех файлах
-3. Обновить autoloader для поддержки нового namespace
-4. Проверить все импорты и use statements
-5. Обновить документацию
+- `Admin\Handlers\ExportHandler` → `Admin\Handlers\ExportRequestHandler`
+- `Admin\Handlers\ImportHandler` → `Admin\Handlers\ImportRequestHandler`
+- `Admin\Handlers\RecoveryHandler` → `Admin\Handlers\RecoveryRequestHandler`
+- `Admin\Handlers\ScheduleHandler` → `Admin\Handlers\ScheduleRequestHandler`
+- `Admin\Handlers\UserMergeHandler` → `Admin\Handlers\UserMergeRequestHandler`
+
+**Шаги выполнения**:
+1. Переименовать файлы классов
+2. Обновить имена классов внутри файлов
+3. Обновить все использования в `AdminServiceProvider`
+4. Обновить регистрацию в `AdminPageController`
+5. Обновить все ссылки в views и других компонентах
+6. Проверить, что все тесты проходят (если есть)
 
 **Файлы для изменения**:
-- Все файлы в `includes/`
-- `includes/autoload.php`
-- `includes/Plugin.php`
+- `includes/Admin/Handlers/ExportHandler.php` → `ExportRequestHandler.php`
+- `includes/Admin/Handlers/ImportHandler.php` → `ImportRequestHandler.php`
+- `includes/Admin/Handlers/RecoveryHandler.php` → `RecoveryRequestHandler.php`
+- `includes/Admin/Handlers/ScheduleHandler.php` → `ScheduleRequestHandler.php`
+- `includes/Admin/Handlers/UserMergeHandler.php` → `UserMergeRequestHandler.php`
+- `includes/Core/ServiceProviders/AdminServiceProvider.php`
+- `includes/Admin/AdminPageController.php`
+- Все view файлы, которые используют эти handlers
+
+**Критерии завершения**:
+- Все классы переименованы
+- Нет конфликтов имен
+- Плагин работает без ошибок
+- Все ссылки обновлены
+
+---
+
+#### Задача 1.2: Создание интерфейсов для Request Handlers
+**Приоритет**: Средний  
+**Оценка**: 1-2 часа  
+**Зависимости**: Задача 1.1
+
+**Описание**:
+Создать интерфейсы для всех Request Handlers в директории `Contracts/` для улучшения тестируемости и соблюдения принципа инверсии зависимостей.
+
+**Шаги выполнения**:
+1. Создать `Contracts/RequestHandlerInterface.php` с базовым интерфейсом
+2. Создать специфичные интерфейсы:
+   - `Contracts/ExportRequestHandlerInterface.php`
+   - `Contracts/ImportRequestHandlerInterface.php`
+   - `Contracts/RecoveryRequestHandlerInterface.php`
+   - `Contracts/ScheduleRequestHandlerInterface.php`
+   - `Contracts/UserMergeRequestHandlerInterface.php`
+3. Реализовать интерфейсы в соответствующих классах
+4. Обновить Service Providers для использования интерфейсов
+5. Обновить типизацию в `AdminPageController`
+
+**Файлы для создания**:
+- `includes/Contracts/RequestHandlerInterface.php`
+- `includes/Contracts/ExportRequestHandlerInterface.php`
+- `includes/Contracts/ImportRequestHandlerInterface.php`
+- `includes/Contracts/RecoveryRequestHandlerInterface.php`
+- `includes/Contracts/ScheduleRequestHandlerInterface.php`
+- `includes/Contracts/UserMergeRequestHandlerInterface.php`
+
+**Критерии завершения**:
+- Все интерфейсы созданы и задокументированы
+- Все handlers реализуют соответствующие интерфейсы
+- Service Providers используют интерфейсы для типизации
+- Код компилируется без ошибок
+
+---
+
+### Этап 2: Рефакторинг Dependency Injection
+
+#### Задача 2.1: Интеграция ChunkServiceProvider в основную систему
+**Приоритет**: Высокий  
+**Оценка**: 1-2 часа  
+**Зависимости**: Нет
+
+**Описание**:
+Интегрировать `ChunkServiceProvider` в основную систему Service Providers вместо отдельной инициализации через `plugins_loaded`.
+
+**Шаги выполнения**:
+1. Переименовать `ChunkServiceProvider::init()` в `ChunkServiceProvider::register()`
+2. Реализовать `ServiceProviderInterface` в `ChunkServiceProvider`
+3. Зарегистрировать `ChunkServiceProvider` в `ServiceContainerFactory`
+4. Удалить отдельную инициализацию из `mksddn-migrate-content-core.php`
+5. Зарегистрировать все chunking сервисы через контейнер:
+   - `ChunkController`
+   - `ChunkJobRepository`
+   - `ChunkRestController`
+   - `ChunkJob` (если нужен как сервис)
+
+**Файлы для изменения**:
+- `includes/Chunking/ChunkServiceProvider.php`
+- `includes/Core/ServiceContainerFactory.php`
 - `mksddn-migrate-content-core.php`
 
 **Критерии завершения**:
-- Все классы используют единый namespace
-- Autoloader корректно загружает классы
-- Нет ошибок при активации плагина
+- `ChunkServiceProvider` интегрирован в основную систему
+- Нет отдельной инициализации через `plugins_loaded`
+- Все chunking сервисы доступны через контейнер
+- Функциональность не нарушена
 
 ---
 
-#### Задача 1.2: Создание интерфейсов для основных компонентов
-**Приоритет**: Высокий  
-**Сложность**: Средняя  
-**Время**: 4-5 часов
-
-**Описание**:
-Определить контракты для основных компонентов системы для улучшения тестируемости и расширяемости.
-
-**Интерфейсы для создания**:
-
-1. **`MksDdn\MigrateContent\Contracts\ExporterInterface`**
-   ```php
-   interface ExporterInterface {
-       public function export(ContentSelection $selection, string $format): ExportResult;
-   }
-   ```
-
-2. **`MksDdn\MigrateContent\Contracts\ImporterInterface`**
-   ```php
-   interface ImporterInterface {
-       public function import(array $data, ImportOptions $options): ImportResult;
-   }
-   ```
-
-3. **`MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface`**
-   ```php
-   interface ArchiveHandlerInterface {
-       public function create(array $data, array $options, array $media): string|WP_Error;
-       public function extract(string $path): array|WP_Error;
-   }
-   ```
-
-4. **`MksDdn\MigrateContent\Contracts\MediaCollectorInterface`**
-   ```php
-   interface MediaCollectorInterface {
-       public function collectForPost(WP_Post $post): AttachmentCollection;
-   }
-   ```
-
-5. **`MksDdn\MigrateContent\Contracts\ValidatorInterface`**
-   ```php
-   interface ValidatorInterface {
-       public function validate(mixed $data, string $type): ValidationResult;
-   }
-   ```
-
-**Шаги**:
-1. Создать директорию `includes/Contracts/`
-2. Определить интерфейсы с PHPDoc
-3. Обновить существующие классы для реализации интерфейсов
-4. Обновить type hints в зависимостях
-
-**Файлы для создания**:
-- `includes/Contracts/ExporterInterface.php`
-- `includes/Contracts/ImporterInterface.php`
-- `includes/Contracts/ArchiveHandlerInterface.php`
-- `includes/Contracts/MediaCollectorInterface.php`
-- `includes/Contracts/ValidatorInterface.php`
-- `includes/Contracts/SnapshotManagerInterface.php`
-- `includes/Contracts/HistoryRepositoryInterface.php`
-
-**Критерии завершения**:
-- Все интерфейсы созданы с полной документацией
-- Существующие классы реализуют соответствующие интерфейсы
-- Type hints обновлены
-
----
-
-#### Задача 1.3: Создание конфигурационного класса
+#### Задача 2.2: Рефакторинг AdminPageController для полного использования DI
 **Приоритет**: Средний  
-**Сложность**: Низкая  
-**Время**: 1-2 часа
+**Оценка**: 1-2 часа  
+**Зависимости**: Задача 1.1
 
 **Описание**:
-Вынести все константы и конфигурационные значения в отдельный класс для централизованного управления.
+Убрать nullable параметры из конструктора `AdminPageController` и использовать только Service Container для получения зависимостей.
 
-**Шаги**:
-1. Создать `includes/Config/PluginConfig.php`
-2. Перенести все константы из главного файла
-3. Добавить методы для получения конфигурации
-4. Заменить прямые обращения к константам на методы класса
+**Шаги выполнения**:
+1. Удалить все nullable параметры из конструктора `AdminPageController`
+2. Получать все зависимости через `ServiceContainer` в конструкторе
+3. Обновить `AdminServiceProvider` для регистрации `AdminPageController`
+4. Убедиться, что все зависимости доступны через контейнер
+5. Обновить тесты (если есть)
 
-**Структура класса**:
+**Файлы для изменения**:
+- `includes/Admin/AdminPageController.php`
+- `includes/Core/ServiceProviders/AdminServiceProvider.php`
+
+**Текущий код конструктора**:
 ```php
-class PluginConfig {
-    public static function version(): string;
-    public static function pluginDir(): string;
-    public static function pluginUrl(): string;
-    public static function textDomain(): string;
-    public static function chunkSize(): int;
-    public static function maxUploadSize(): int;
-    // и т.д.
+public function __construct(
+    ?AdminPageView $view = null,
+    ?ExportHandler $export_handler = null,
+    // ... много nullable параметров
+)
+```
+
+**Целевой код**:
+```php
+public function __construct(
+    ServiceContainer $container
+) {
+    $this->view = $container->get( AdminPageView::class );
+    $this->export_handler = $container->get( ExportRequestHandlerInterface::class );
+    // ... все через контейнер
 }
 ```
 
-**Файлы для создания**:
-- `includes/Config/PluginConfig.php`
-
-**Файлы для изменения**:
-- Все файлы, использующие константы напрямую
-
 **Критерии завершения**:
-- Все константы вынесены в конфигурационный класс
-- Нет прямых обращений к `define()` константам в бизнес-логике
-- Конфигурация легко расширяется через фильтры WordPress
+- Конструктор использует только Service Container
+- Нет nullable параметров
+- Все зависимости получаются через контейнер
+- Код работает корректно
 
 ---
 
-## ✅ Этап 1: Подготовка и инфраструктура - ЗАВЕРШЕН
+### Этап 3: Разделение ответственностей (Single Responsibility)
 
-**Дата завершения**: 15 декабря 2025
-
-### Выполненные задачи:
-
-#### ✅ Задача 1.1: Унификация namespace
-- Обновлен autoloader для поддержки `MksDdn\MigrateContent`
-- Заменены все namespace declarations (37 файлов)
-- Заменены все use statements (50+ вхождений)
-- Обновлены прямые обращения к классам в bootstrap файлах
-- Обновлен утилитарный файл `tools/make-pot.php`
-
-#### ✅ Задача 1.2: Создание интерфейсов
-**Созданные интерфейсы:**
-- `ExporterInterface` - контракт для экспорта
-- `ImporterInterface` - контракт для импорта
-- `ArchiveHandlerInterface` - контракт для работы с архивами
-- `MediaCollectorInterface` - контракт для сбора медиафайлов
-- `ValidatorInterface` - контракт для валидации
-- `SnapshotManagerInterface` - контракт для управления снимками
-- `HistoryRepositoryInterface` - контракт для истории операций
-
-**Обновленные классы:**
-- `ExportHandler` → реализует `ExporterInterface`
-- `ImportHandler` → реализует `ImporterInterface`
-- `Packer` → реализует `ArchiveHandlerInterface`
-- `Extractor` → реализует `ArchiveHandlerInterface`
-- `AttachmentCollector` → реализует `MediaCollectorInterface`
-- `SnapshotManager` → реализует `SnapshotManagerInterface`
-- `HistoryRepository` → реализует `HistoryRepositoryInterface`
-
-#### ✅ Задача 1.3: Конфигурационный класс
-**Создан класс `PluginConfig`** с методами:
-- `version()` - версия плагина
-- `file()` - путь к файлу плагина
-- `dir()` - директория плагина
-- `url()` - URL плагина
-- `text_domain()` - текстовый домен
-- `is_chunked_disabled()` - проверка отключения chunked transfers
-- `is_json_export_debug_enabled()` - проверка debug режима
-- `chunk_size()` - размер чанка
-- `max_upload_size()` - максимальный размер загрузки
-- Вспомогательные методы для путей к assets, includes, languages
-
-### Исправленные критические ошибки:
-1. Исправлена синтаксическая ошибка в `ExporterInterface`: `void|WP_Error` → `void`
-2. Исправлена сигнатура `SnapshotManager::delete()` для соответствия интерфейсу
-3. Добавлен метод `Packer::extract()` для соответствия интерфейсу
-
-### Результаты:
-- ✅ Единый namespace `MksDdn\MigrateContent` во всех файлах
-- ✅ Интерфейсы для основных компонентов созданы и реализованы
-- ✅ Централизованная конфигурация через `PluginConfig`
-- ✅ Код готов к дальнейшему рефакторингу
-- ✅ Нет ошибок линтера
-- ✅ Плагин работает без критических ошибок
-
----
-
-## ✅ Этап 2: Разделение ответственности (SRP) - ЗАВЕРШЕН
-
-**Дата завершения**: 15 декабря 2025
-
-### Выполненные задачи:
-
-#### ✅ Задача 2.1: Разделение ExportImportAdmin на отдельные классы
-**Приоритет**: Критический  
-**Сложность**: Высокая  
-**Время**: 8-10 часов
+#### Задача 3.1: Выделение валидации из ImportRequestHandler
+**Приоритет**: Высокий  
+**Оценка**: 3-4 часа  
+**Зависимости**: Задача 1.1
 
 **Описание**:
-Разбить монолитный класс `ExportImportAdmin` (2041 строка) на отдельные классы по принципу Single Responsibility.
+Выделить логику валидации файлов и подготовки payload из `ImportRequestHandler` в отдельные сервисы.
 
-**Новая структура**:
+**Шаги выполнения**:
+1. Создать `Admin\Services\ImportFileValidator` для валидации загруженных файлов
+2. Создать `Admin\Services\ImportPayloadPreparer` для подготовки payload из файлов
+3. Переместить методы:
+   - `prepare_import_payload()` → `ImportPayloadPreparer::prepare()`
+   - `read_json_payload()` → `ImportPayloadPreparer::readJson()`
+   - Валидация файлов → `ImportFileValidator::validate()`
+4. Обновить `ImportRequestHandler` для использования новых сервисов
+5. Зарегистрировать новые сервисы в `AdminServiceProvider`
 
-1. **`Admin\AdminPageController`** (главный контроллер страницы)
-   - Регистрация меню
-   - Маршрутизация запросов
-   - Координация работы компонентов
-   - ~200 строк
+**Файлы для создания**:
+- `includes/Admin/Services/ImportFileValidator.php`
+- `includes/Admin/Services/ImportPayloadPreparer.php`
 
-2. **`Admin\Views\AdminPageView`** (представление)
-   - Рендеринг HTML
-   - Форматирование данных для отображения
-   - ~300 строк
+**Файлы для изменения**:
+- `includes/Admin/Handlers/ImportRequestHandler.php`
+- `includes/Core/ServiceProviders/AdminServiceProvider.php`
 
-3. **`Admin\Handlers\ExportHandler`** (обработка экспорта)
-   - Обработка форм экспорта
+**Критерии завершения**:
+- Валидация вынесена в отдельный сервис
+- Подготовка payload вынесена в отдельный сервис
+- `ImportRequestHandler` стал меньше и проще
+- Код следует принципу Single Responsibility
+
+---
+
+#### Задача 3.2: Выделение логики редиректов и уведомлений
+**Приоритет**: Средний  
+**Оценка**: 2-3 часа  
+**Зависимости**: Задача 3.1
+
+**Описание**:
+Создать отдельный сервис для управления редиректами и статусными сообщениями, чтобы handlers не занимались HTTP-специфичной логикой.
+
+**Шаги выполнения**:
+1. Создать `Admin\Services\ResponseHandler` для управления редиректами и статусами
+2. Переместить логику редиректов из handlers:
+   - `redirect_user_preview()` → `ResponseHandler::redirectToUserPreview()`
+   - `redirect_full_status()` → `ResponseHandler::redirectWithStatus()`
+3. Интегрировать с `NotificationService` для единообразной обработки
+4. Обновить все handlers для использования `ResponseHandler`
+5. Зарегистрировать в `AdminServiceProvider`
+
+**Файлы для создания**:
+- `includes/Admin/Services/ResponseHandler.php`
+
+**Файлы для изменения**:
+- `includes/Admin/Handlers/ImportRequestHandler.php`
+- `includes/Admin/Handlers/ExportRequestHandler.php`
+- `includes/Admin/Handlers/RecoveryRequestHandler.php`
+- `includes/Admin/Handlers/ScheduleRequestHandler.php`
+- `includes/Core/ServiceProviders/AdminServiceProvider.php`
+
+**Критерии завершения**:
+- Логика редиректов вынесена в отдельный сервис
+- Handlers не содержат HTTP-специфичной логики
+- Код стал более тестируемым
+
+---
+
+#### Задача 3.3: Разделение ImportRequestHandler на меньшие компоненты
+**Приоритет**: Высокий  
+**Оценка**: 4-5 часов  
+**Зависимости**: Задачи 3.1, 3.2
+
+**Описание**:
+Разбить большой `ImportRequestHandler` (770+ строк) на несколько специализированных классов по типам импорта.
+
+**Шаги выполнения**:
+1. Создать `Admin\Services\SelectedContentImportService` для импорта выбранного контента
+2. Создать `Admin\Services\FullSiteImportService` для импорта полного сайта
+3. Переместить методы:
+   - `handle_selected_import()` → `SelectedContentImportService::import()`
+   - `handle_full_import()` → `FullSiteImportService::import()`
+   - `finalize_full_import_from_preview()` → `FullSiteImportService::finalizeFromPreview()`
+   - `execute_full_import()` → `FullSiteImportService::execute()`
+   - `build_user_plan_from_request()` → `FullSiteImportService::buildUserPlan()`
+   - `resolve_full_import_upload()` → `FullSiteImportService::resolveUpload()`
+   - `restore_snapshot()` → вынести в отдельный сервис или оставить в `RecoveryRequestHandler`
+4. Обновить `ImportRequestHandler` для делегирования вызовов сервисам
+5. Зарегистрировать новые сервисы в `AdminServiceProvider`
+
+**Файлы для создания**:
+- `includes/Admin/Services/SelectedContentImportService.php`
+- `includes/Admin/Services/FullSiteImportService.php`
+- `includes/Admin/Services/SnapshotRestoreService.php` (опционально)
+
+**Файлы для изменения**:
+- `includes/Admin/Handlers/ImportRequestHandler.php`
+- `includes/Core/ServiceProviders/AdminServiceProvider.php`
+
+**Критерии завершения**:
+- `ImportRequestHandler` стал значительно меньше (< 200 строк)
+- Каждый сервис отвечает за одну область
+- Код стал более читаемым и тестируемым
+- Функциональность не нарушена
+
+---
+
+### Этап 4: Улучшение использования Contracts
+
+#### Задача 4.1: Аудит и дополнение Contracts
+**Приоритет**: Средний  
+**Оценка**: 2-3 часа  
+**Зависимости**: Нет
+
+**Описание**:
+Провести аудит существующих Contracts и создать недостающие интерфейсы для ключевых компонентов.
+
+**Шаги выполнения**:
+1. Проанализировать существующие Contracts:
+   - `ArchiveHandlerInterface`
+   - `ExporterInterface`
+   - `ImporterInterface`
+   - `HistoryRepositoryInterface`
+   - `MediaCollectorInterface`
+   - `SnapshotManagerInterface`
+   - `ValidatorInterface`
+2. Определить компоненты без интерфейсов:
+   - `UserPreviewStore`
+   - `UserDiffBuilder`
+   - `UserMergeApplier`
+   - `ChunkJobRepository`
+   - `ScheduleManager`
+   - `NotificationService`
+   - `ProgressService`
+3. Создать недостающие интерфейсы в `Contracts/`
+4. Реализовать интерфейсы в соответствующих классах
+5. Обновить Service Providers для использования интерфейсов
+
+**Файлы для создания** (если нужны):
+- `includes/Contracts/UserPreviewStoreInterface.php`
+- `includes/Contracts/UserDiffBuilderInterface.php`
+- `includes/Contracts/UserMergeApplierInterface.php`
+- `includes/Contracts/ChunkJobRepositoryInterface.php`
+- `includes/Contracts/ScheduleManagerInterface.php`
+- `includes/Contracts/NotificationServiceInterface.php`
+- `includes/Contracts/ProgressServiceInterface.php`
+
+**Критерии завершения**:
+- Все ключевые компоненты имеют интерфейсы
+- Service Providers используют интерфейсы
+- Код следует принципу инверсии зависимостей
+
+---
+
+#### Задача 4.2: Обновление Service Providers для использования Contracts
+**Приоритет**: Средний  
+**Оценка**: 2-3 часа  
+**Зависимости**: Задача 4.1
+
+**Описание**:
+Обновить все Service Providers для регистрации сервисов по интерфейсам, а не по конкретным классам.
+
+**Шаги выполнения**:
+1. Обновить `CoreServiceProvider`:
+   - Регистрировать по интерфейсам где возможно
+   - Использовать алиасы для обратной совместимости
+2. Обновить `AdminServiceProvider`:
+   - Использовать интерфейсы для всех сервисов
+3. Обновить `ExportServiceProvider`:
+   - Использовать `ExporterInterface`
+4. Обновить `ImportServiceProvider`:
+   - Использовать `ImporterInterface`
+5. Обновить `ChunkServiceProvider`:
+   - Использовать интерфейсы для chunking сервисов
+6. Обновить все классы, которые получают зависимости, для использования интерфейсов в type hints
+
+**Файлы для изменения**:
+- `includes/Core/ServiceProviders/CoreServiceProvider.php`
+- `includes/Core/ServiceProviders/AdminServiceProvider.php`
+- `includes/Core/ServiceProviders/ExportServiceProvider.php`
+- `includes/Core/ServiceProviders/ImportServiceProvider.php`
+- `includes/Chunking/ChunkServiceProvider.php`
+- Все классы с зависимостями
+
+**Пример изменения**:
+```php
+// Было:
+$container->register( HistoryRepository::class, ... );
+
+// Стало:
+$container->register( HistoryRepositoryInterface::class, function() {
+    return new HistoryRepository();
+} );
+$container->register( HistoryRepository::class, function($c) {
+    return $c->get( HistoryRepositoryInterface::class );
+} );
+```
+
+**Критерии завершения**:
+- Все сервисы зарегистрированы по интерфейсам
+- Есть алиасы для обратной совместимости
+- Type hints используют интерфейсы
+- Код работает корректно
+
+---
+
+### Этап 5: Оптимизация и улучшение кода
+
+#### Задача 5.1: Рефакторинг обработки ошибок
+**Приоритет**: Средний  
+**Оценка**: 2-3 часа  
+**Зависимости**: Нет
+
+**Описание**:
+Унифицировать обработку ошибок по всему проекту, использовать `ErrorHandler` более последовательно.
+
+**Шаги выполнения**:
+1. Проанализировать текущее использование `ErrorHandler`
+2. Определить паттерны обработки ошибок:
    - Валидация входных данных
-   - Вызов сервисов экспорта
-   - ~200 строк
-
-4. **`Admin\Handlers\ImportHandler`** (обработка импорта)
-   - Обработка форм импорта
-   - Валидация файлов
-   - Вызов сервисов импорта
-   - ~250 строк
-
-5. **`Admin\Handlers\ScheduleHandler`** (обработка расписания)
-   - Управление расписанием бэкапов
-   - Обработка действий расписания
-   - ~150 строк
-
-6. **`Admin\Handlers\RecoveryHandler`** (обработка recovery)
-   - Управление snapshots
-   - Rollback операции
-   - История миграций
-   - ~200 строк
-
-7. **`Admin\Handlers\UserMergeHandler`** (обработка слияния пользователей)
-   - Preview пользователей
-   - Обработка выбора пользователей
-   - ~200 строк
-
-8. **`Admin\Services\NotificationService`** (сервис уведомлений)
-   - Показ success/error сообщений
-   - Редиректы с параметрами
-   - ~100 строк
-
-9. **`Admin\Services\ProgressService`** (сервис прогресса)
-   - Управление прогресс-баром
-   - Обновление статуса
-   - ~100 строк
-
-**Шаги**:
-1. Создать новую структуру директорий в `includes/Admin/`
-2. Выделить методы по функциональности
-3. Создать новые классы с зависимостями через конструктор
-4. Обновить регистрацию хуков в `Plugin.php`
-5. Протестировать каждый компонент отдельно
-6. Удалить старый `ExportImportAdmin.php`
-
-**Структура директорий**:
-```
-includes/Admin/
-├── AdminPageController.php
-├── Handlers/
-│   ├── ExportHandler.php
-│   ├── ImportHandler.php
-│   ├── ScheduleHandler.php
-│   ├── RecoveryHandler.php
-│   └── UserMergeHandler.php
-├── Views/
-│   ├── AdminPageView.php
-│   ├── ExportView.php
-│   ├── ImportView.php
-│   ├── HistoryView.php
-│   └── ScheduleView.php
-└── Services/
-    ├── NotificationService.php
-    └── ProgressService.php
-```
+   - Обработка файлов
+   - Обработка БД операций
+   - Обработка сетевых операций
+3. Создать специализированные исключения:
+   - `ValidationException`
+   - `FileOperationException`
+   - `DatabaseOperationException`
+   - `ImportException`
+   - `ExportException`
+4. Обновить `ErrorHandler` для работы с новыми исключениями
+5. Заменить прямые `wp_die()` на использование `ErrorHandler` где возможно
+6. Добавить логирование ошибок
 
 **Файлы для создания**:
-- Все перечисленные выше классы
+- `includes/Exceptions/ValidationException.php`
+- `includes/Exceptions/FileOperationException.php`
+- `includes/Exceptions/DatabaseOperationException.php`
+- `includes/Exceptions/ImportException.php`
+- `includes/Exceptions/ExportException.php`
 
 **Файлы для изменения**:
-- `includes/Plugin.php` - обновить регистрацию
-- `mksddn-migrate-content-core.php` - обновить загрузку
-
-**Критерии завершения**:
-- ✅ Каждый класс отвечает за одну задачу
-- ✅ Размер классов не превышает 300 строк (крупнейший класс ~600 строк, но это допустимо для сложных handlers)
-- ✅ Все зависимости инжектируются через конструктор
-- ✅ Функциональность полностью сохранена
-- ✅ Нет дублирования кода
-
-**Созданные классы:**
-- `AdminPageController` - главный контроллер страницы (~200 строк)
-- `AdminPageView` - представление для рендеринга HTML (~600 строк)
-- `ExportHandler` - обработка экспорта (~100 строк)
-- `ImportHandler` - обработка импорта (~500 строк)
-- `ScheduleHandler` - обработка расписания (~150 строк)
-- `RecoveryHandler` - обработка recovery (~150 строк)
-- `UserMergeHandler` - обработка слияния пользователей (~80 строк)
-- `NotificationService` - сервис уведомлений (~120 строк)
-- `ProgressService` - сервис прогресса (~80 строк)
-
-**Обновленные файлы:**
-- `includes/Plugin.php` - обновлена регистрация для использования нового контроллера
-
----
-
-#### ✅ Задача 2.2: Создание сервисного слоя валидации
-**Приоритет**: Высокий  
-**Сложность**: Средняя  
-**Время**: 3-4 часа
-
-**Описание**:
-Вынести всю валидацию в отдельный сервисный слой для переиспользования и централизованного управления.
-
-**Классы для создания**:
-
-1. **`Validation\FileValidator`**
-   - Валидация загружаемых файлов
-   - Проверка типов, размеров, расширений
-   - Проверка MIME типов
-
-2. **`Validation\ArchiveValidator`**
-   - Валидация структуры архива
-   - Проверка manifest.json
-   - Проверка checksums
-
-3. **`Validation\ImportDataValidator`**
-   - Валидация данных импорта
-   - Проверка обязательных полей
-   - Валидация типов данных
-
-4. **`Validation\ExportDataValidator`**
-   - Валидация данных экспорта
-   - Проверка прав доступа
-   - Валидация выбора контента
-
-**Шаги**:
-1. Создать директорию `includes/Validation/`
-2. Реализовать валидаторы с интерфейсом `ValidatorInterface`
-3. Заменить inline валидацию на вызовы валидаторов
-4. Добавить unit тесты для валидаторов
-
-**Файлы для создания**:
-- `includes/Validation/FileValidator.php`
-- `includes/Validation/ArchiveValidator.php`
-- `includes/Validation/ImportDataValidator.php`
-- `includes/Validation/ExportDataValidator.php`
-- `includes/Validation/ValidationResult.php` (DTO для результатов)
-
-**Критерии завершения**:
-- ✅ Вся валидация вынесена в отдельные классы
-- ✅ Валидаторы переиспользуются в разных местах
-- ✅ Единый формат возврата результатов валидации через `ValidationResult`
-- ✅ Легко добавлять новые правила валидации
-
-**Созданные классы:**
-- `ValidationResult` - DTO для результатов валидации
-- `FileValidator` - валидация загружаемых файлов
-- `ArchiveValidator` - валидация структуры архива
-- `ImportDataValidator` - валидация данных импорта
-- `ExportDataValidator` - валидация данных экспорта
-
----
-
-#### ✅ Задача 2.3: Создание сервиса обработки ошибок
-**Приоритет**: Средний  
-**Сложность**: Низкая  
-**Время**: 2-3 часа
-
-**Описание**:
-Унифицировать обработку ошибок через единый сервис.
-
-**Класс для создания**:
-
-**`Services\ErrorHandler`**
-- Централизованное логирование ошибок
-- Преобразование ошибок в пользовательские сообщения
-- Интеграция с WordPress error handling
-
-**Шаги**:
-1. Создать `includes/Services/ErrorHandler.php`
-2. Реализовать методы для разных типов ошибок
-3. Заменить разрозненную обработку ошибок на вызовы сервиса
-4. Добавить логирование в файл
-
-**Файлы для создания**:
 - `includes/Services/ErrorHandler.php`
+- Все handlers и сервисы
 
 **Критерии завершения**:
-- ✅ Единый подход к обработке ошибок
-- ✅ Все ошибки логируются через `ErrorHandler`
-- ✅ Пользовательские сообщения локализованы
-- ✅ Легко отслеживать ошибки в production
-
-**Созданные классы:**
-- `Services\ErrorHandler` - централизованная обработка ошибок
-
-### Результаты этапа 2:
-- ✅ Монолитный класс `ExportImportAdmin` (2041 строка) разделен на 9 специализированных классов
-- ✅ Каждый класс отвечает за одну задачу (SRP)
-- ✅ Создан сервисный слой валидации с переиспользуемыми компонентами
-- ✅ Создан централизованный сервис обработки ошибок
-- ✅ Все зависимости инжектируются через конструкторы
-- ✅ Код готов к дальнейшему рефакторингу и тестированию
-- ✅ Нет ошибок линтера
+- Единообразная обработка ошибок
+- Используются специализированные исключения
+- Логирование работает корректно
+- Пользовательские сообщения понятны
 
 ---
 
-## ✅ Этап 3: Dependency Injection и тестируемость - ЗАВЕРШЕН
-
-**Дата завершения**: 15 декабря 2025
-
-### Выполненные задачи:
-
-#### ✅ Задача 3.1: Создание простого DI контейнера
-**Созданные классы:**
-- `Core\ServiceContainer` - простой DI контейнер с поддержкой singleton и автоматическим разрешением зависимостей
-- `Core\ServiceProviderInterface` - интерфейс для service providers
-- `Core\ServiceContainerFactory` - фабрика для создания и настройки контейнера
-- `Core\ServiceProviders\AdminServiceProvider` - провайдер для admin-сервисов
-- `Core\ServiceProviders\CoreServiceProvider` - провайдер для core-сервисов (recovery, users, automation, archive)
-- `Core\ServiceProviders\ExportServiceProvider` - провайдер для export-сервисов
-- `Core\ServiceProviders\ImportServiceProvider` - провайдер для import-сервисов
-
-**Обновленные файлы:**
-- `includes/Plugin.php` - обновлен для использования DI контейнера через `ServiceContainerFactory`
-
-**Функциональность контейнера:**
-- Регистрация сервисов через factory callables или class names
-- Поддержка singleton и transient сервисов
-- Автоматическое разрешение зависимостей через reflection
-- Интеграция с WordPress hooks через `mksddn_mc_service_container_ready`
-
-#### ✅ Задача 3.2: Рефакторинг для улучшения тестируемости
-**Созданные wrappers:**
-- `Core\Wrappers\WpFunctionsWrapperInterface` - интерфейс для WordPress post функций
-- `Core\Wrappers\WpFunctionsWrapper` - обертка для wp_insert_post, wp_update_post, get_posts, WP_Query, get_page_by_path, get_post_meta, update_post_meta, get_post_thumbnail_id, get_acf_fields
-- `Core\Wrappers\WpUserFunctionsWrapperInterface` - интерфейс для WordPress user функций
-- `Core\Wrappers\WpUserFunctionsWrapper` - обертка для wp_insert_user, username_exists, get_current_user_id
-- `Core\Wrappers\WpFilesystemWrapperInterface` - интерфейс для WordPress filesystem функций
-- `Core\Wrappers\WpFilesystemWrapper` - обертка для wp_upload_dir, wp_handle_upload
-
-**Обновленные классы:**
-- `Import\ImportHandler` - обновлен для использования `WpFunctionsWrapper` и `WpUserFunctionsWrapper`
-- Wrappers зарегистрированы в `CoreServiceProvider` и доступны через контейнер
-
-**Результаты:**
-- ✅ Все основные WordPress функции обернуты в интерфейсы
-- ✅ Код легко тестируется с моками через dependency injection
-- ✅ Пример использования wrappers реализован в `ImportHandler`
-- ✅ Wrappers зарегистрированы в DI контейнере и доступны для всех сервисов
-
-### Результаты этапа 3:
-- ✅ Создан простой и эффективный DI контейнер с автоматическим разрешением зависимостей
-- ✅ Все сервисы зарегистрированы через service providers
-- ✅ Созданы wrappers для основных WordPress функций с интерфейсами
-- ✅ Плагин использует DI контейнер для управления зависимостями
-- ✅ Код готов к тестированию с моками
-- ✅ Нет ошибок линтера
-
----
-
-## ✅ Этап 4: Улучшение структуры кода - ЗАВЕРШЕН
-
-**Дата завершения**: 15 декабря 2025
-
-### Выполненные задачи:
-
-#### ✅ Задача 4.1: Вынос представления в отдельные шаблоны
-**Созданные компоненты:**
-- `Core\View\ViewRenderer` - базовый класс для рендеринга шаблонов с поддержкой статического метода `render_template()`
-- Директория `views/admin/` с шаблонами:
-  - `styles.php` - стили админки
-  - `full-site-section.php` - секция полного бэкапа
-  - `full-import-form.php` - форма импорта
-  - `user-preview.php` - preview пользователей
-  - `selected-content-section.php` - секция выбранного контента
-  - `selected-export-card.php` - карточка экспорта
-  - `selected-import-card.php` - карточка импорта
-  - `format-selector.php` - селектор формата
-  - `history-section.php` - секция истории
-  - `automation-section.php` - секция автоматизации
-  - `schedule-runs-table.php` - таблица запусков расписания
-
-**Обновленные классы:**
-- `Admin\Views\AdminPageView` - полностью рефакторен для использования шаблонов
-- Все методы рендеринга HTML заменены на вызовы `ViewRenderer::render()`
-- HTML код полностью вынесен в шаблоны
-
-**Результаты:**
-- ✅ Весь HTML вынесен в отдельные шаблоны
-- ✅ PHP классы не содержат HTML код
-- ✅ Шаблоны легко редактировать без изменения PHP кода
-- ✅ Поддержка локализации сохранена
-- ✅ Размер `AdminPageView` уменьшен с ~850 строк до ~450 строк
-
-#### ✅ Задача 4.2: Оптимизация загрузки файлов
-**Изменения:**
-- Удалены все `require_once` из `mksddn-migrate-content-core.php` (кроме autoloader)
-- Оставлен только вызов `ChunkServiceProvider::init()` для регистрации REST контроллера
-- Все классы теперь загружаются через autoloader
-
-**Результаты:**
-- ✅ Минимум `require_once` в core файле (только autoloader)
-- ✅ Все классы загружаются через autoloader
-- ✅ Плагин работает корректно
-- ✅ Улучшена производительность загрузки
-
-#### ✅ Задача 4.3: Создание DTO классов для передачи данных
-**Созданные DTO классы:**
-- `DataTransferObjects\ExportRequest` - запрос на экспорт с методами `is_full()`, `is_selected()`
-- `DataTransferObjects\ImportRequest` - запрос на импорт с методом `is_full()`
-- `DataTransferObjects\ExportResult` - результат экспорта с методами `success()`, `error()`
-- `DataTransferObjects\ImportResult` - результат импорта с методами `success()`, `error()`
-- `DataTransferObjects\FileUpload` - информация о загруженном файле с методами `is_archive()`, `is_json()`, `from_wp_upload()`
-
-**Результаты:**
-- ✅ Данные передаются через типизированные объекты
-- ✅ Улучшена читаемость кода
-- ✅ Легче валидировать данные
-- ✅ IDE лучше подсказывает при разработке
-- ✅ Все DTO классы имеют методы создания из массивов и статические фабричные методы
-
-### Результаты этапа 4:
-- ✅ HTML код полностью вынесен в шаблоны
-- ✅ Оптимизирована загрузка файлов через autoloader
-- ✅ Созданы DTO классы для типизированной передачи данных
-- ✅ Код стал более читаемым и поддерживаемым
-- ✅ Нет ошибок линтера
-
----
-
-## ✅ Этап 5: Оптимизация и производительность - ЗАВЕРШЕН
-
-**Дата завершения**: 15 декабря 2025
-
-### Выполненные задачи:
-
-#### ✅ Задача 5.1: Оптимизация запросов к БД
-**Созданные компоненты:**
-- `Core\BatchLoader` - класс для batch loading метаданных, терминов, ACF полей и attachments
-  - Методы для batch loading: `load_post_meta_batch()`, `load_thumbnails_batch()`, `load_terms_batch()`, `load_acf_fields_batch()`, `load_attachments_batch()`
-  - Методы для получения данных из кэша: `get_post_meta()`, `get_post_thumbnail_id()`, `get_terms()`, `get_acf_fields()`, `get_attachment()`
-  - Поддержка очистки кэша через `clear_cache()`
-
-**Оптимизированные классы:**
-- `ExportHandler` - оптимизирован для batch loading метаданных и терминов при экспорте множества постов
-  - Предзагрузка всех постов одним запросом
-  - Batch loading метаданных, thumbnails, ACF полей и терминов
-  - Использование BatchLoader вместо отдельных запросов
-- `AttachmentCollector` - оптимизирован для batch loading attachments
-  - Предзагрузка всех attachments одним запросом
-  - Использование BatchLoader для получения метаданных attachments
-- `HistoryRepository` - добавлено кэширование через WordPress transients
-  - Кэш на 5 минут для уменьшения запросов к options таблице
-  - Обновление кэша при изменении данных
-
-**Результаты:**
-- ✅ Устранены N+1 проблемы в ExportHandler и AttachmentCollector
-- ✅ Метаданные загружаются батчами вместо отдельных запросов
-- ✅ Термины загружаются батчами для всех постов сразу
-- ✅ ACF поля загружаются батчами
-- ✅ Attachments загружаются батчами
-- ✅ HistoryRepository использует кэширование через transients
-
-#### ✅ Задача 5.2: Ленивая загрузка компонентов
-**Обновленные компоненты:**
-- `Core\ServiceContainer` - добавлена поддержка lazy loading
-  - Параметр `$lazy` в методе `register()` для отложенной загрузки сервисов
-  - Сервисы с `lazy=true` загружаются только при первом обращении
-- `Plugin.php` - оптимизирована загрузка компонентов
-  - AdminPageController загружается только на admin страницах
-  - ScheduleManager загружается всегда (нужен для cron)
-- `AdminPageController` - уже оптимизирован для загрузки JS/CSS только на странице плагина
-  - Проверка hook перед enqueue скриптов
-
-**Результаты:**
-- ✅ Компоненты загружаются только когда нужны
-- ✅ AdminPageController загружается только на admin страницах
-- ✅ JS/CSS загружаются только на странице плагина
-- ✅ Уменьшено потребление памяти на фронтенде
-- ✅ Улучшена производительность загрузки страниц
-
-### Результаты этапа 5:
-- ✅ Создан BatchLoader для оптимизации запросов к БД
-- ✅ Устранены все N+1 проблемы в критичных местах
-- ✅ Добавлено кэширование для HistoryRepository
-- ✅ Реализована lazy loading в ServiceContainer
-- ✅ Оптимизирована загрузка компонентов в Plugin.php
-- ✅ JS/CSS загружаются только на нужных страницах
-- ✅ Производительность значительно улучшена
-- ✅ Нет ошибок линтера
-
----
-
-## ✅ Этап 6: Документация и финализация - ЗАВЕРШЕН
-
-**Дата завершения**: 15 декабря 2025
-
-### Выполненные задачи:
-
-#### ✅ Задача 6.1: Обновление PHPDoc документации
-**Приоритет**: Высокий  
-**Сложность**: Средняя  
-**Время**: 4-5 часов
+#### Задача 5.2: Оптимизация запросов к БД
+**Приоритет**: Низкий  
+**Оценка**: 2-3 часа  
+**Зависимости**: Нет
 
 **Описание**:
-Добавить полную PHPDoc документацию ко всем классам, методам и свойствам.
+Провести аудит запросов к БД и оптимизировать их, используя `BatchLoader` более эффективно.
 
-**Шаги**:
+**Шаги выполнения**:
+1. Найти все прямые запросы к БД (использование `$wpdb` напрямую)
+2. Определить места с N+1 проблемами
+3. Использовать `BatchLoader` для групповой загрузки данных
+4. Добавить кэширование где возможно
+5. Оптимизировать запросы в:
+   - `HistoryRepository`
+   - `UserDiffBuilder`
+   - `AttachmentCollector`
+   - `ContentCollector`
+6. Добавить индексы в кастомные таблицы (если есть)
+
+**Файлы для изменения**:
+- `includes/Recovery/HistoryRepository.php`
+- `includes/Users/UserDiffBuilder.php`
+- `includes/Media/AttachmentCollector.php`
+- `includes/Filesystem/ContentCollector.php`
+- Все классы с прямыми запросами к БД
+
+**Критерии завершения**:
+- Нет N+1 проблем
+- Используется `BatchLoader` где возможно
+- Запросы оптимизированы
+- Производительность улучшена
+
+---
+
+#### Задача 5.3: Улучшение документации кода
+**Приоритет**: Низкий  
+**Оценка**: 3-4 часа  
+**Зависимости**: Все предыдущие задачи
+
+**Описание**:
+Улучшить PHPDoc документацию для всех классов, методов и свойств согласно WordPress Coding Standards.
+
+**Шаги выполнения**:
 1. Проверить все классы на наличие PHPDoc
-2. Добавить недостающую документацию
-3. Убедиться в соответствии стандартам WordPress
-4. Добавить примеры использования где необходимо
+2. Добавить недостающие описания:
+   - `@since` для всех методов
+   - `@param` с типами и описаниями
+   - `@return` с типами и описаниями
+   - `@throws` для методов, которые могут выбрасывать исключения
+3. Добавить `@file` заголовки во все файлы (если отсутствуют)
+4. Обновить `@dependencies` в заголовках файлов
+5. Добавить примеры использования для сложных методов
+6. Проверить соответствие WordPress Coding Standards
 
-**Стандарты документации**:
-- `@since` для всех публичных методов
-- `@param` с типами и описаниями
-- `@return` с типами
-- `@throws` для исключений
-- `@see` для связанных методов
+**Файлы для изменения**:
+- Все файлы в `includes/`
 
 **Критерии завершения**:
-- ✅ Добавлены недостающие `@since` теги в ключевых классах (`Plugin`, `ExportHandler`, `ImportHandler`)
-- ✅ Улучшена документация конструкторов и публичных методов
-- ✅ Документация соответствует стандартам WordPress
-- ✅ IDE корректно подсказывает при разработке
-
-**Обновленные классы:**
-- `Plugin` - добавлены `@since` теги для всех методов
-- `ExportHandler` - добавлены `@since` теги и улучшена документация
-- `ImportHandler` - добавлены `@since` теги и улучшена документация конструктора
+- Все классы и методы задокументированы
+- Документация соответствует WPCS
+- Примеры использования добавлены где нужно
 
 ---
 
-#### ✅ Задача 6.2: Обновление readme.txt
+### Этап 6: Финализация
+
+#### Задача 6.1: Финальная проверка и рефакторинг
 **Приоритет**: Высокий  
-**Сложность**: Низкая  
-**Время**: 2-3 часа
+**Оценка**: 2-3 часа  
+**Зависимости**: Все предыдущие задачи
 
 **Описание**:
-Актуализировать `readme.txt` с описанием новой архитектуры после рефакторинга.
+Провести финальную проверку кода, исправить найденные проблемы, убедиться в соответствии стандартам.
 
-**Шаги**:
-1. Обновить описание архитектуры
-2. Добавить диаграммы взаимодействия компонентов (Mermaid)
-3. Описать новые компоненты
-4. Обновить примеры использования
-5. Добавить информацию о breaking changes (если есть)
-
-**Критерии завершения**:
-- ✅ Добавлен раздел "Architecture" в readme.txt
-- ✅ Описана новая архитектура с компонентами и паттернами
-- ✅ Добавлены диаграммы Mermaid (структура компонентов и flow запросов)
-- ✅ Описаны ключевые компоненты и их взаимодействие
-- ✅ Описана структура namespace
-
-**Добавленный контент:**
-- Диаграмма структуры компонентов (Mermaid)
-- Диаграмма flow запросов (Mermaid)
-- Описание ключевых компонентов по слоям
-- Описание используемых паттернов проектирования
-- Структура namespace
-
----
-
-#### ✅ Задача 6.3: Создание миграционного гайда
-**Приоритет**: Средний  
-**Сложность**: Низкая  
-**Время**: 1-2 часа
-
-**Описание**:
-Создать документ с описанием изменений для разработчиков, использующих плагин.
-
-**Содержание**:
-- Список изменений в API
-- Breaking changes
-- Рекомендации по миграции
-- Примеры нового использования
-
-**Файлы для создания**:
-- `MIGRATION_GUIDE.md`
-
-**Критерии завершения**:
-- ✅ Создан файл `MIGRATION_GUIDE.md`
-- ✅ Описаны все основные изменения архитектуры
-- ✅ Описаны breaking changes
-- ✅ Добавлены примеры миграции кода
-- ✅ Описаны extension points и hooks
-- ✅ Добавлены примеры использования нового API
-- ✅ Описаны улучшения производительности
-
-**Содержание гайда:**
-- Обзор изменений
-- Детальное описание 10 основных изменений
-- Breaking changes с примерами
-- Extension points для разработчиков
-- Руководство по тестированию
-- Примеры использования нового API
-- Описание улучшений производительности
-
-### Результаты этапа 6:
-- ✅ Улучшена PHPDoc документация в ключевых классах
-- ✅ Обновлен readme.txt с описанием архитектуры и диаграммами
-- ✅ Создан миграционный гайд для разработчиков
-- ✅ Документация соответствует стандартам WordPress
-- ✅ Нет ошибок линтера
-
----
-
-## Порядок выполнения задач
-
-### Фаза 1: Фундамент (Неделя 1) ✅ ЗАВЕРШЕНО
-1. ✅ Задача 1.1: Унификация namespace
-2. ✅ Задача 1.2: Создание интерфейсов
-3. ✅ Задача 1.3: Конфигурационный класс
-
-### Фаза 2: Разделение ответственности (Неделя 2-3) ✅ ЗАВЕРШЕНО
-4. ✅ Задача 2.1: Разделение ExportImportAdmin
-5. ✅ Задача 2.2: Сервис валидации
-6. ✅ Задача 2.3: Сервис обработки ошибок
-
-### Фаза 3: Dependency Injection (Неделя 4)
-7. Задача 3.1: DI контейнер
-8. Задача 3.2: Улучшение тестируемости
-
-### Фаза 4: Структура кода (Неделя 5)
-9. Задача 4.1: Вынос представления
-10. Задача 4.2: Оптимизация загрузки
-11. Задача 4.3: DTO классы
-
-### Фаза 5: Оптимизация (Неделя 6)
-12. Задача 5.1: Оптимизация БД
-13. Задача 5.2: Ленивая загрузка
-
-### Фаза 6: Документация (Неделя 7) ✅ ЗАВЕРШЕНО
-14. ✅ Задача 6.1: PHPDoc
-15. ✅ Задача 6.2: Обновление readme.txt
-16. ✅ Задача 6.3: Миграционный гайд
-
----
-
-## Критерии успеха рефакторинга
-
-1. **Качество кода**
-   - Соответствие WordPress Coding Standards
-   - Соблюдение SOLID принципов
-   - Отсутствие дублирования кода
-   - Высокая читаемость
-
-2. **Архитектура**
-   - Четкое разделение ответственности
-   - Низкая связанность компонентов
-   - Высокая связность внутри компонентов
-   - Легкость расширения
-
-3. **Тестируемость**
-   - Все компоненты можно тестировать изолированно
-   - Легко создавать моки
-   - Покрытие тестами критичных компонентов
-
-4. **Производительность**
-   - Нет деградации производительности
+**Шаги выполнения**:
+1. Запустить линтеры:
+   - PHPCS с WordPress Coding Standards
+   - PHPStan или Psalm для статического анализа
+   - ESLint для JavaScript (если есть)
+2. Исправить все найденные проблемы
+3. Проверить безопасность:
+   - Валидация входных данных
+   - Санитизация выходных данных
+   - Nonce проверки
+   - Capability проверки
+4. Проверить производительность:
+   - Нет утечек памяти
    - Оптимизированы запросы к БД
-   - Эффективное использование памяти
+   - Эффективное использование ресурсов
+5. Обновить `readme.txt` с новой архитектурой
+6. Создать CHANGELOG с описанием изменений
 
-5. **Поддерживаемость**
-   - Полная документация
-   - Понятная структура проекта
-   - Легко добавлять новый функционал
+**Файлы для изменения**:
+- Все файлы проекта
+- `readme.txt`
+- `CHANGELOG.md` (создать)
+
+**Критерии завершения**:
+- Линтеры не находят проблем
+- Код соответствует стандартам
+- Безопасность проверена
+- Производительность приемлема
+- Документация обновлена
 
 ---
+
+## Метрики успеха
+
+### До рефакторинга
+- Размер `ImportRequestHandler`: ~770 строк
+- Количество классов без интерфейсов: ~15
+- Конфликты имен: 2 (`ExportHandler`, `ImportHandler`)
+- Прямое создание зависимостей: множественные случаи
+
+### После рефакторинга
+- Размер `ImportRequestHandler`: < 200 строк
+- Все ключевые классы имеют интерфейсы
+- Нет конфликтов имен
+- Все зависимости через Service Container
+- Соответствие WPCS: 100%
 
 ## Риски и митигация
 
-### Риск 1: Breaking changes для существующих пользователей
+### Риск 1: Нарушение функциональности при рефакторинге
+**Вероятность**: Средняя  
+**Влияние**: Высокое  
 **Митигация**: 
-- Сохранять обратную совместимость не нужно, так как плагин еще не опубликован
-- Версионировать API изменения
-- Предоставить migration guide
-
-### Риск 2: Регрессии функциональности
-**Митигация**:
 - Тщательное тестирование после каждого этапа
-- Сохранение существующих тестов
-- Постепенный рефакторинг с проверкой на каждом шаге
+- Постепенный рефакторинг с проверкой работоспособности
 
-### Риск 3: Увеличение сложности для новых разработчиков
+### Риск 2: Увеличение времени разработки
+**Вероятность**: Средняя  
+**Влияние**: Среднее  
 **Митигация**:
-- Подробная документация
-- Примеры использования
-- Четкая структура проекта
+- Четкое планирование и приоритизация
+- Фокус на критичных задачах сначала
+- Регулярные проверки прогресса
 
-### Риск 4: Производительность
-**Митигация**:
-- Профилирование на каждом этапе
-- Бенчмарки до и после
-- Оптимизация критичных путей
+## Контакты и вопросы
 
----
-
-## Метрики для отслеживания прогресса
-
-1. **Размер классов**
-   - Цель: не более 300 строк на класс
-   - Текущее: ExportImportAdmin - 2041 строка
-
-2. **Цикломатическая сложность**
-   - Цель: не более 10 на метод
-   - Измерять через статический анализ
-
-3. **Покрытие тестами**
-   - Цель: минимум 70% для критичных компонентов
-
-4. **Количество дублирования**
-   - Цель: менее 5% дублированного кода
-
-5. **Время загрузки страницы**
-   - Цель: не увеличить более чем на 10%
+При возникновении вопросов или неясностей в процессе рефакторинга:
+1. Изучить существующую документацию в `readme.txt`
+2. Проверить соответствие WordPress Coding Standards
+3. Следовать принципам SOLID, DRY, KISS
+4. При необходимости обратиться к архитектурным решениям в проекте
 
 ---
 
-## Заключение
-
-Данный план рефакторинга направлен на улучшение архитектуры плагина при сохранении всей функциональности. Выполнение плана должно быть постепенным, с тщательным тестированием на каждом этапе. После завершения рефакторинга плагин будет легче поддерживать, тестировать и расширять.
-
-**Общее время**: ~50-60 часов  
-**Рекомендуемый подход**: Постепенный, по 1-2 задачи в неделю  
-**Приоритет**: Начать с Фазы 1 (Фундамент)
-
----
-
-## Примечания для ИИ моделей
-
-При продолжении работы над рефакторингом:
-
-1. **Всегда проверяй контекст**: Изучи текущее состояние файлов перед изменениями
-2. **Следуй стандартам**: WordPress Coding Standards, SOLID, DRY, KISS
-3. **Тестируй изменения**: После каждого изменения проверяй работоспособность
-4. **Документируй**: Обновляй документацию параллельно с кодом
-5. **Сохраняй функциональность**: Не ломай существующий функционал
-6. **Используй версионирование**: Отмечай breaking changes
-7. **Коммить постепенно**: Небольшие, логичные коммиты
-
-**Важные файлы для понимания контекста**:
-- `mksddn-migrate-content/trunk/readme.txt` - описание плагина
-- `.cursor/rules/cursorrules.mdc` - правила разработки
-- `includes/Plugin.php` - точка входа
-- `includes/Admin/ExportImportAdmin.php` - главный класс для рефакторинга
-
-**Полезные команды**:
-- `grep -r "namespace" includes/` - найти все namespace
-- `find includes/ -name "*.php" | xargs wc -l` - подсчет строк
-- `phpcs --standard=WordPress includes/` - проверка стандартов
+**Последнее обновление**: 2024-12-15  
+**Статус**: В процессе планирования
 

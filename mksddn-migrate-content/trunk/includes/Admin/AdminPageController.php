@@ -8,14 +8,19 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
-use MksDdn\MigrateContent\Admin\Handlers\ExportHandler;
-use MksDdn\MigrateContent\Admin\Handlers\ImportHandler;
-use MksDdn\MigrateContent\Admin\Handlers\RecoveryHandler;
-use MksDdn\MigrateContent\Admin\Handlers\ScheduleHandler;
-use MksDdn\MigrateContent\Admin\Handlers\UserMergeHandler;
+use MksDdn\MigrateContent\Admin\Handlers\ExportRequestHandler;
+use MksDdn\MigrateContent\Admin\Handlers\ImportRequestHandler;
+use MksDdn\MigrateContent\Admin\Handlers\RecoveryRequestHandler;
+use MksDdn\MigrateContent\Admin\Handlers\ScheduleRequestHandler;
+use MksDdn\MigrateContent\Admin\Handlers\UserMergeRequestHandler;
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
+use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Automation\ScheduleManager;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
@@ -45,37 +50,37 @@ class AdminPageController {
 	/**
 	 * Export handler.
 	 *
-	 * @var ExportHandler
+	 * @var ExportRequestHandlerInterface
 	 */
-	private ExportHandler $export_handler;
+	private ExportRequestHandlerInterface $export_handler;
 
 	/**
 	 * Import handler.
 	 *
-	 * @var ImportHandler
+	 * @var ImportRequestHandlerInterface
 	 */
-	private ImportHandler $import_handler;
+	private ImportRequestHandlerInterface $import_handler;
 
 	/**
 	 * Schedule handler.
 	 *
-	 * @var ScheduleHandler
+	 * @var ScheduleRequestHandlerInterface
 	 */
-	private ScheduleHandler $schedule_handler;
+	private ScheduleRequestHandlerInterface $schedule_handler;
 
 	/**
 	 * Recovery handler.
 	 *
-	 * @var RecoveryHandler
+	 * @var RecoveryRequestHandlerInterface
 	 */
-	private RecoveryHandler $recovery_handler;
+	private RecoveryRequestHandlerInterface $recovery_handler;
 
 	/**
 	 * User merge handler.
 	 *
-	 * @var UserMergeHandler
+	 * @var UserMergeRequestHandlerInterface
 	 */
-	private UserMergeHandler $user_merge_handler;
+	private UserMergeRequestHandlerInterface $user_merge_handler;
 
 	/**
 	 * Notification service.
@@ -101,24 +106,24 @@ class AdminPageController {
 	/**
 	 * Constructor.
 	 *
-	 * @param AdminPageView|null      $view              View instance.
-	 * @param ExportHandler|null      $export_handler    Export handler.
-	 * @param ImportHandler|null      $import_handler    Import handler.
-	 * @param ScheduleHandler|null    $schedule_handler  Schedule handler.
-	 * @param RecoveryHandler|null    $recovery_handler  Recovery handler.
-	 * @param UserMergeHandler|null   $user_merge_handler User merge handler.
-	 * @param NotificationService|null $notifications    Notification service.
-	 * @param ProgressService|null    $progress          Progress service.
-	 * @param UserPreviewStore|null   $preview_store     User preview store.
+	 * @param AdminPageView|null                        $view              View instance.
+	 * @param ExportRequestHandlerInterface|null        $export_handler    Export handler.
+	 * @param ImportRequestHandlerInterface|null        $import_handler    Import handler.
+	 * @param ScheduleRequestHandlerInterface|null      $schedule_handler  Schedule handler.
+	 * @param RecoveryRequestHandlerInterface|null      $recovery_handler  Recovery handler.
+	 * @param UserMergeRequestHandlerInterface|null     $user_merge_handler User merge handler.
+	 * @param NotificationService|null                  $notifications    Notification service.
+	 * @param ProgressService|null                      $progress          Progress service.
+	 * @param UserPreviewStore|null                     $preview_store     User preview store.
 	 * @since 1.0.0
 	 */
 	public function __construct(
 		?AdminPageView $view = null,
-		?ExportHandler $export_handler = null,
-		?ImportHandler $import_handler = null,
-		?ScheduleHandler $schedule_handler = null,
-		?RecoveryHandler $recovery_handler = null,
-		?UserMergeHandler $user_merge_handler = null,
+		?ExportRequestHandlerInterface $export_handler = null,
+		?ImportRequestHandlerInterface $import_handler = null,
+		?ScheduleRequestHandlerInterface $schedule_handler = null,
+		?RecoveryRequestHandlerInterface $recovery_handler = null,
+		?UserMergeRequestHandlerInterface $user_merge_handler = null,
 		?NotificationService $notifications = null,
 		?ProgressService $progress = null,
 		?UserPreviewStore $preview_store = null
@@ -127,11 +132,11 @@ class AdminPageController {
 		$this->progress          = $progress ?? new ProgressService();
 		$this->preview_store     = $preview_store ?? new UserPreviewStore();
 		$this->view              = $view ?? new AdminPageView();
-		$this->export_handler    = $export_handler ?? new ExportHandler( $this->notifications );
-		$this->import_handler    = $import_handler ?? new ImportHandler( null, null, null, null, $this->preview_store, $this->notifications, $this->progress );
-		$this->schedule_handler  = $schedule_handler ?? new ScheduleHandler( null, $this->notifications );
-		$this->recovery_handler  = $recovery_handler ?? new RecoveryHandler( null, null, null, $this->notifications );
-		$this->user_merge_handler = $user_merge_handler ?? new UserMergeHandler( $this->preview_store, $this->notifications );
+		$this->export_handler    = $export_handler ?? new ExportRequestHandler( $this->notifications );
+		$this->import_handler    = $import_handler ?? new ImportRequestHandler( null, null, null, null, $this->preview_store, $this->notifications, $this->progress );
+		$this->schedule_handler  = $schedule_handler ?? new ScheduleRequestHandler( null, $this->notifications );
+		$this->recovery_handler  = $recovery_handler ?? new RecoveryRequestHandler( null, null, null, $this->notifications );
+		$this->user_merge_handler = $user_merge_handler ?? new UserMergeRequestHandler( $this->preview_store, $this->notifications );
 	}
 
 	/**

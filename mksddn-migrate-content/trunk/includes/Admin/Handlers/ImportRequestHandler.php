@@ -1,7 +1,7 @@
 <?php
 /**
- * @file: ImportHandler.php
- * @description: Handler for import operations
+ * @file: ImportRequestHandler.php
+ * @description: Handler for import request operations
  * @dependencies: Archive\Extractor, Import\ImportHandler, Recovery\SnapshotManager, Recovery\HistoryRepository, Recovery\JobLock, Chunking\ChunkJobRepository, Users\UserDiffBuilder, Users\UserPreviewStore, Filesystem\FullContentImporter, Support\SiteUrlGuard, Support\FilesystemHelper, Admin\Services\NotificationService, Admin\Services\ProgressService
  * @created: 2024-12-15
  */
@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Archive\Extractor;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
+use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Filesystem\FullContentImporter;
 use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
@@ -29,11 +30,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Handler for import operations.
+ * Handler for import request operations.
  *
  * @since 1.0.0
  */
-class ImportHandler {
+class ImportRequestHandler implements ImportRequestHandlerInterface {
 
 	/**
 	 * Archive extractor.

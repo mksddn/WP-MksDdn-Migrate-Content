@@ -1,7 +1,7 @@
 <?php
 /**
- * @file: ScheduleHandler.php
- * @description: Handler for schedule operations
+ * @file: ScheduleRequestHandler.php
+ * @description: Handler for schedule request operations
  * @dependencies: Automation\ScheduleManager, Admin\Services\NotificationService
  * @created: 2024-12-15
  */
@@ -10,6 +10,7 @@ namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Automation\ScheduleManager;
+use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
@@ -18,11 +19,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Handler for schedule operations.
+ * Handler for schedule request operations.
  *
  * @since 1.0.0
  */
-class ScheduleHandler {
+class ScheduleRequestHandler implements ScheduleRequestHandlerInterface {
 
 	/**
 	 * Schedule manager.
