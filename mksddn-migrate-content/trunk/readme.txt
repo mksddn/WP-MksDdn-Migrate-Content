@@ -73,6 +73,60 @@ Filesystem operations run through `WP_Filesystem`, honor capability checks, and 
 4. User merge dialog showing archive/current comparison.
 5. Scheduling screen with cron settings and retention status.
 
+== Architecture ==
+
+The plugin follows SOLID principles and WordPress Coding Standards with a clean, modular architecture:
+
+= Service Container & Dependency Injection =
+* Centralized `ServiceContainer` manages all dependencies
+* Service Providers (`CoreServiceProvider`, `AdminServiceProvider`, `ExportServiceProvider`, `ImportServiceProvider`, `ChunkServiceProvider`) register services
+* All dependencies resolved through container, eliminating direct instantiation
+* Full support for interface-based dependency injection
+
+= Request Handlers =
+* `ExportRequestHandler` - handles export requests
+* `ImportRequestHandler` - delegates to specialized import services
+* `RecoveryRequestHandler` - manages snapshots and rollbacks
+* `ScheduleRequestHandler` - handles automation scheduling
+* `UserMergeRequestHandler` - processes user merge operations
+* All handlers implement corresponding interfaces for testability
+
+= Service Layer =
+* `SelectedContentImportService` - handles selected content imports
+* `FullSiteImportService` - manages full site imports
+* `ImportFileValidator` - validates uploaded files
+* `ImportPayloadPreparer` - prepares import payloads
+* `ResponseHandler` - manages redirects and status messages
+* `NotificationService` - handles user notifications
+* `ProgressService` - tracks operation progress
+
+= Contracts (Interfaces) =
+All key components implement interfaces:
+* `ExporterInterface`, `ImporterInterface`
+* `MediaCollectorInterface`, `SnapshotManagerInterface`
+* `HistoryRepositoryInterface`, `ChunkJobRepositoryInterface`
+* `ScheduleManagerInterface`, `UserPreviewStoreInterface`
+* `NotificationServiceInterface`, `ProgressServiceInterface`
+* Request handler interfaces for all handlers
+
+= Error Handling =
+* Specialized exceptions: `ValidationException`, `FileOperationException`, `DatabaseOperationException`, `ImportException`, `ExportException`
+* Centralized `ErrorHandler` for consistent error processing
+* Proper logging and user-friendly error messages
+
+= Performance =
+* `BatchLoader` for optimized database queries (prevents N+1 problems)
+* Efficient media collection with batch processing
+* Chunked transfer for large files
+* Memory-efficient streaming for large archives
+
+= Security =
+* All admin operations check `current_user_can('manage_options')`
+* Nonce verification for all forms and AJAX requests
+* Input sanitization using WordPress sanitization functions
+* Output escaping with `esc_html()`, `esc_attr()`, `esc_url()`
+* File upload validation with MIME type checking
+
 == Changelog ==
 
 = 1.0.0 =
@@ -83,6 +137,11 @@ Filesystem operations run through `WP_Filesystem`, honor capability checks, and 
 * Chunked upload/download pipeline with resume tokens, progress UI, and safe fallbacks.
 * Snapshots, history log, global job lock, and one-click rollback for every import.
 * User merge matrix covering new, conflicting, and existing accounts with role/metasync choices.
-* Automation & scheduling module with cron frequency selector, retention, and manual “Run now”.
+* Automation & scheduling module with cron frequency selector, retention, and manual "Run now".
+* Refactored architecture following SOLID principles with Service Container and Dependency Injection.
+* All components use interfaces (Contracts) for improved testability and maintainability.
+* Separated concerns: Request Handlers, Services, and Views are clearly divided.
+* Specialized exception handling for better error management.
+* Optimized database queries using BatchLoader to prevent N+1 problems.
 
 
