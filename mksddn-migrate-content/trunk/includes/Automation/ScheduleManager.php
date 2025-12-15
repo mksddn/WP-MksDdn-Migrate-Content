@@ -5,9 +5,10 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Automation;
+namespace MksDdn\MigrateContent\Automation;
 
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Contracts\ScheduleManagerInterface;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -17,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles cron setup and manual runs.
  */
-class ScheduleManager {
+class ScheduleManager implements ScheduleManagerInterface {
 
 	public const CRON_HOOK = 'mksddn_mc_cron_run';
 

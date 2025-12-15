@@ -5,11 +5,12 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Recovery;
+namespace MksDdn\MigrateContent\Recovery;
 
-use Mksddn_MC\Database\FullDatabaseExporter;
-use Mksddn_MC\Filesystem\ContentCollector;
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Contracts\SnapshotManagerInterface;
+use MksDdn\MigrateContent\Database\FullDatabaseExporter;
+use MksDdn\MigrateContent\Filesystem\ContentCollector;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use ZipArchive;
 
@@ -20,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Manages snapshot archives stored under uploads.
  */
-class SnapshotManager {
+class SnapshotManager implements SnapshotManagerInterface {
 
 	private const DEFAULT_RETENTION = 3;
 
@@ -184,17 +185,19 @@ class SnapshotManager {
 	/**
 	 * Remove snapshot directory.
 	 *
-	 * @param string $snapshot_id Snapshot ID.
-	 * @return void
+	 * @param string $id Snapshot ID.
+	 * @return bool|WP_Error True on success, false or error on failure.
 	 */
-	public function delete( string $snapshot_id ): void {
-		$snapshot = $this->get( $snapshot_id );
+	public function delete( string $id ): bool|WP_Error {
+		$snapshot = $this->get( $id );
 		if ( ! $snapshot ) {
-			return;
+			return new WP_Error( 'mksddn_snapshot_not_found', __( 'Snapshot not found.', 'mksddn-migrate-content' ) );
 		}
 
 		$dir = dirname( $snapshot['path'] );
-		$this->remove_directory( $dir );
+		$result = $this->remove_directory( $dir );
+
+		return $result;
 	}
 
 	/**
@@ -239,13 +242,14 @@ class SnapshotManager {
 	 * Remove directory recursively.
 	 *
 	 * @param string $dir Target directory.
+	 * @return bool True on success, false on failure.
 	 */
-	private function remove_directory( string $dir ): void {
+	private function remove_directory( string $dir ): bool {
 		if ( ! is_dir( $dir ) ) {
-			return;
+			return false;
 		}
 
-		FilesystemHelper::delete( $dir, true );
+		return FilesystemHelper::delete( $dir, true );
 	}
 }
 

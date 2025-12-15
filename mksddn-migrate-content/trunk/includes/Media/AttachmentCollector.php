@@ -5,8 +5,10 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Media;
+namespace MksDdn\MigrateContent\Media;
 
+use MksDdn\MigrateContent\Contracts\MediaCollectorInterface;
+use MksDdn\MigrateContent\Core\BatchLoader;
 use WP_Post;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -16,7 +18,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Scans post content/meta to find referenced attachments.
  */
-class AttachmentCollector {
+class AttachmentCollector implements MediaCollectorInterface {
+
+	/**
+	 * Batch loader for optimizing database queries.
+	 *
+	 * @var BatchLoader
+	 */
+	private BatchLoader $batch_loader;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param BatchLoader|null $batch_loader Optional batch loader.
+	 */
+	public function __construct( ?BatchLoader $batch_loader = null ) {
+		$this->batch_loader = $batch_loader ?? new BatchLoader();
+	}
 
 	/**
 	 * Collect attachment data for the provided post.
@@ -30,6 +48,9 @@ class AttachmentCollector {
 		if ( empty( $attachment_ids ) ) {
 			return null;
 		}
+
+		// Preload all attachments in batch.
+		$this->batch_loader->load_attachments_batch( $attachment_ids );
 
 		$collection = new AttachmentCollection();
 
@@ -64,8 +85,8 @@ class AttachmentCollector {
 	private function discover_attachment_ids( WP_Post $post ): array {
 		$ids = array();
 
-		// Featured media.
-		$thumbnail_id = get_post_thumbnail_id( $post );
+		// Featured media - use batch loader.
+		$thumbnail_id = $this->batch_loader->get_post_thumbnail_id( $post->ID );
 		if ( $thumbnail_id ) {
 			$ids[] = (int) $thumbnail_id;
 		}
@@ -134,16 +155,27 @@ class AttachmentCollector {
 	 * @return int[]
 	 */
 	private function probe_meta_for_attachments( int $post_id ): array {
-		$meta   = get_post_meta( $post_id );
+		// Use batch loader for optimized queries.
+		$meta   = $this->batch_loader->get_post_meta( $post_id );
 		$result = array();
+		$potential_ids = array();
 
 		foreach ( $meta as $values ) {
 			foreach ( (array) $values as $value ) {
 				if ( is_numeric( $value ) ) {
-					$attachment = get_post( (int) $value );
-					if ( $attachment && 'attachment' === $attachment->post_type ) {
-						$result[] = (int) $value;
-					}
+					$potential_ids[] = (int) $value;
+				}
+			}
+		}
+
+		if ( ! empty( $potential_ids ) ) {
+			// Load attachments in batch.
+			$this->batch_loader->load_attachments_batch( $potential_ids );
+
+			foreach ( $potential_ids as $attachment_id ) {
+				$attachment = $this->batch_loader->get_attachment( $attachment_id );
+				if ( $attachment && 'attachment' === $attachment->post_type ) {
+					$result[] = $attachment_id;
 				}
 			}
 		}
@@ -159,10 +191,14 @@ class AttachmentCollector {
 	 * @return array|null
 	 */
 	private function build_manifest_entry( int $attachment_id, int $parent_id ): ?array {
-		$attachment = get_post( $attachment_id );
+		// Use batch loader for optimized queries.
+		$attachment = $this->batch_loader->get_attachment( $attachment_id );
 		if ( ! $attachment || 'attachment' !== $attachment->post_type ) {
 			return null;
 		}
+
+		// Load meta for attachment in batch if needed.
+		$attachment_meta = $this->batch_loader->get_post_meta( $attachment_id );
 
 		$file_path = get_attached_file( $attachment_id );
 		if ( ! $file_path || ! file_exists( $file_path ) ) {
@@ -173,6 +209,9 @@ class AttachmentCollector {
 		$filename = wp_basename( $file_path );
 		$target   = 'media/' . $attachment_id . '-' . $filename;
 
+		// Get alt text from cached meta.
+		$alt_text = $attachment_meta['_wp_attachment_image_alt'] ?? '';
+
 		return array(
 			'original_id'   => $attachment_id,
 			'parent'        => $parent_id,
@@ -181,8 +220,8 @@ class AttachmentCollector {
 			'filesize'      => filesize( $file_path ),
 			'checksum'      => $hash,
 			'source_url'    => wp_get_attachment_url( $attachment_id ),
-			'title'         => get_the_title( $attachment_id ),
-			'alt'           => get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ),
+			'title'         => $attachment->post_title,
+			'alt'           => is_string( $alt_text ) ? $alt_text : '',
 			'caption'       => $attachment->post_excerpt,
 			'description'   => $attachment->post_content,
 			'archive_path'  => $target,

@@ -5,13 +5,14 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Chunking;
+namespace MksDdn\MigrateContent\Chunking;
 
+use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
+use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
-use WP_REST_Server;
 use WP_REST_Request;
-use Mksddn_MC\Filesystem\FullContentExporter;
-use Mksddn_MC\Support\FilesystemHelper;
+use WP_REST_Server;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -19,12 +20,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class ChunkRestController {
 
-	private ChunkJobRepository $repository;
+	private ChunkJobRepositoryInterface $repository;
 
 	private int $chunk_size = 5242880; // 5 MB.
 
-	public function __construct() {
-		$this->repository = new ChunkJobRepository();
+	/**
+	 * Constructor.
+	 *
+	 * @param ChunkJobRepositoryInterface $repository Chunk job repository.
+	 * @since 1.0.0
+	 */
+	public function __construct( ChunkJobRepositoryInterface $repository ) {
+		$this->repository = $repository;
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
 

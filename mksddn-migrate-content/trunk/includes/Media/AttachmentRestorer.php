@@ -5,12 +5,11 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Media;
+namespace MksDdn\MigrateContent\Media;
 
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_Post;
-use WP_Query;
 use const \ABSPATH;
 use function \delete_post_meta;
 use function \get_attached_file;
@@ -23,7 +22,6 @@ use function \sanitize_textarea_field;
 use function \set_post_thumbnail;
 use function \update_post_meta;
 use function \wp_get_attachment_url;
-use function \wp_reset_postdata;
 use function \wp_update_post;
 use function \media_handle_sideload;
 use function \is_wp_error;
@@ -116,28 +114,25 @@ class AttachmentRestorer {
 			return null;
 		}
 
-		$query = new WP_Query(
-			array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'meta_query'     => array(
-					array(
-						'key'   => '_mksddn_mc_checksum',
-						'value' => $checksum,
-					),
-				),
+		// Use direct SQL query for better performance with meta_key lookup.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Optimized direct query with indexed meta_key lookup, caching not needed for one-time lookup.
+		$attachment_id = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT p.ID FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+				WHERE p.post_type = 'attachment'
+				AND p.post_status = 'inherit'
+				AND pm.meta_key = %s
+				AND pm.meta_value = %s
+				LIMIT 1",
+				'_mksddn_mc_checksum',
+				$checksum
 			)
 		);
 
-		if ( empty( $query->posts ) ) {
-			wp_reset_postdata();
-		} else {
-			$attachment_id = (int) $query->posts[0];
-			wp_reset_postdata();
-
-			return $attachment_id;
+		if ( $attachment_id ) {
+			return (int) $attachment_id;
 		}
 
 		// Fallback: search by filename and compare actual file hash.
@@ -146,29 +141,28 @@ class AttachmentRestorer {
 			return null;
 		}
 
-		$by_file = new WP_Query(
-			array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'posts_per_page' => 10,
-				'fields'         => 'ids',
-				'meta_query'     => array(
-					array(
-						'key'     => '_wp_attached_file',
-						'value'   => $filename,
-						'compare' => 'LIKE',
-					),
-				),
+		// Use direct SQL query for filename lookup.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Optimized direct query with indexed meta_key lookup, caching not needed for one-time lookup.
+		$attachment_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+				WHERE p.post_type = 'attachment'
+				AND p.post_status = 'inherit'
+				AND pm.meta_key = %s
+				AND pm.meta_value LIKE %s
+				LIMIT 10",
+				'_wp_attached_file',
+				$wpdb->esc_like( $filename ) . '%'
 			)
 		);
 
-		if ( empty( $by_file->posts ) ) {
-			wp_reset_postdata();
+		if ( empty( $attachment_ids ) ) {
 			return null;
 		}
 
-		foreach ( $by_file->posts as $attachment_id ) {
-			$path = get_attached_file( $attachment_id );
+		foreach ( $attachment_ids as $attachment_id ) {
+			$path = get_attached_file( (int) $attachment_id );
 			if ( ! $path || ! file_exists( $path ) ) {
 				continue;
 			}
@@ -178,13 +172,11 @@ class AttachmentRestorer {
 				continue;
 			}
 
-			update_post_meta( $attachment_id, '_mksddn_mc_checksum', $checksum );
-			wp_reset_postdata();
+			update_post_meta( (int) $attachment_id, '_mksddn_mc_checksum', $checksum );
 
 			return (int) $attachment_id;
 		}
 
-		wp_reset_postdata();
 		return null;
 	}
 

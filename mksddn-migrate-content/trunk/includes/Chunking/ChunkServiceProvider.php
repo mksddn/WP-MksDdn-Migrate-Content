@@ -1,27 +1,59 @@
 <?php
 /**
- * Registers chunking services.
- *
- * @package MksDdn_Migrate_Content
+ * @file: ChunkServiceProvider.php
+ * @description: Service provider for chunking-related services
+ * @dependencies: Core\ServiceContainer, Core\ServiceProviderInterface
+ * @created: 2024-12-15
  */
 
-namespace Mksddn_MC\Chunking;
+namespace MksDdn\MigrateContent\Chunking;
+
+use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
+use MksDdn\MigrateContent\Core\ServiceContainer;
+use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ChunkServiceProvider {
+/**
+ * Service provider for chunking-related services.
+ *
+ * @since 1.0.0
+ */
+class ChunkServiceProvider implements ServiceProviderInterface {
 
-	public static function init(): void {
-		static $booted = false;
+	/**
+	 * Register chunking services.
+	 *
+	 * @param ServiceContainer $container Service container.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function register( ServiceContainer $container ): void {
+		// Register ChunkJobRepository.
+		$container->register(
+			ChunkJobRepositoryInterface::class,
+			function ( ServiceContainer $container ) {
+				return new ChunkJobRepository();
+			}
+		);
+		$container->register(
+			ChunkJobRepository::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ChunkJobRepositoryInterface::class );
+			}
+		);
 
-		if ( $booted ) {
-			return;
-		}
-
-		$booted = true;
-		new ChunkRestController();
+		// Register ChunkRestController.
+		$container->register(
+			ChunkRestController::class,
+			function ( ServiceContainer $container ) {
+				return new ChunkRestController(
+					$container->get( ChunkJobRepositoryInterface::class )
+				);
+			}
+		);
 	}
 }
 

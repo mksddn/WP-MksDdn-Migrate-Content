@@ -5,11 +5,12 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Archive;
+namespace MksDdn\MigrateContent\Archive;
 
+use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use ZipArchive;
-use Mksddn_MC\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,7 +19,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Extracts manifest + payload with integrity validation.
  */
-class Extractor {
+class Extractor implements ArchiveHandlerInterface {
+
+	/**
+	 * Create archive from data (not implemented for extractor).
+	 *
+	 * @param array $payload Payload data.
+	 * @param array $meta   Manifest metadata.
+	 * @param array $assets Additional files to embed.
+	 * @return string|WP_Error Always returns error as extractor cannot create archives.
+	 * @since 1.0.0
+	 */
+	public function create_archive( array $payload, array $meta, array $assets = array() ): string|WP_Error {
+		return new WP_Error( 'mksddn_mc_not_implemented', __( 'Extractor cannot create archives.', 'mksddn-migrate-content' ) );
+	}
 
 	/**
 	 * Extract archive contents and return normalized data.

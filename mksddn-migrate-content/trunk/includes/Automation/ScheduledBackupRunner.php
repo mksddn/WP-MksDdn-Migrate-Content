@@ -5,13 +5,13 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Automation;
+namespace MksDdn\MigrateContent\Automation;
 
-use Mksddn_MC\Filesystem\FullContentExporter;
-use Mksddn_MC\Recovery\HistoryRepository;
-use Mksddn_MC\Recovery\JobLock;
-use Mksddn_MC\Support\FilenameBuilder;
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Recovery\HistoryRepository;
+use MksDdn\MigrateContent\Recovery\JobLock;
+use MksDdn\MigrateContent\Support\FilenameBuilder;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {

@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Automation;
+namespace MksDdn\MigrateContent\Automation;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

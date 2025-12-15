@@ -5,15 +5,18 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Export;
+namespace MksDdn\MigrateContent\Export;
 
-use Mksddn_MC\Archive\Packer;
-use Mksddn_MC\Media\AttachmentCollector;
-use Mksddn_MC\Media\AttachmentCollection;
-use Mksddn_MC\Options\OptionsExporter;
-use Mksddn_MC\Selection\ContentSelection;
-use Mksddn_MC\Support\FilenameBuilder;
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Archive\Packer;
+use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ExporterInterface;
+use MksDdn\MigrateContent\Contracts\MediaCollectorInterface;
+use MksDdn\MigrateContent\Core\BatchLoader;
+use MksDdn\MigrateContent\Media\AttachmentCollection;
+use MksDdn\MigrateContent\Options\OptionsExporter;
+use MksDdn\MigrateContent\Selection\ContentSelection;
+use MksDdn\MigrateContent\Support\FilenameBuilder;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_Post;
 
@@ -23,8 +26,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Handles export operations for pages, options pages and forms.
+ *
+ * @since 1.0.0
  */
-class ExportHandler {
+class ExportHandler implements ExporterInterface {
 
 	private const EXPORT_TYPES = array(
 		'page' => 'export_page',
@@ -43,9 +48,16 @@ class ExportHandler {
 	/**
 	 * Attachment collector.
 	 */
-	private AttachmentCollector $media_collector;
+	private MediaCollectorInterface $media_collector;
 
 	private OptionsExporter $options_exporter;
+
+	/**
+	 * Batch loader for optimizing database queries.
+	 *
+	 * @var BatchLoader
+	 */
+	private BatchLoader $batch_loader;
 
 	/**
 	 * Whether to gather media files for the current export.
@@ -55,18 +67,24 @@ class ExportHandler {
 	/**
 	 * Setup handler.
 	 *
-	 * @param Packer|null              $packer           Optional packer.
-	 * @param AttachmentCollector|null $media_collector  Optional collector.
-	 * @param OptionsExporter|null     $options_exporter Optional options exporter.
+	 * @param Packer|null                  $packer           Optional packer.
+	 * @param MediaCollectorInterface|null $media_collector  Optional collector.
+	 * @param OptionsExporter|null         $options_exporter Optional options exporter.
+	 * @param BatchLoader|null             $batch_loader     Optional batch loader.
+	 * @since 1.0.0
 	 */
-	public function __construct( ?Packer $packer = null, ?AttachmentCollector $media_collector = null, ?OptionsExporter $options_exporter = null ) {
+	public function __construct( ?Packer $packer = null, ?MediaCollectorInterface $media_collector = null, ?OptionsExporter $options_exporter = null, ?BatchLoader $batch_loader = null ) {
 		$this->packer           = $packer ?? new Packer();
-		$this->media_collector  = $media_collector ?? new AttachmentCollector();
+		$this->media_collector  = $media_collector ?? new \MksDdn\MigrateContent\Media\AttachmentCollector();
 		$this->options_exporter = $options_exporter ?? new OptionsExporter();
+		$this->batch_loader     = $batch_loader ?? new BatchLoader();
 	}
 
 	/**
 	 * Handle export dispatch.
+	 *
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function export_single_page(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
@@ -88,6 +106,7 @@ class ExportHandler {
 	 * @param ContentSelection $selection Selection object.
 	 * @param string           $format    Requested format.
 	 * @return void
+	 * @since 1.0.0
 	 */
 	public function export_selected_content( ContentSelection $selection, string $format = 'archive' ): void {
 		if ( ! $selection->has_items() && ! $selection->has_options() ) {
@@ -179,9 +198,57 @@ class ExportHandler {
 
 		$combined_media = new AttachmentCollection();
 
+		// Collect all post IDs grouped by post type for batch loading.
+		$all_post_ids = array();
+		$posts_by_id  = array();
+		$post_types   = array();
+
+		foreach ( $selection->get_items() as $type => $ids ) {
+			$post_types[] = $type;
+			foreach ( $ids as $id ) {
+				$all_post_ids[] = (int) $id;
+			}
+		}
+
+		// Load all posts in batch.
+		if ( ! empty( $all_post_ids ) ) {
+			$posts = \get_posts(
+				array(
+					'post__in'       => $all_post_ids,
+					'post_type'      => array_unique( $post_types ),
+					'posts_per_page' => -1,
+					'post_status'    => 'any',
+				)
+			);
+
+			foreach ( $posts as $post ) {
+				$posts_by_id[ $post->ID ] = $post;
+			}
+
+			// Preload meta, thumbnails, and ACF fields in batch.
+			$this->batch_loader->load_post_meta_batch( $all_post_ids );
+			$this->batch_loader->load_thumbnails_batch( $all_post_ids );
+			$this->batch_loader->load_acf_fields_batch( $all_post_ids );
+
+			// Preload taxonomy terms for posts.
+			$post_type_ids = array();
+			foreach ( $posts_by_id as $post ) {
+				if ( 'post' === $post->post_type ) {
+					$post_type_ids[] = $post->ID;
+				}
+			}
+
+			if ( ! empty( $post_type_ids ) ) {
+				$taxonomies = \get_object_taxonomies( 'post', 'names' );
+				foreach ( $taxonomies as $taxonomy ) {
+					$this->batch_loader->load_terms_batch( $post_type_ids, $taxonomy );
+				}
+			}
+		}
+
 		foreach ( $selection->get_items() as $type => $ids ) {
 			foreach ( $ids as $id ) {
-				$post = \get_post( $id );
+				$post = $posts_by_id[ $id ] ?? null;
 				if ( ! $post ) {
 					continue;
 				}
@@ -235,6 +302,11 @@ class ExportHandler {
 	 * @return array
 	 */
 	private function prepare_post_data( WP_Post $post, ?AttachmentCollection $media = null ): array {
+		// Use batch loader for optimized queries.
+		$meta_data = $this->batch_loader->get_post_meta( $post->ID );
+		$acf_fields = $this->batch_loader->get_acf_fields( $post->ID );
+		$thumbnail_id = $this->batch_loader->get_post_thumbnail_id( $post->ID );
+
 		$data = array(
 			'type'       => $post->post_type,
 			'ID'         => $post->ID,
@@ -245,9 +317,9 @@ class ExportHandler {
 			'status'     => $post->post_status,
 			'author'     => $post->post_author,
 			'date'       => $post->post_date_gmt,
-			'acf_fields' => function_exists( 'get_fields' ) ? get_fields( $post->ID ) : array(),
-			'meta'       => \get_post_meta( $post->ID ),
-			'featured_media' => \get_post_thumbnail_id( $post ),
+			'acf_fields' => $acf_fields,
+			'meta'       => $meta_data,
+			'featured_media' => $thumbnail_id,
 		);
 
 		if ( 'post' === $post->post_type ) {
@@ -283,21 +355,13 @@ class ExportHandler {
 		$result     = array();
 
 		foreach ( $taxonomies as $taxonomy ) {
-			$terms = \wp_get_object_terms( $post_id, $taxonomy );
-			if ( \is_wp_error( $terms ) || empty( $terms ) ) {
+			// Use batch loader for optimized queries.
+			$terms = $this->batch_loader->get_terms( $post_id, $taxonomy );
+			if ( empty( $terms ) ) {
 				continue;
 			}
 
-			$result[ $taxonomy ] = array_map(
-				static function ( $term ) {
-					return array(
-						'slug'        => $term->slug,
-						'name'        => $term->name,
-						'description' => $term->description,
-					);
-				},
-				$terms
-			);
+			$result[ $taxonomy ] = $terms;
 		}
 
 		return $result;
@@ -310,7 +374,10 @@ class ExportHandler {
 	 * @return array
 	 */
 	private function prepare_form_data( WP_Post $form, ?AttachmentCollection $media = null ): array {
-		$fields_config = \get_post_meta( $form->ID, '_fields_config', true );
+		// Use batch loader for optimized queries.
+		$meta_data = $this->batch_loader->get_post_meta( $form->ID );
+		$acf_fields = $this->batch_loader->get_acf_fields( $form->ID );
+		$fields_config = $meta_data['_fields_config'] ?? '';
 
 		$data = array(
 			'type'          => 'forms',
@@ -319,10 +386,10 @@ class ExportHandler {
 			'content'       => $form->post_content,
 			'excerpt'       => $form->post_excerpt,
 			'slug'          => $form->post_name,
-			'fields_config' => $fields_config,
-			'fields'        => json_decode( $fields_config, true ),
-			'acf_fields'    => function_exists( 'get_fields' ) ? get_fields( $form->ID ) : array(),
-			'meta'          => \get_post_meta( $form->ID ),
+			'fields_config' => is_string( $fields_config ) ? $fields_config : '',
+			'fields'        => is_string( $fields_config ) ? json_decode( $fields_config, true ) : array(),
+			'acf_fields'    => $acf_fields,
+			'meta'          => $meta_data,
 		);
 
 		if ( $media && $media->has_items() ) {

@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Filesystem;
+namespace MksDdn\MigrateContent\Filesystem;
 
 use WP_Error;
 use ZipArchive;

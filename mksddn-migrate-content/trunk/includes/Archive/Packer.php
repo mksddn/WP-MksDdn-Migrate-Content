@@ -5,10 +5,11 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Archive;
+namespace MksDdn\MigrateContent\Archive;
 
+use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
-use Mksddn_MC\Support\FilesystemHelper;
 use ZipArchive;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -18,9 +19,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Creates archives containing manifest + payload.
  */
-class Packer {
+class Packer implements ArchiveHandlerInterface {
 
 	private const FORMAT_VERSION = 1;
+
+	/**
+	 * Extract archive contents (not implemented for packer).
+	 *
+	 * @param string $file_path Archive file path.
+	 * @return array|WP_Error Always returns error as packer cannot extract archives.
+	 * @since 1.0.0
+	 */
+	public function extract( string $file_path ): array|WP_Error {
+		return new WP_Error( 'mksddn_mc_not_implemented', __( 'Packer cannot extract archives.', 'mksddn-migrate-content' ) );
+	}
 
 	/**
 	 * Build archive and return a temporary filepath.

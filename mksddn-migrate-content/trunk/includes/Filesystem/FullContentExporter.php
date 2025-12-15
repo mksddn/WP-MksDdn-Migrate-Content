@@ -5,9 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Filesystem;
+namespace MksDdn\MigrateContent\Filesystem;
 
-use Mksddn_MC\Database\FullDatabaseExporter;
+use MksDdn\MigrateContent\Database\FullDatabaseExporter;
 use WP_Error;
 use ZipArchive;
 

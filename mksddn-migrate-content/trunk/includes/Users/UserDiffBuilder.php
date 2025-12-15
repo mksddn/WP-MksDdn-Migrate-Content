@@ -1,13 +1,15 @@
 <?php
 /**
- * Builds comparison between current users and archive payload.
- *
- * @package MksDdn_Migrate_Content
+ * @file: UserDiffBuilder.php
+ * @description: Builds comparison between current users and archive payload
+ * @dependencies: UserDiffBuilderInterface, FullArchivePayload
+ * @created: 2024-12-15
  */
 
-namespace Mksddn_MC\Users;
+namespace MksDdn\MigrateContent\Users;
 
-use Mksddn_MC\Filesystem\FullArchivePayload;
+use MksDdn\MigrateContent\Contracts\UserDiffBuilderInterface;
+use MksDdn\MigrateContent\Filesystem\FullArchivePayload;
 use WP_Error;
 use WP_Roles;
 use WP_User;
@@ -18,14 +20,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Generates normalized structures for user selection UI.
+ *
+ * @since 1.0.0
  */
-class UserDiffBuilder {
+class UserDiffBuilder implements UserDiffBuilderInterface {
 
 	/**
 	 * Build diff data based on archive payload and current site users.
 	 *
 	 * @param string $archive_path Absolute archive path.
-	 * @return array|WP_Error
+	 * @return array<string, mixed>|WP_Error Diff data with incoming users, counts, and table info, or WP_Error on failure.
+	 * @since 1.0.0
 	 */
 	public function build( string $archive_path ) {
 		$payload = FullArchivePayload::read( $archive_path );
@@ -56,10 +61,11 @@ class UserDiffBuilder {
 	}
 
 	/**
-	 * Extract remote users and basic metadata.
+	 * Extract remote users and basic metadata from database dump.
 	 *
-	 * @param array $database Database dump.
-	 * @return array
+	 * @param array<string, mixed> $database Database dump array.
+	 * @return array<string, mixed> Remote users data with prefix, table names, users map, and meta.
+	 * @since 1.0.0
 	 */
 	private function extract_remote_users( array $database ): array {
 		$tables         = isset( $database['tables'] ) && is_array( $database['tables'] ) ? $database['tables'] : array();
@@ -118,8 +124,9 @@ class UserDiffBuilder {
 	/**
 	 * Group user meta rows by user ID.
 	 *
-	 * @param array $meta_rows Meta rows from dump.
-	 * @return array
+	 * @param array<int, array<string, mixed>> $meta_rows Meta rows from dump.
+	 * @return array<int, array<int, array<string, mixed>>> Meta grouped by user ID.
+	 * @since 1.0.0
 	 */
 	private function group_meta_by_user( array $meta_rows ): array {
 		$grouped = array();
@@ -135,7 +142,9 @@ class UserDiffBuilder {
 			}
 
 			$grouped[ $user_id ][] = array(
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Not a DB query, processing array data from archive dump.
 				'meta_key'   => isset( $row['meta_key'] ) ? sanitize_text_field( (string) $row['meta_key'] ) : '',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Not a DB query, processing array data from archive dump.
 				'meta_value' => $row['meta_value'] ?? '',
 			);
 		}
@@ -146,9 +155,10 @@ class UserDiffBuilder {
 	/**
 	 * Detect table name with suffix.
 	 *
-	 * @param array  $tables Table list.
-	 * @param string $suffix Table suffix.
-	 * @return string|null
+	 * @param array<string, mixed> $tables Table list.
+	 * @param string                $suffix Table suffix (e.g., 'users', 'usermeta').
+	 * @return string|null Table name or null if not found.
+	 * @since 1.0.0
 	 */
 	private function find_table_name( array $tables, string $suffix ): ?string {
 		$suffix_length = strlen( $suffix );
@@ -166,9 +176,10 @@ class UserDiffBuilder {
 	/**
 	 * Resolve remote role slugs from meta rows.
 	 *
-	 * @param array  $meta_rows Meta rows.
-	 * @param string $capabilities_key Serialized capabilities key.
-	 * @return array
+	 * @param array<int, array<string, mixed>> $meta_rows Meta rows for user.
+	 * @param string                            $capabilities_key Serialized capabilities key.
+	 * @return array<int, string> Array of role slugs.
+	 * @since 1.0.0
 	 */
 	private function resolve_remote_roles( array $meta_rows, string $capabilities_key ): array {
 		foreach ( $meta_rows as $row ) {
@@ -195,7 +206,8 @@ class UserDiffBuilder {
 	/**
 	 * Collect current site users.
 	 *
-	 * @return array
+	 * @return array<string, array<string, string>> Local users map keyed by email (lowercase).
+	 * @since 1.0.0
 	 */
 	private function collect_local_users(): array {
 		$result = array();
@@ -228,11 +240,12 @@ class UserDiffBuilder {
 	}
 
 	/**
-	 * Build combined list for UI.
+	 * Build combined list for UI with conflict detection.
 	 *
-	 * @param array $remote Remote users map.
-	 * @param array $local  Local users map.
-	 * @return array
+	 * @param array<string, mixed> $remote Remote users map.
+	 * @param array<string, array<string, string>> $local  Local users map.
+	 * @return array<int, array<string, mixed>> Combined user list with status indicators.
+	 * @since 1.0.0
 	 */
 	private function combine_users( array $remote, array $local ): array {
 		$entries = array();
@@ -259,8 +272,9 @@ class UserDiffBuilder {
 	/**
 	 * Count conflicts in incoming list.
 	 *
-	 * @param array $incoming Incoming users.
-	 * @return int
+	 * @param array<int, array<string, mixed>> $incoming Incoming users list.
+	 * @return int Number of conflicts.
+	 * @since 1.0.0
 	 */
 	private function count_conflicts( array $incoming ): int {
 		$total = 0;
@@ -276,8 +290,9 @@ class UserDiffBuilder {
 	/**
 	 * Convert role slugs to labels.
 	 *
-	 * @param array $roles Role slugs.
-	 * @return string
+	 * @param array<int, string> $roles Role slugs.
+	 * @return string Translated role label.
+	 * @since 1.0.0
 	 */
 	private function format_role_label( array $roles ): string {
 		if ( empty( $roles ) ) {

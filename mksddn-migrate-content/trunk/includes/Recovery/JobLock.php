@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Recovery;
+namespace MksDdn\MigrateContent\Recovery;
 
 use WP_Error;
 

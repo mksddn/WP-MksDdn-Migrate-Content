@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Selection;
+namespace MksDdn\MigrateContent\Selection;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -25,15 +25,30 @@ class SelectionBuilder {
 	public function from_request( array $request ): ContentSelection {
 		$selection = new ContentSelection();
 
-		foreach ( $this->resolve_post_type_keys( $request ) as $type ) {
-			$field = sprintf( 'selected_%s_ids', $type );
-			if ( empty( $request[ $field ] ) ) {
+		// Process all fields that match the pattern.
+		foreach ( array_keys( $request ) as $field ) {
+			if ( ! preg_match( '/^selected_(.+)_ids$/', $field, $matches ) ) {
 				continue;
 			}
 
-			$ids = array_map( 'absint', (array) $request[ $field ] );
-			foreach ( $ids as $id ) {
-				$selection->add_item( $type, $id );
+			$type = sanitize_key( $matches[1] );
+			if ( '' === $type ) {
+				continue;
+			}
+
+			// Check if field exists and has values.
+			if ( ! isset( $request[ $field ] ) ) {
+				continue;
+			}
+
+			$values = (array) $request[ $field ];
+			
+			// Process IDs directly.
+			foreach ( $values as $value ) {
+				$id = absint( $value );
+				if ( $id > 0 ) {
+					$selection->add_item( $type, $id );
+				}
 			}
 		}
 
@@ -48,37 +63,6 @@ class SelectionBuilder {
 		}
 
 		return $selection;
-	}
-
-	/**
-	 * Determine which post-type keys are present in the request.
-	 *
-	 * @param array $request Raw request.
-	 * @return string[]
-	 */
-	private function resolve_post_type_keys( array $request ): array {
-		$keys = array();
-
-		$legacy = array_map( 'sanitize_key', (array) ( $request['export_post_types'] ?? array() ) );
-		if ( ! empty( $legacy ) ) {
-			$keys = array_merge( $keys, $legacy );
-		}
-
-		foreach ( array_keys( $request ) as $field ) {
-			if ( ! preg_match( '/^selected_(.+)_ids$/', $field, $matches ) ) {
-				continue;
-			}
-
-			$type = sanitize_key( $matches[1] );
-
-			if ( '' === $type ) {
-				continue;
-			}
-
-			$keys[] = $type;
-		}
-
-		return array_values( array_unique( $keys ) );
 	}
 }
 

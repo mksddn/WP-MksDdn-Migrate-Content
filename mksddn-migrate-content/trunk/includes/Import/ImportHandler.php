@@ -5,12 +5,15 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Import;
+namespace MksDdn\MigrateContent\Import;
 
+use MksDdn\MigrateContent\Contracts\ImporterInterface;
+use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapperInterface;
+use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
+use MksDdn\MigrateContent\Media\AttachmentRestorer;
+use MksDdn\MigrateContent\Options\OptionsImporter;
 use WP_Error;
 use WP_Post;
-use Mksddn_MC\Media\AttachmentRestorer;
-use Mksddn_MC\Options\OptionsImporter;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,8 +21,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Handles importing pages, options pages, and forms.
+ *
+ * @since 1.0.0
  */
-class ImportHandler {
+class ImportHandler implements ImporterInterface {
 
 	/**
 	 * Attachment restorer.
@@ -29,21 +34,53 @@ class ImportHandler {
 	private OptionsImporter $options_importer;
 
 	/**
+	 * WordPress functions wrapper.
+	 *
+	 * @var WpFunctionsWrapperInterface
+	 */
+	private WpFunctionsWrapperInterface $wp_functions;
+
+	/**
+	 * WordPress user functions wrapper.
+	 *
+	 * @var WpUserFunctionsWrapperInterface
+	 */
+	private WpUserFunctionsWrapperInterface $wp_user_functions;
+
+	/**
 	 * Loader callback for media files (archives only).
 	 *
 	 * @var callable|null
 	 */
 	private $media_file_loader = null;
 
-	public function __construct( ?AttachmentRestorer $media_restorer = null, ?OptionsImporter $options_importer = null ) {
-		$this->media_restorer  = $media_restorer ?? new AttachmentRestorer();
+	/**
+	 * Constructor.
+	 *
+	 * @param AttachmentRestorer|null            $media_restorer   Optional media restorer.
+	 * @param OptionsImporter|null               $options_importer Optional options importer.
+	 * @param WpFunctionsWrapperInterface|null   $wp_functions     Optional WordPress functions wrapper.
+	 * @param WpUserFunctionsWrapperInterface|null $wp_user_functions Optional WordPress user functions wrapper.
+	 * @since 1.0.0
+	 */
+	public function __construct(
+		?AttachmentRestorer $media_restorer = null,
+		?OptionsImporter $options_importer = null,
+		?WpFunctionsWrapperInterface $wp_functions = null,
+		?WpUserFunctionsWrapperInterface $wp_user_functions = null
+	) {
+		$this->media_restorer   = $media_restorer ?? new AttachmentRestorer();
 		$this->options_importer = $options_importer ?? new OptionsImporter();
+		$this->wp_functions      = $wp_functions ?? new \MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapper();
+		$this->wp_user_functions = $wp_user_functions ?? new \MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapper();
 	}
 
 	/**
 	 * Set loader used to fetch files from archive.
 	 *
 	 * @param callable|null $loader Loader callback.
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function set_media_file_loader( ?callable $loader ): void {
 		$this->media_file_loader = $loader;
@@ -53,7 +90,8 @@ class ImportHandler {
 	 * Import bundle containing multiple posts/options.
 	 *
 	 * @param array $data Bundle payload.
-	 * @return bool
+	 * @return bool True on success, false on failure.
+	 * @since 1.0.0
 	 */
 	public function import_bundle( array $data ): bool {
 		$items = isset( $data['items'] ) && is_array( $data['items'] ) ? $data['items'] : array();
@@ -79,6 +117,7 @@ class ImportHandler {
 	 *
 	 * @param array $data Data array containing page information.
 	 * @return bool True on success, false on failure.
+	 * @since 1.0.0
 	 */
 	public function import_single_page( array $data ): bool {
 		if ( ! $this->validate_page_data( $data ) ) {
@@ -86,7 +125,7 @@ class ImportHandler {
 		}
 
 		$post_type = in_array( $data['type'] ?? 'page', array( 'post', 'page' ), true ) ? $data['type'] : 'page';
-		$existing  = get_page_by_path( $data['slug'], OBJECT, $post_type );
+		$existing  = $this->wp_functions->get_page_by_path( $data['slug'], 'OBJECT', $post_type );
 		$post_data = $this->prepare_post_data( $data, $post_type );
 
 		$post_id = $existing ? $this->update_post( $existing, $post_data ) : $this->create_post( $post_data );
@@ -126,7 +165,7 @@ class ImportHandler {
 		}
 
 		if ( isset( $data['featured_media'] ) ) {
-			update_post_meta( $post_id, '_mksddn_original_thumbnail', (int) $data['featured_media'] );
+			$this->wp_functions->update_post_meta( $post_id, '_mksddn_original_thumbnail', (int) $data['featured_media'] );
 		}
 
 		return $this->media_restorer->restore(
@@ -175,7 +214,7 @@ class ImportHandler {
 			'post_name'    => sanitize_title( $data['slug'] ),
 			'post_type'    => $post_type,
 			'post_status'  => sanitize_key( $data['status'] ?? 'publish' ),
-			'post_author'  => absint( $data['author'] ?? get_current_user_id() ),
+			'post_author'  => absint( $data['author'] ?? $this->wp_user_functions->get_current_user_id() ),
 			'post_date_gmt'=> isset( $data['date'] ) ? sanitize_text_field( $data['date'] ) : current_time( 'mysql', true ),
 		);
 	}
@@ -189,7 +228,7 @@ class ImportHandler {
 	 */
 	private function update_post( WP_Post $existing, array $post_data ): int|WP_Error {
 		$post_data['ID'] = $existing->ID;
-		return wp_update_post( $post_data );
+		return $this->wp_functions->update_post( $post_data );
 	}
 
 	/**
@@ -199,7 +238,7 @@ class ImportHandler {
 	 * @return int|WP_Error
 	 */
 	private function create_post( array $post_data ): int|WP_Error {
-		return wp_insert_post( $post_data );
+		return $this->wp_functions->insert_post( $post_data );
 	}
 
 	/**

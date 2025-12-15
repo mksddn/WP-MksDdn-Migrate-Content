@@ -5,13 +5,13 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Filesystem;
+namespace MksDdn\MigrateContent\Filesystem;
 
-use Mksddn_MC\Database\FullDatabaseImporter;
-use Mksddn_MC\Support\DomainReplacer;
-use Mksddn_MC\Support\FilesystemHelper;
-use Mksddn_MC\Support\SiteUrlGuard;
-use Mksddn_MC\Users\UserMergeApplier;
+use MksDdn\MigrateContent\Database\FullDatabaseImporter;
+use MksDdn\MigrateContent\Support\DomainReplacer;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Users\UserMergeApplier;
 use WP_Error;
 use ZipArchive;
 

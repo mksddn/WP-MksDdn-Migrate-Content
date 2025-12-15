@@ -5,8 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Users;
+namespace MksDdn\MigrateContent\Users;
 
+use MksDdn\MigrateContent\Contracts\UserMergeApplierInterface;
 use WP_Error;
 use WP_User;
 
@@ -17,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles importing/updating users from archive payload.
  */
-class UserMergeApplier {
+class UserMergeApplier implements UserMergeApplierInterface {
 
 	/**
 	 * Summary of last merge operation.
@@ -65,7 +66,9 @@ class UserMergeApplier {
 				continue;
 			}
 			$meta_by_user[ $user_id ][] = array(
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Not a DB query, processing array data from archive dump.
 				'meta_key'   => isset( $meta['meta_key'] ) ? (string) $meta['meta_key'] : '',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Not a DB query, processing array data from archive dump.
 				'meta_value' => $meta['meta_value'] ?? '',
 			);
 		}

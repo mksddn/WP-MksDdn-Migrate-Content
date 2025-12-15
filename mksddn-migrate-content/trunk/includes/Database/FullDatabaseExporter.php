@@ -1,11 +1,12 @@
 <?php
 /**
- * Dumps WordPress database tables into an array structure.
- *
- * @package MksDdn_Migrate_Content
+ * @file: FullDatabaseExporter.php
+ * @description: Dumps WordPress database tables into an array structure
+ * @dependencies: wpdb
+ * @created: 2024-12-15
  */
 
-namespace Mksddn_MC\Database;
+namespace MksDdn\MigrateContent\Database;
 
 use wpdb;
 
@@ -15,6 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Export tables that belong to the current installation.
+ *
+ * @since 1.0.0
  */
 class FullDatabaseExporter {
 
@@ -22,7 +25,8 @@ class FullDatabaseExporter {
 	 * Export all tables using the current blog prefix.
 	 *
 	 * @global wpdb $wpdb WordPress DB abstraction.
-	 * @return array
+	 * @return array<string, mixed> Database dump with tables, site URLs, and paths.
+	 * @since 1.0.0
 	 */
 	public function export(): array {
 		global $wpdb;
@@ -62,7 +66,8 @@ class FullDatabaseExporter {
 	 * Find tables for current site prefix.
 	 *
 	 * @param wpdb $wpdb Database object.
-	 * @return string[]
+	 * @return array<int, string> Array of table names.
+	 * @since 1.0.0
 	 */
 	private function detect_tables( wpdb $wpdb ): array {
 		$like   = $wpdb->esc_like( $wpdb->prefix ) . '%';
