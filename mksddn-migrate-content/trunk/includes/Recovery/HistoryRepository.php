@@ -1,8 +1,9 @@
 <?php
 /**
- * Stores lightweight job history in options table.
- *
- * @package MksDdn_Migrate_Content
+ * @file: HistoryRepository.php
+ * @description: Stores lightweight job history in options table
+ * @dependencies: HistoryRepositoryInterface
+ * @created: 2024-12-15
  */
 
 namespace MksDdn\MigrateContent\Recovery;
@@ -15,6 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Persists history entries for exports/imports/rollbacks.
+ *
+ * @since 1.0.0
  */
 class HistoryRepository implements HistoryRepositoryInterface {
 
@@ -33,9 +36,10 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	/**
 	 * Start new entry.
 	 *
-	 * @param string $type    Entry type.
-	 * @param array  $context Additional meta.
-	 * @return string Entry ID.
+	 * @param string                $type    Entry type (e.g., 'export', 'import', 'rollback').
+	 * @param array<string, mixed>  $context Additional meta data.
+	 * @return string Entry ID (UUID).
+	 * @since 1.0.0
 	 */
 	public function start( string $type, array $context = array() ): string {
 		$id     = wp_generate_uuid4();
@@ -60,9 +64,11 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	/**
 	 * Complete entry with final status.
 	 *
-	 * @param string $id      Entry ID.
-	 * @param string $status  success|error|cancelled.
-	 * @param array  $context Extra context.
+	 * @param string                $id      Entry ID.
+	 * @param string                $status  Final status: 'success', 'error', or 'cancelled'.
+	 * @param array<string, mixed>  $context Extra context data.
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function finish( string $id, string $status, array $context = array() ): void {
 		$entries = $this->load();
@@ -83,8 +89,10 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	/**
 	 * Update context for specific entry.
 	 *
-	 * @param string $id      Entry ID.
-	 * @param array  $context Context overrides.
+	 * @param string                $id      Entry ID.
+	 * @param array<string, mixed>  $context Context overrides.
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function update_context( string $id, array $context ): void {
 		$entries = $this->load();
@@ -103,8 +111,9 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	/**
 	 * Fetch all entries (descending).
 	 *
-	 * @param int $limit Optional limit.
-	 * @return array
+	 * @param int $limit Optional limit. Default 20.
+	 * @return array<int, array<string, mixed>> Array of history entries.
+	 * @since 1.0.0
 	 */
 	public function all( int $limit = 20 ): array {
 		return array_slice( $this->load(), 0, $limit );
@@ -114,7 +123,8 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	 * Fetch entry by ID.
 	 *
 	 * @param string $id Entry ID.
-	 * @return array|null
+	 * @return array<string, mixed>|null Entry data or null if not found.
+	 * @since 1.0.0
 	 */
 	public function find( string $id ): ?array {
 		foreach ( $this->load() as $entry ) {
@@ -127,9 +137,11 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	}
 
 	/**
-	 * Persist entries.
+	 * Persist entries to database and cache.
 	 *
-	 * @param array $entries Entries to store.
+	 * @param array<int, array<string, mixed>> $entries Entries to store.
+	 * @return void
+	 * @since 1.0.0
 	 */
 	private function persist( array $entries ): void {
 		update_option( self::OPTION, $entries, false );
@@ -139,9 +151,10 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	}
 
 	/**
-	 * Load existing entries.
+	 * Load existing entries from cache or database.
 	 *
-	 * @return array
+	 * @return array<int, array<string, mixed>> Array of history entries.
+	 * @since 1.0.0
 	 */
 	private function load(): array {
 		// Return cached entries if available.
@@ -168,10 +181,11 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	}
 
 	/**
-	 * Sanitize context data.
+	 * Sanitize context data to prevent XSS and ensure data integrity.
 	 *
-	 * @param array $context Context data.
-	 * @return array
+	 * @param array<string, mixed> $context Context data.
+	 * @return array<string, string> Sanitized context data.
+	 * @since 1.0.0
 	 */
 	private function sanitize_context( array $context ): array {
 		$allowed = array(

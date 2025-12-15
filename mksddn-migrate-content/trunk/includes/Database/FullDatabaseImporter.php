@@ -1,8 +1,9 @@
 <?php
 /**
- * Restores WordPress database tables from exported data.
- *
- * @package MksDdn_Migrate_Content
+ * @file: FullDatabaseImporter.php
+ * @description: Restores WordPress database tables from exported data
+ * @dependencies: wpdb, WP_Error
+ * @created: 2024-12-15
  */
 
 namespace MksDdn\MigrateContent\Database;
@@ -16,14 +17,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Import previously exported database rows.
+ *
+ * @since 1.0.0
  */
 class FullDatabaseImporter {
 
 	/**
 	 * Apply dump onto current database.
 	 *
-	 * @param array $dump Database dump.
-	 * @return true|WP_Error
+	 * @param array<string, mixed> $dump Database dump array with tables data.
+	 * @return true|WP_Error True on success, WP_Error on failure.
+	 * @since 1.0.0
 	 */
 	public function import( array $dump ) {
 		if ( empty( $dump['tables'] ) || ! is_array( $dump['tables'] ) ) {
@@ -74,7 +78,9 @@ class FullDatabaseImporter {
 	/**
 	 * Validate table name to avoid SQL injection.
 	 *
-	 * @param string $table_name Candidate name.
+	 * @param string $table_name Candidate table name.
+	 * @return bool True if valid, false otherwise.
+	 * @since 1.0.0
 	 */
 	private function is_valid_table_name( string $table_name ): bool {
 		return (bool) preg_match( '/^[a-zA-Z0-9_]+$/', $table_name );
@@ -86,6 +92,8 @@ class FullDatabaseImporter {
 	 * @param wpdb   $wpdb        Database object.
 	 * @param string $table_name  Table name.
 	 * @param string $schema_sql  CREATE TABLE statement.
+	 * @return void
+	 * @since 1.0.0
 	 */
 	private function ensure_table_exists( wpdb $wpdb, string $table_name, string $schema_sql ): void {
 		if ( $this->table_exists( $wpdb, $table_name ) ) {
@@ -104,6 +112,8 @@ class FullDatabaseImporter {
 	 *
 	 * @param wpdb   $wpdb       Database object.
 	 * @param string $table_name Table name.
+	 * @return bool True if table exists, false otherwise.
+	 * @since 1.0.0
 	 */
 	private function table_exists( wpdb $wpdb, string $table_name ): bool {
 		$like  = $wpdb->esc_like( $table_name );
