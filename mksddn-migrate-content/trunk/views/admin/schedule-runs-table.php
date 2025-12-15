@@ -29,12 +29,17 @@ endif;
 			</tr>
 		</thead>
 		<tbody>
-			<?php foreach ( $runs as $run ) : ?>
+			<?php
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variable.
+			foreach ( $runs as $run ) : ?>
 				<?php
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 				$filename = $run['filename'];
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 				$download = '';
 
 				if ( $filename ) {
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$download_url = wp_nonce_url(
 						add_query_arg(
 							array(
@@ -46,6 +51,7 @@ endif;
 						'mksddn_mc_download_scheduled_' . $filename
 					);
 
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$delete_url = wp_nonce_url(
 						add_query_arg(
 							array(
@@ -57,7 +63,9 @@ endif;
 						'mksddn_mc_delete_scheduled_' . $filename
 					);
 
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$download = '<a class="button button-small" href="' . esc_url( $download_url ) . '">' . esc_html__( 'Download', 'mksddn-migrate-content' ) . '</a>';
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$download .= ' <a class="button button-small button-secondary" href="' . esc_url( $delete_url ) . '" onclick="return confirm(\'' . esc_js( __( 'Delete this scheduled backup?', 'mksddn-migrate-content' ) ) . '\');">' . esc_html__( 'Delete', 'mksddn-migrate-content' ) . '</a>';
 				}
 				?>

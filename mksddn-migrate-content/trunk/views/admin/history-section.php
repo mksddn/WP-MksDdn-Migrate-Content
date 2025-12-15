@@ -34,7 +34,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 				</tr>
 			</thead>
 			<tbody>
-				<?php foreach ( $entries as $entry ) : ?>
+				<?php
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variable.
+				foreach ( $entries as $entry ) : ?>
 					<tr>
 						<td><?php echo esc_html( $entry['type'] ); ?></td>
 						<td><?php echo wp_kses_post( $entry['status_badge'] ); ?></td>

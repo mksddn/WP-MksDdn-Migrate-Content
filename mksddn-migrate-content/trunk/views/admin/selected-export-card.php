@@ -20,10 +20,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<h4><?php esc_html_e( 'Choose content', 'mksddn-migrate-content' ); ?></h4>
 			<p class="description"><?php esc_html_e( 'Hold Cmd/Ctrl to pick multiple entries inside each list.', 'mksddn-migrate-content' ); ?></p>
 			<div class="mksddn-mc-selection-grid">
-				<?php foreach ( $exportable_types as $type => $label ) : ?>
+				<?php
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variables.
+				foreach ( $exportable_types as $type => $label ) : ?>
 					<?php
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$items = $items_by_type[ $type ] ?? array();
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$size = max( 4, min( count( $items ), 12 ) );
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$name = 'selected_' . $type . '_ids[]';
 					?>
 					<div class="mksddn-mc-basic-selection">
@@ -37,8 +42,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 							<?php if ( empty( $items ) ) : ?>
 								<option value="" disabled><?php esc_html_e( 'No entries found', 'mksddn-migrate-content' ); ?></option>
 							<?php else : ?>
-								<?php foreach ( $items as $item ) : ?>
+								<?php
+								// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variable.
+								foreach ( $items as $item ) : ?>
 									<?php
+									// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 									$label_text = $item->post_title ?: ( '#' . $item->ID );
 									?>
 									<option value="<?php echo esc_attr( $item->ID ); ?>"><?php echo esc_html( $label_text ); ?></option>

@@ -10,10 +10,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $summary = $preview['summary'] ?? array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $incoming = $summary['incoming'] ?? array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $counts   = $summary['counts'] ?? array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $total    = (int) ( $counts['incoming'] ?? count( $incoming ) );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $conflict = (int) ( $counts['conflicts'] ?? 0 );
 ?>
 <h3><?php esc_html_e( 'Review users before import', 'mksddn-migrate-content' ); ?></h3>
@@ -39,18 +44,27 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 				</tr>
 			</thead>
 			<tbody>
-				<?php foreach ( $incoming as $entry ) : ?>
+				<?php
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variable.
+				foreach ( $incoming as $entry ) : ?>
 					<?php
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$email = isset( $entry['email'] ) ? sanitize_email( $entry['email'] ) : '';
 					if ( ! $email ) {
 						continue;
 					}
 
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$key       = md5( strtolower( $email ) );
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$checkbox  = 'mksddn-mc-user-' . $key;
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$status    = sanitize_text_field( $entry['status'] ?? 'new' );
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$local     = $entry['local_role'] ?? '';
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$role      = $entry['role'] ?? '';
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$status_label = 'conflict' === $status ? __( 'Existing user', 'mksddn-migrate-content' ) : __( 'New user', 'mksddn-migrate-content' );
 					?>
 					<tr>
@@ -59,7 +73,7 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 							<input type="hidden" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="0">
 							<?php
 							/* translators: %s: user email. */
-							$label_text = sprintf( esc_html__( 'Include %s', 'mksddn-migrate-content' ), esc_html( $email ) );
+							$label_text = sprintf( esc_html__( 'Include %s', 'mksddn-migrate-content' ), esc_html( $email ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 							?>
 							<label class="screen-reader-text" for="<?php echo esc_attr( $checkbox ); ?>"><?php echo esc_html( $label_text ); ?></label>
 							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
@@ -71,7 +85,9 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 						<td>
 							<?php if ( 'conflict' === $status ) : ?>
 								<?php
+								// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 								$select_id = 'mksddn-mc-user-mode-' . $key;
+								// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 								$label_text = esc_html__( 'Conflict handling', 'mksddn-migrate-content' );
 								?>
 								<label class="screen-reader-text" for="<?php echo esc_attr( $select_id ); ?>"><?php echo esc_html( $label_text ); ?></label>

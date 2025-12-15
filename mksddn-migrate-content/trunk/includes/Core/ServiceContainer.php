@@ -67,6 +67,7 @@ class ServiceContainer {
 
 		// Check if service is registered.
 		if ( ! isset( $this->services[ $id ] ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message is for internal use only, not displayed to users.
 			throw new \RuntimeException( "Service '{$id}' is not registered in the container." );
 		}
 

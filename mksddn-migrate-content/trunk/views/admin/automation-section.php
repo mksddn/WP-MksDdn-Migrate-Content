@@ -39,7 +39,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="mksddn-mc-field">
 					<label for="mksddn-mc-schedule-recurrence"><?php esc_html_e( 'Run frequency', 'mksddn-migrate-content' ); ?></label>
 					<select id="mksddn-mc-schedule-recurrence" name="schedule_recurrence">
-						<?php foreach ( $recurrences as $slug => $label ) : ?>
+						<?php
+						// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variables.
+						foreach ( $recurrences as $slug => $label ) : ?>
 							<option value="<?php echo esc_attr( $slug ); ?>"<?php selected( $settings['recurrence'], $slug ); ?>><?php echo esc_html( $label ); ?></option>
 						<?php endforeach; ?>
 					</select>
