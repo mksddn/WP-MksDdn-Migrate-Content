@@ -39,6 +39,9 @@ class Plugin {
 
 	/**
 	 * Register hooks.
+	 *
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function register(): void {
 		add_action( 'init', array( $this, 'boot' ) );
@@ -46,6 +49,9 @@ class Plugin {
 
 	/**
 	 * Initialize services.
+	 *
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function boot(): void {
 		// Always load schedule manager (needed for cron).

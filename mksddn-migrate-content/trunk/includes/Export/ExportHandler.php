@@ -25,6 +25,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Handles export operations for pages, options pages and forms.
+ *
+ * @since 1.0.0
  */
 class ExportHandler implements ExporterInterface {
 
@@ -68,6 +70,7 @@ class ExportHandler implements ExporterInterface {
 	 * @param AttachmentCollector|null $media_collector  Optional collector.
 	 * @param OptionsExporter|null     $options_exporter Optional options exporter.
 	 * @param BatchLoader|null         $batch_loader     Optional batch loader.
+	 * @since 1.0.0
 	 */
 	public function __construct( ?Packer $packer = null, ?AttachmentCollector $media_collector = null, ?OptionsExporter $options_exporter = null, ?BatchLoader $batch_loader = null ) {
 		$this->packer           = $packer ?? new Packer();
@@ -78,6 +81,9 @@ class ExportHandler implements ExporterInterface {
 
 	/**
 	 * Handle export dispatch.
+	 *
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function export_single_page(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce is verified in admin controller before dispatch.
@@ -99,6 +105,7 @@ class ExportHandler implements ExporterInterface {
 	 * @param ContentSelection $selection Selection object.
 	 * @param string           $format    Requested format.
 	 * @return void
+	 * @since 1.0.0
 	 */
 	public function export_selected_content( ContentSelection $selection, string $format = 'archive' ): void {
 		if ( ! $selection->has_items() && ! $selection->has_options() ) {

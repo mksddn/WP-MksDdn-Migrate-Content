@@ -21,6 +21,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Handles importing pages, options pages, and forms.
+ *
+ * @since 1.0.0
  */
 class ImportHandler implements ImporterInterface {
 
@@ -52,6 +54,15 @@ class ImportHandler implements ImporterInterface {
 	 */
 	private $media_file_loader = null;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param AttachmentRestorer|null            $media_restorer   Optional media restorer.
+	 * @param OptionsImporter|null               $options_importer Optional options importer.
+	 * @param WpFunctionsWrapperInterface|null   $wp_functions     Optional WordPress functions wrapper.
+	 * @param WpUserFunctionsWrapperInterface|null $wp_user_functions Optional WordPress user functions wrapper.
+	 * @since 1.0.0
+	 */
 	public function __construct(
 		?AttachmentRestorer $media_restorer = null,
 		?OptionsImporter $options_importer = null,
@@ -68,6 +79,8 @@ class ImportHandler implements ImporterInterface {
 	 * Set loader used to fetch files from archive.
 	 *
 	 * @param callable|null $loader Loader callback.
+	 * @return void
+	 * @since 1.0.0
 	 */
 	public function set_media_file_loader( ?callable $loader ): void {
 		$this->media_file_loader = $loader;
@@ -77,7 +90,8 @@ class ImportHandler implements ImporterInterface {
 	 * Import bundle containing multiple posts/options.
 	 *
 	 * @param array $data Bundle payload.
-	 * @return bool
+	 * @return bool True on success, false on failure.
+	 * @since 1.0.0
 	 */
 	public function import_bundle( array $data ): bool {
 		$items = isset( $data['items'] ) && is_array( $data['items'] ) ? $data['items'] : array();
@@ -103,6 +117,7 @@ class ImportHandler implements ImporterInterface {
 	 *
 	 * @param array $data Data array containing page information.
 	 * @return bool True on success, false on failure.
+	 * @since 1.0.0
 	 */
 	public function import_single_page( array $data ): bool {
 		if ( ! $this->validate_page_data( $data ) ) {
