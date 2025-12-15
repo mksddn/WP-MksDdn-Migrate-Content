@@ -5,10 +5,10 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC;
+namespace MksDdn\MigrateContent;
 
-use Mksddn_MC\Admin\ExportImportAdmin;
-use Mksddn_MC\Automation\ScheduleManager;
+use MksDdn\MigrateContent\Admin\ExportImportAdmin;
+use MksDdn\MigrateContent\Automation\ScheduleManager;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

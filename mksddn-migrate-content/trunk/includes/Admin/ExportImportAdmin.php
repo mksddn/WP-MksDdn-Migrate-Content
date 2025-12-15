@@ -5,25 +5,25 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Admin;
+namespace MksDdn\MigrateContent\Admin;
 
-use Mksddn_MC\Archive\Extractor;
-use Mksddn_MC\Automation\ScheduleManager;
-use Mksddn_MC\Export\ExportHandler;
-use Mksddn_MC\Import\ImportHandler;
-use Mksddn_MC\Options\OptionsHelper;
-use Mksddn_MC\Filesystem\FullContentExporter;
-use Mksddn_MC\Filesystem\FullContentImporter;
-use Mksddn_MC\Chunking\ChunkJobRepository;
-use Mksddn_MC\Selection\SelectionBuilder;
-use Mksddn_MC\Recovery\SnapshotManager;
-use Mksddn_MC\Recovery\HistoryRepository;
-use Mksddn_MC\Recovery\JobLock;
-use Mksddn_MC\Support\FilenameBuilder;
-use Mksddn_MC\Support\FilesystemHelper;
-use Mksddn_MC\Support\SiteUrlGuard;
-use Mksddn_MC\Users\UserDiffBuilder;
-use Mksddn_MC\Users\UserPreviewStore;
+use MksDdn\MigrateContent\Archive\Extractor;
+use MksDdn\MigrateContent\Automation\ScheduleManager;
+use MksDdn\MigrateContent\Export\ExportHandler;
+use MksDdn\MigrateContent\Import\ImportHandler;
+use MksDdn\MigrateContent\Options\OptionsHelper;
+use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Filesystem\FullContentImporter;
+use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
+use MksDdn\MigrateContent\Selection\SelectionBuilder;
+use MksDdn\MigrateContent\Recovery\SnapshotManager;
+use MksDdn\MigrateContent\Recovery\HistoryRepository;
+use MksDdn\MigrateContent\Recovery\JobLock;
+use MksDdn\MigrateContent\Support\FilenameBuilder;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Users\UserDiffBuilder;
+use MksDdn\MigrateContent\Users\UserPreviewStore;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {

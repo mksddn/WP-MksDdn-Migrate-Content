@@ -5,7 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Recovery;
+namespace MksDdn\MigrateContent\Recovery;
+
+use MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -14,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Persists history entries for exports/imports/rollbacks.
  */
-class HistoryRepository {
+class HistoryRepository implements HistoryRepositoryInterface {
 
 	private const OPTION = 'mksddn_mc_history';
 	private const LIMIT  = 50;

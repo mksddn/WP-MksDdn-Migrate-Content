@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Users;
+namespace MksDdn\MigrateContent\Users;
 
 use WP_Error;
 use WP_User;

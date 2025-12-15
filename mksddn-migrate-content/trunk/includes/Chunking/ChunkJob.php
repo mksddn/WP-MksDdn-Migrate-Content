@@ -5,9 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Chunking;
+namespace MksDdn\MigrateContent\Chunking;
 
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

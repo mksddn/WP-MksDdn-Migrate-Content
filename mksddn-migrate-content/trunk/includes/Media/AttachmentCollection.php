@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Media;
+namespace MksDdn\MigrateContent\Media;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

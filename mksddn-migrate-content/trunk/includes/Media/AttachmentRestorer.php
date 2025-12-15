@@ -5,9 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Media;
+namespace MksDdn\MigrateContent\Media;
 
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_Post;
 use WP_Query;

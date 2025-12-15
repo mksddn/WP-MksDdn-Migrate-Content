@@ -5,15 +5,16 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Export;
+namespace MksDdn\MigrateContent\Export;
 
-use Mksddn_MC\Archive\Packer;
-use Mksddn_MC\Media\AttachmentCollector;
-use Mksddn_MC\Media\AttachmentCollection;
-use Mksddn_MC\Options\OptionsExporter;
-use Mksddn_MC\Selection\ContentSelection;
-use Mksddn_MC\Support\FilenameBuilder;
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Archive\Packer;
+use MksDdn\MigrateContent\Contracts\ExporterInterface;
+use MksDdn\MigrateContent\Media\AttachmentCollector;
+use MksDdn\MigrateContent\Media\AttachmentCollection;
+use MksDdn\MigrateContent\Options\OptionsExporter;
+use MksDdn\MigrateContent\Selection\ContentSelection;
+use MksDdn\MigrateContent\Support\FilenameBuilder;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_Post;
 
@@ -24,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles export operations for pages, options pages and forms.
  */
-class ExportHandler {
+class ExportHandler implements ExporterInterface {
 
 	private const EXPORT_TYPES = array(
 		'page' => 'export_page',

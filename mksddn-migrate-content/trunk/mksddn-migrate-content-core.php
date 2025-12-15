@@ -25,8 +25,8 @@ add_action(
 		require_once __DIR__ . '/includes/Chunking/ChunkRestController.php';
 		require_once __DIR__ . '/includes/Chunking/ChunkServiceProvider.php';
 
-		Mksddn_MC\Chunking\ChunkServiceProvider::init();
+		MksDdn\MigrateContent\Chunking\ChunkServiceProvider::init();
 	}
 );
 
-( new Mksddn_MC\Plugin() )->register();
+( new MksDdn\MigrateContent\Plugin() )->register();

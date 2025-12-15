@@ -5,9 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Users;
+namespace MksDdn\MigrateContent\Users;
 
-use Mksddn_MC\Filesystem\FullArchivePayload;
+use MksDdn\MigrateContent\Filesystem\FullArchivePayload;
 use WP_Error;
 use WP_Roles;
 use WP_User;

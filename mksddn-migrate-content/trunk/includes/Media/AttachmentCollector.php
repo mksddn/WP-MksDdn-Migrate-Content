@@ -5,8 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Media;
+namespace MksDdn\MigrateContent\Media;
 
+use MksDdn\MigrateContent\Contracts\MediaCollectorInterface;
 use WP_Post;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -16,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Scans post content/meta to find referenced attachments.
  */
-class AttachmentCollector {
+class AttachmentCollector implements MediaCollectorInterface {
 
 	/**
 	 * Collect attachment data for the provided post.

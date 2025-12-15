@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 spl_autoload_register(
 	static function ( string $class ): void {
-		$prefix = 'Mksddn_MC\\';
+		$prefix = 'MksDdn\\MigrateContent\\';
 
 		if ( 0 !== strpos( $class, $prefix ) ) {
 			return;

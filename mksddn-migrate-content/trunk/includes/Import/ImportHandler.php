@@ -5,12 +5,13 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Import;
+namespace MksDdn\MigrateContent\Import;
 
+use MksDdn\MigrateContent\Contracts\ImporterInterface;
+use MksDdn\MigrateContent\Media\AttachmentRestorer;
+use MksDdn\MigrateContent\Options\OptionsImporter;
 use WP_Error;
 use WP_Post;
-use Mksddn_MC\Media\AttachmentRestorer;
-use Mksddn_MC\Options\OptionsImporter;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -19,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles importing pages, options pages, and forms.
  */
-class ImportHandler {
+class ImportHandler implements ImporterInterface {
 
 	/**
 	 * Attachment restorer.

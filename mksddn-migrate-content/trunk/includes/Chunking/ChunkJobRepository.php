@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Chunking;
+namespace MksDdn\MigrateContent\Chunking;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

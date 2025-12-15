@@ -5,13 +5,13 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Chunking;
+namespace MksDdn\MigrateContent\Chunking;
 
 use WP_Error;
 use WP_REST_Server;
 use WP_REST_Request;
-use Mksddn_MC\Filesystem\FullContentExporter;
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

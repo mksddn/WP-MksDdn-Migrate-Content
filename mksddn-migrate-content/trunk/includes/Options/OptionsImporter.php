@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Options;
+namespace MksDdn\MigrateContent\Options;
 
 use WP_Error;
 

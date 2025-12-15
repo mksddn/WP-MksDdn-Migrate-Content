@@ -10,7 +10,7 @@
  *   php tools/make-pot.php [sourceDir] [outputFile] [textDomain]
  */
 
-namespace Mksddn_MC\Tools;
+namespace MksDdn\MigrateContent\Tools;
 
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;

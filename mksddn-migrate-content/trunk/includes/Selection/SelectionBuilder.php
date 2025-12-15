@@ -5,7 +5,7 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Selection;
+namespace MksDdn\MigrateContent\Selection;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

@@ -5,9 +5,9 @@
  * @package MksDdn_Migrate_Content
  */
 
-namespace Mksddn_MC\Automation;
+namespace MksDdn\MigrateContent\Automation;
 
-use Mksddn_MC\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {

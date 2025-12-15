@@ -58,8 +58,8 @@ register_activation_hook(
 register_deactivation_hook(
 	__FILE__,
 	function (): void {
-		if ( class_exists( '\Mksddn_MC\Automation\ScheduleManager' ) ) {
-			\Mksddn_MC\Automation\ScheduleManager::deactivate();
+		if ( class_exists( '\MksDdn\MigrateContent\Automation\ScheduleManager' ) ) {
+			\MksDdn\MigrateContent\Automation\ScheduleManager::deactivate();
 		}
 	}
 );
