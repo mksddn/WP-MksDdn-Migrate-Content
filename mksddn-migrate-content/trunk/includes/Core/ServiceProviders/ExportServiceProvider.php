@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Core\ServiceProviders;
 
+use MksDdn\MigrateContent\Core\BatchLoader;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 use MksDdn\MigrateContent\Export\ExportHandler;
@@ -36,7 +37,9 @@ class ExportServiceProvider implements ServiceProviderInterface {
 		$container->register(
 			AttachmentCollector::class,
 			function ( ServiceContainer $container ) {
-				return new AttachmentCollector();
+				return new AttachmentCollector(
+					$container->get( BatchLoader::class )
+				);
 			}
 		);
 
@@ -53,7 +56,8 @@ class ExportServiceProvider implements ServiceProviderInterface {
 				return new ExportHandler(
 					$container->get( \MksDdn\MigrateContent\Archive\Packer::class ),
 					$container->get( AttachmentCollector::class ),
-					$container->get( OptionsExporter::class )
+					$container->get( OptionsExporter::class ),
+					$container->get( BatchLoader::class )
 				);
 			}
 		);

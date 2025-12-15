@@ -48,11 +48,15 @@ class Plugin {
 	 * Initialize services.
 	 */
 	public function boot(): void {
+		// Always load schedule manager (needed for cron).
 		$schedule_manager = $this->container->get( ScheduleManager::class );
 		$schedule_manager->register();
 
-		$admin_controller = $this->container->get( AdminPageController::class );
-		$admin_controller->register();
+		// Only load admin controller on admin pages.
+		if ( is_admin() ) {
+			$admin_controller = $this->container->get( AdminPageController::class );
+			$admin_controller->register();
+		}
 	}
 }
 

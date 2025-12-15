@@ -20,6 +20,15 @@ class HistoryRepository implements HistoryRepositoryInterface {
 
 	private const OPTION = 'mksddn_mc_history';
 	private const LIMIT  = 50;
+	private const CACHE_KEY = 'mksddn_mc_history_cache';
+	private const CACHE_EXPIRY = 300; // 5 minutes
+
+	/**
+	 * Cached entries.
+	 *
+	 * @var array|null
+	 */
+	private ?array $cached_entries = null;
 
 	/**
 	 * Start new entry.
@@ -124,6 +133,9 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	 */
 	private function persist( array $entries ): void {
 		update_option( self::OPTION, $entries, false );
+		// Update cache.
+		set_transient( self::CACHE_KEY, $entries, self::CACHE_EXPIRY );
+		$this->cached_entries = $entries;
 	}
 
 	/**
@@ -132,8 +144,27 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	 * @return array
 	 */
 	private function load(): array {
+		// Return cached entries if available.
+		if ( null !== $this->cached_entries ) {
+			return $this->cached_entries;
+		}
+
+		// Try to get from transient cache.
+		$cached = get_transient( self::CACHE_KEY );
+		if ( false !== $cached && is_array( $cached ) ) {
+			$this->cached_entries = $cached;
+			return $this->cached_entries;
+		}
+
+		// Load from database.
 		$entries = get_option( self::OPTION, array() );
-		return is_array( $entries ) ? $entries : array();
+		$entries = is_array( $entries ) ? $entries : array();
+
+		// Cache for 5 minutes.
+		set_transient( self::CACHE_KEY, $entries, self::CACHE_EXPIRY );
+		$this->cached_entries = $entries;
+
+		return $entries;
 	}
 
 	/**

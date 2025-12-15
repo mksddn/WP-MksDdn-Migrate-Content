@@ -24,6 +24,7 @@ use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapper;
 use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapper;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
+use MksDdn\MigrateContent\Core\BatchLoader;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -45,6 +46,14 @@ class CoreServiceProvider implements ServiceProviderInterface {
 	 * @since 1.0.0
 	 */
 	public function register( ServiceContainer $container ): void {
+		// Batch loader for optimizing database queries.
+		$container->register(
+			BatchLoader::class,
+			function ( ServiceContainer $container ) {
+				return new BatchLoader();
+			}
+		);
+
 		// WordPress function wrappers.
 		$container->register(
 			WpFunctionsWrapperInterface::class,

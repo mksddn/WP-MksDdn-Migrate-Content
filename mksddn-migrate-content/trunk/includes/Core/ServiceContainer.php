@@ -22,7 +22,7 @@ class ServiceContainer {
 	/**
 	 * Registered services.
 	 *
-	 * @var array<string, callable|string>
+	 * @var array<string, array{factory: callable|string, singleton: bool, lazy: bool}>
 	 */
 	private array $services = array();
 
@@ -39,13 +39,15 @@ class ServiceContainer {
 	 * @param string          $id        Service identifier.
 	 * @param callable|string $factory   Factory callable or class name.
 	 * @param bool            $singleton Whether to treat as singleton.
+	 * @param bool            $lazy      Whether to lazy load (only instantiate when accessed).
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function register( string $id, callable|string $factory, bool $singleton = true ): void {
+	public function register( string $id, callable|string $factory, bool $singleton = true, bool $lazy = false ): void {
 		$this->services[ $id ] = array(
 			'factory'   => $factory,
 			'singleton' => $singleton,
+			'lazy'      => $lazy,
 		);
 	}
 
@@ -72,7 +74,7 @@ class ServiceContainer {
 		$factory        = $service_config['factory'];
 		$is_singleton   = $service_config['singleton'];
 
-		// Resolve service instance.
+		// Resolve service instance (lazy loading is automatic - services are only instantiated when get() is called).
 		$instance = $this->resolve( $factory );
 
 		// Cache singleton instances.
