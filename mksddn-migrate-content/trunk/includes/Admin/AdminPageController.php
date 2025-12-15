@@ -8,11 +8,6 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
-use MksDdn\MigrateContent\Admin\Handlers\ExportRequestHandler;
-use MksDdn\MigrateContent\Admin\Handlers\ImportRequestHandler;
-use MksDdn\MigrateContent\Admin\Handlers\RecoveryRequestHandler;
-use MksDdn\MigrateContent\Admin\Handlers\ScheduleRequestHandler;
-use MksDdn\MigrateContent\Admin\Handlers\UserMergeRequestHandler;
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
@@ -21,11 +16,8 @@ use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
-use MksDdn\MigrateContent\Automation\ScheduleManager;
+use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Config\PluginConfig;
-use MksDdn\MigrateContent\Recovery\HistoryRepository;
-use MksDdn\MigrateContent\Recovery\JobLock;
-use MksDdn\MigrateContent\Recovery\SnapshotManager;
 use MksDdn\MigrateContent\Support\FilenameBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 
@@ -106,37 +98,19 @@ class AdminPageController {
 	/**
 	 * Constructor.
 	 *
-	 * @param AdminPageView|null                        $view              View instance.
-	 * @param ExportRequestHandlerInterface|null        $export_handler    Export handler.
-	 * @param ImportRequestHandlerInterface|null        $import_handler    Import handler.
-	 * @param ScheduleRequestHandlerInterface|null      $schedule_handler  Schedule handler.
-	 * @param RecoveryRequestHandlerInterface|null      $recovery_handler  Recovery handler.
-	 * @param UserMergeRequestHandlerInterface|null     $user_merge_handler User merge handler.
-	 * @param NotificationService|null                  $notifications    Notification service.
-	 * @param ProgressService|null                      $progress          Progress service.
-	 * @param UserPreviewStore|null                     $preview_store     User preview store.
+	 * @param ServiceContainer $container Service container.
 	 * @since 1.0.0
 	 */
-	public function __construct(
-		?AdminPageView $view = null,
-		?ExportRequestHandlerInterface $export_handler = null,
-		?ImportRequestHandlerInterface $import_handler = null,
-		?ScheduleRequestHandlerInterface $schedule_handler = null,
-		?RecoveryRequestHandlerInterface $recovery_handler = null,
-		?UserMergeRequestHandlerInterface $user_merge_handler = null,
-		?NotificationService $notifications = null,
-		?ProgressService $progress = null,
-		?UserPreviewStore $preview_store = null
-	) {
-		$this->notifications     = $notifications ?? new NotificationService();
-		$this->progress          = $progress ?? new ProgressService();
-		$this->preview_store     = $preview_store ?? new UserPreviewStore();
-		$this->view              = $view ?? new AdminPageView();
-		$this->export_handler    = $export_handler ?? new ExportRequestHandler( $this->notifications );
-		$this->import_handler    = $import_handler ?? new ImportRequestHandler( null, null, null, null, $this->preview_store, $this->notifications, $this->progress );
-		$this->schedule_handler  = $schedule_handler ?? new ScheduleRequestHandler( null, $this->notifications );
-		$this->recovery_handler  = $recovery_handler ?? new RecoveryRequestHandler( null, null, null, $this->notifications );
-		$this->user_merge_handler = $user_merge_handler ?? new UserMergeRequestHandler( $this->preview_store, $this->notifications );
+	public function __construct( ServiceContainer $container ) {
+		$this->view              = $container->get( AdminPageView::class );
+		$this->export_handler    = $container->get( ExportRequestHandlerInterface::class );
+		$this->import_handler    = $container->get( ImportRequestHandlerInterface::class );
+		$this->schedule_handler  = $container->get( ScheduleRequestHandlerInterface::class );
+		$this->recovery_handler  = $container->get( RecoveryRequestHandlerInterface::class );
+		$this->user_merge_handler = $container->get( UserMergeRequestHandlerInterface::class );
+		$this->notifications     = $container->get( NotificationService::class );
+		$this->progress          = $container->get( ProgressService::class );
+		$this->preview_store     = $container->get( UserPreviewStore::class );
 	}
 
 	/**

@@ -162,17 +162,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		$container->register(
 			AdminPageController::class,
 			function ( ServiceContainer $container ) {
-				return new AdminPageController(
-					$container->get( AdminPageView::class ),
-					$container->get( ExportRequestHandlerInterface::class ),
-					$container->get( ImportRequestHandlerInterface::class ),
-					$container->get( ScheduleRequestHandlerInterface::class ),
-					$container->get( RecoveryRequestHandlerInterface::class ),
-					$container->get( UserMergeRequestHandlerInterface::class ),
-					$container->get( NotificationService::class ),
-					$container->get( ProgressService::class ),
-					$container->get( \MksDdn\MigrateContent\Users\UserPreviewStore::class )
-				);
+				return new AdminPageController( $container );
 			}
 		);
 	}

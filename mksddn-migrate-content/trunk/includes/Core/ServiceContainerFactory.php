@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Core;
 
+use MksDdn\MigrateContent\Chunking\ChunkServiceProvider;
 use MksDdn\MigrateContent\Core\ServiceProviders\AdminServiceProvider;
 use MksDdn\MigrateContent\Core\ServiceProviders\CoreServiceProvider;
 use MksDdn\MigrateContent\Core\ServiceProviders\ExportServiceProvider;
@@ -39,6 +40,7 @@ class ServiceContainerFactory {
 			new AdminServiceProvider(),
 			new ExportServiceProvider(),
 			new ImportServiceProvider(),
+			new ChunkServiceProvider(),
 		);
 
 		foreach ( $providers as $provider ) {

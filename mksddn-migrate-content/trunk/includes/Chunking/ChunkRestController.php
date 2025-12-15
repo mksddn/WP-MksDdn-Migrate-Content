@@ -23,8 +23,14 @@ class ChunkRestController {
 
 	private int $chunk_size = 5242880; // 5 MB.
 
-	public function __construct() {
-		$this->repository = new ChunkJobRepository();
+	/**
+	 * Constructor.
+	 *
+	 * @param ChunkJobRepository $repository Chunk job repository.
+	 * @since 1.0.0
+	 */
+	public function __construct( ChunkJobRepository $repository ) {
+		$this->repository = $repository;
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
 

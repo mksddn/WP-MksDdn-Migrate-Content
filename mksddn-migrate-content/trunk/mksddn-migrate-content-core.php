@@ -11,12 +11,4 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/includes/autoload.php';
 
-// Initialize chunking services.
-add_action(
-	'plugins_loaded',
-	static function (): void {
-		MksDdn\MigrateContent\Chunking\ChunkServiceProvider::init();
-	}
-);
-
 ( new MksDdn\MigrateContent\Plugin() )->register();
