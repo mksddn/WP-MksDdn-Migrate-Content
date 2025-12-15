@@ -66,7 +66,9 @@ class UserMergeApplier implements UserMergeApplierInterface {
 				continue;
 			}
 			$meta_by_user[ $user_id ][] = array(
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Not a DB query, processing array data from archive dump.
 				'meta_key'   => isset( $meta['meta_key'] ) ? (string) $meta['meta_key'] : '',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Not a DB query, processing array data from archive dump.
 				'meta_value' => $meta['meta_value'] ?? '',
 			);
 		}

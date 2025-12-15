@@ -142,7 +142,9 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 			}
 
 			$grouped[ $user_id ][] = array(
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Not a DB query, processing array data from archive dump.
 				'meta_key'   => isset( $row['meta_key'] ) ? sanitize_text_field( (string) $row['meta_key'] ) : '',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Not a DB query, processing array data from archive dump.
 				'meta_value' => $row['meta_value'] ?? '',
 			);
 		}
