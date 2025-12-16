@@ -384,7 +384,7 @@ final class PotGenerator {
 			'#, fuzzy',
 			'msgid ""',
 			'msgstr ""',
-			'"Project-Id-Version: MksDdn Migrate Content 1.0.1\\n"',
+			'"Project-Id-Version: MksDdn Migrate Content\\n"',
 			'"Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/issues\\n"',
 			'"POT-Creation-Date: ' . $date . '\\n"',
 			'"MIME-Version: 1.0\\n"',
