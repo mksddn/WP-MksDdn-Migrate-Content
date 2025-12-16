@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
+use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
@@ -96,6 +97,13 @@ class AdminPageController {
 	private UserPreviewStoreInterface $preview_store;
 
 	/**
+	 * Server backup scanner.
+	 *
+	 * @var ServerBackupScanner
+	 */
+	private ServerBackupScanner $server_scanner;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ServiceContainer $container Service container.
@@ -111,6 +119,7 @@ class AdminPageController {
 		$this->notifications     = $container->get( NotificationServiceInterface::class );
 		$this->progress          = $container->get( ProgressServiceInterface::class );
 		$this->preview_store     = $container->get( UserPreviewStoreInterface::class );
+		$this->server_scanner    = $container->get( ServerBackupScanner::class );
 	}
 
 	/**
@@ -132,6 +141,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_schedule_run', array( $this->schedule_handler, 'handle_run_now' ) );
 		add_action( 'admin_post_mksddn_mc_download_scheduled', array( $this->schedule_handler, 'handle_download' ) );
 		add_action( 'admin_post_mksddn_mc_delete_scheduled', array( $this->schedule_handler, 'handle_delete' ) );
+		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 	}
 
 	/**
@@ -193,6 +203,31 @@ class AdminPageController {
 		if ( 'toplevel_page_' . PluginConfig::text_domain() !== $hook ) {
 			return;
 		}
+
+		// Enqueue server file selector script.
+		wp_enqueue_script(
+			'mksddn-server-file-selector',
+			PluginConfig::assets_url() . 'js/server-file-selector.js',
+			array(),
+			PluginConfig::version(),
+			true
+		);
+
+		wp_localize_script(
+			'mksddn-server-file-selector',
+			'mksddnServerFileSelector',
+			array(
+				'ajaxAction' => 'mksddn_mc_get_server_backups',
+				'nonce'     => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'      => array(
+					'loading'     => __( 'Loading...', 'mksddn-migrate-content' ),
+					'selectFile'  => __( 'Select a file...', 'mksddn-migrate-content' ),
+					'noFiles'     => __( 'No backup files found', 'mksddn-migrate-content' ),
+					'loadError'   => __( 'Error loading files', 'mksddn-migrate-content' ),
+					'pleaseSelect' => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+				),
+			)
+		);
 
 		if ( ! PluginConfig::is_chunked_disabled() ) {
 			wp_enqueue_script(
@@ -280,6 +315,34 @@ class AdminPageController {
 			'original_name' => $preview['original_name'] ?? '',
 			'summary'       => $summary,
 		);
+	}
+
+	/**
+	 * Handle AJAX request to get list of server backup files.
+	 *
+	 * @return void
+	 * @since 1.0.1
+	 */
+	public function handle_ajax_get_server_backups(): void {
+		// Verify nonce from POST data.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		$files = $this->server_scanner->scan();
+
+		if ( is_wp_error( $files ) ) {
+			wp_send_json_error( array( 'message' => $files->get_error_message() ) );
+		}
+
+		wp_send_json_success( array( 'files' => $files ) );
 	}
 }
 

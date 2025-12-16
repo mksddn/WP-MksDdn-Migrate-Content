@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,17 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.1.0 =
+* Added server file import feature - users can now select backup files directly from the server imports directory.
+* Introduced ServerBackupScanner service for scanning and validating backup files on the server.
+* Added JavaScript module (server-file-selector.js) for dynamic file selection with AJAX loading.
+* Updated import forms (full site and selected content) with source toggle (upload vs server).
+* Enhanced FullSiteImportService and SelectedContentImportService to support server file imports.
+* Added AJAX endpoint (mksddn_mc_get_server_backups) for retrieving available backup files.
+* Implemented file caching via WordPress transients to improve performance.
+* Added path traversal protection for secure server file access.
+* Server file selector displays file size and modification date for better user experience.
 
 = 1.0.1 =
 * Fixed duplicate PRIMARY KEY errors during full site import (wp_postmeta, wp_actionscheduler_actions).

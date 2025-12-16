@@ -21,6 +21,7 @@ use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Services\ResponseHandler;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
+use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
@@ -104,6 +105,13 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
+			ServerBackupScanner::class,
+			function ( ServiceContainer $container ) {
+				return new ServerBackupScanner();
+			}
+		);
+
+		$container->register(
 			SelectedContentImportService::class,
 			function ( ServiceContainer $container ) {
 				return new SelectedContentImportService(
@@ -114,7 +122,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( NotificationServiceInterface::class ),
 					$container->get( ProgressServiceInterface::class ),
 					$container->get( ImportFileValidator::class ),
-					$container->get( ImportPayloadPreparer::class )
+					$container->get( ImportPayloadPreparer::class ),
+					$container->get( ServerBackupScanner::class )
 				);
 			}
 		);
@@ -128,7 +137,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
 					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class ),
 					$container->get( NotificationServiceInterface::class ),
-					$container->get( ResponseHandler::class )
+					$container->get( ResponseHandler::class ),
+					$container->get( ServerBackupScanner::class )
 				);
 			}
 		);

@@ -9,7 +9,7 @@
 Plugin Name: MksDdn Migrate Content
 Plugin URI: https://github.com/mksddn/WP-MksDdn-Migrate-Content
 Description: Export and import single pages (and more) with metadata and media.
-Version: 1.0.1
+Version: 1.1.0
 Author: mksddn
 Author URI: https://github.com/mksddn
 Text Domain: mksddn-migrate-content
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constants.
-define( 'MKSDDN_MC_VERSION', '1.0.1' );
+define( 'MKSDDN_MC_VERSION', '1.1.0' );
 define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -51,6 +51,20 @@ register_activation_hook(
 		if ( ! mksddn_mc_meets_requirements() ) {
 			deactivate_plugins( plugin_basename( __FILE__ ) );
 			wp_die( esc_html__( 'MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+.', 'mksddn-migrate-content' ) );
+		}
+
+		// Load autoloader to access plugin classes.
+		require_once MKSDDN_MC_DIR . 'includes/autoload.php';
+
+		// Create required directories.
+		if ( class_exists( '\MksDdn\MigrateContent\Config\PluginConfig' ) ) {
+			$result = \MksDdn\MigrateContent\Config\PluginConfig::create_required_directories();
+			if ( is_wp_error( $result ) ) {
+				// Log error but don't prevent activation.
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'MksDdn Migrate Content activation error: ' . $result->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
+			}
 		}
 	}
 );

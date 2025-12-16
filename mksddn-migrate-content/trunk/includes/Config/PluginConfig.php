@@ -8,6 +8,8 @@
 
 namespace MksDdn\MigrateContent\Config;
 
+use WP_Error;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -156,6 +158,85 @@ class PluginConfig {
 	 */
 	public static function languages_dir(): string {
 		return self::dir() . 'languages/';
+	}
+
+	/**
+	 * Get imports directory path for server-uploaded backup files.
+	 *
+	 * @return string Imports directory path.
+	 * @since 1.0.1
+	 */
+	public static function imports_dir(): string {
+		$uploads = wp_upload_dir();
+		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		$default = trailingslashit( $base ) . 'mksddn-mc/imports/';
+		return apply_filters( 'mksddn_mc_imports_dir', $default );
+	}
+
+	/**
+	 * Get base uploads directory for plugin.
+	 *
+	 * @return string Base directory path.
+	 * @since 1.0.1
+	 */
+	public static function uploads_base_dir(): string {
+		$uploads = wp_upload_dir();
+		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		return trailingslashit( $base ) . 'mksddn-mc/';
+	}
+
+	/**
+	 * Get all required plugin directories.
+	 *
+	 * @return array Array of directory paths.
+	 * @since 1.0.1
+	 */
+	public static function get_required_directories(): array {
+		$base = self::uploads_base_dir();
+
+		return array(
+			'base'       => $base,
+			'jobs'       => $base . 'jobs/',
+			'scheduled'  => $base . 'scheduled/',
+			'snapshots'  => $base . 'snapshots/',
+			'imports'    => $base . 'imports/',
+		);
+	}
+
+	/**
+	 * Create all required plugin directories.
+	 *
+	 * @return bool|WP_Error True if all directories were created successfully, WP_Error with failed directories otherwise.
+	 * @since 1.0.1
+	 */
+	public static function create_required_directories(): bool|WP_Error {
+		$directories = self::get_required_directories();
+		$failed = array();
+
+		foreach ( $directories as $key => $dir ) {
+			if ( ! is_dir( $dir ) ) {
+				if ( ! wp_mkdir_p( $dir ) ) {
+					$failed[ $key ] = $dir;
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						error_log( sprintf( 'MksDdn Migrate Content: Failed to create directory: %s', $dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					}
+				}
+			}
+		}
+
+		if ( ! empty( $failed ) ) {
+			return new WP_Error(
+				'mksddn_mc_directories_creation_failed',
+				sprintf(
+					/* translators: %s: list of failed directories */
+					__( 'Failed to create required directories: %s', 'mksddn-migrate-content' ),
+					implode( ', ', $failed )
+				),
+				$failed
+			);
+		}
+
+		return true;
 	}
 }
 

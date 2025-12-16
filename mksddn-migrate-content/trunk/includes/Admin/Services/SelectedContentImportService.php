@@ -13,6 +13,8 @@ use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Recovery\SnapshotManager;
+use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Support\MimeTypeHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -83,6 +85,13 @@ class SelectedContentImportService {
 	private ImportPayloadPreparer $payload_preparer;
 
 	/**
+	 * Server backup scanner.
+	 *
+	 * @var ServerBackupScanner
+	 */
+	private ServerBackupScanner $server_scanner;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Extractor|null              $extractor        Archive extractor.
@@ -93,6 +102,7 @@ class SelectedContentImportService {
 	 * @param ProgressService|null        $progress         Progress service.
 	 * @param ImportFileValidator|null    $file_validator   File validator.
 	 * @param ImportPayloadPreparer|null  $payload_preparer Payload preparer.
+	 * @param ServerBackupScanner|null    $server_scanner   Server backup scanner.
 	 * @since 1.0.0
 	 */
 	public function __construct(
@@ -103,7 +113,8 @@ class SelectedContentImportService {
 		?NotificationService $notifications = null,
 		?ProgressService $progress = null,
 		?ImportFileValidator $file_validator = null,
-		?ImportPayloadPreparer $payload_preparer = null
+		?ImportPayloadPreparer $payload_preparer = null,
+		?ServerBackupScanner $server_scanner = null
 	) {
 		$this->extractor        = $extractor ?? new Extractor();
 		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
@@ -113,6 +124,7 @@ class SelectedContentImportService {
 		$this->progress         = $progress ?? new ProgressService();
 		$this->file_validator   = $file_validator ?? new ImportFileValidator();
 		$this->payload_preparer  = $payload_preparer ?? new ImportPayloadPreparer( $this->extractor );
+		$this->server_scanner   = $server_scanner ?? new ServerBackupScanner();
 	}
 
 	/**
@@ -140,17 +152,39 @@ class SelectedContentImportService {
 		$history_id = null;
 
 		try {
-			if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
-				$this->notifications->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
-				$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
-				return;
-			}
+			// Check if server file is provided.
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+			$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
 
-			$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated in validator
-			if ( is_wp_error( $file_data ) ) {
-				$this->notifications->show_error( $file_data->get_error_message() );
-				$this->progress->update( 100, __( 'Validation failed', 'mksddn-migrate-content' ) );
-				return;
+			if ( $server_file ) {
+				$file_info = $this->server_scanner->get_file( $server_file );
+
+				if ( is_wp_error( $file_info ) ) {
+					$this->notifications->show_error( $file_info->get_error_message() );
+					$this->progress->update( 100, __( 'Server file not found', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				$file_data = array(
+					'name'      => $file_info['name'],
+					'path'      => $file_info['path'],
+					'size'      => $file_info['size'],
+					'extension' => $file_info['extension'],
+					'mime'      => MimeTypeHelper::detect( $file_info['path'], $file_info['extension'] ),
+				);
+			} else {
+				if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
+					$this->notifications->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
+					$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated in validator
+				if ( is_wp_error( $file_data ) ) {
+					$this->notifications->show_error( $file_data->get_error_message() );
+					$this->progress->update( 100, __( 'Validation failed', 'mksddn-migrate-content' ) );
+					return;
+				}
 			}
 
 			$this->progress->update( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );

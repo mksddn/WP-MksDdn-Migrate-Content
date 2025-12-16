@@ -49,7 +49,6 @@ class ChunkJob {
 	}
 
 	private function load(): void {
-		wp_mkdir_p( $this->dir );
 		$path = $this->dir . $this->id . '.json';
 
 		if ( file_exists( $path ) ) {

@@ -62,8 +62,8 @@ class SnapshotManager implements SnapshotManagerInterface {
 
 		$args = wp_parse_args( $args, $defaults );
 
-		if ( ! wp_mkdir_p( $this->base_dir ) ) {
-			return new WP_Error( 'mksddn_snapshot_dir', __( 'Unable to prepare snapshot directory.', 'mksddn-migrate-content' ) );
+		if ( ! is_dir( $this->base_dir ) ) {
+			return new WP_Error( 'mksddn_snapshot_dir', __( 'Snapshot directory does not exist. Please reactivate the plugin to create required directories.', 'mksddn-migrate-content' ) );
 		}
 
 		$id          = gmdate( 'YmdHis' ) . '-' . wp_generate_uuid4();
