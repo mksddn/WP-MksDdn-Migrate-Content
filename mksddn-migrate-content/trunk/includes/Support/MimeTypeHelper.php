@@ -28,19 +28,30 @@ class MimeTypeHelper {
 	 * @since 1.0.1
 	 */
 	public static function detect( string $file_path, string $extension ): string {
-		if ( function_exists( 'mime_content_type' ) ) {
-			$mime = mime_content_type( $file_path );
-			if ( $mime ) {
+		// Try mime_content_type if available and file exists.
+		if ( function_exists( 'mime_content_type' ) && file_exists( $file_path ) ) {
+			$mime = @mime_content_type( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- fallback available
+			if ( $mime && 'application/octet-stream' !== $mime ) {
 				return $mime;
 			}
 		}
 
+		// Try WordPress wp_check_filetype if available.
+		if ( function_exists( 'wp_check_filetype' ) ) {
+			$filetype = wp_check_filetype( $file_path );
+			if ( ! empty( $filetype['type'] ) ) {
+				return $filetype['type'];
+			}
+		}
+
+		// Fallback to extension-based mapping.
 		$mime_map = array(
 			'wpbkp' => 'application/zip',
 			'json'  => 'application/json',
 		);
 
-		return $mime_map[ $extension ] ?? 'application/octet-stream';
+		$extension_lower = strtolower( $extension );
+		return $mime_map[ $extension_lower ] ?? 'application/octet-stream';
 	}
 }
 

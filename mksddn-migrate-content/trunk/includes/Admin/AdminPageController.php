@@ -324,7 +324,13 @@ class AdminPageController {
 	 * @since 1.0.1
 	 */
 	public function handle_ajax_get_server_backups(): void {
-		check_ajax_referer( 'mksddn_mc_admin', 'nonce' );
+		// Verify nonce from POST data.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
 
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );

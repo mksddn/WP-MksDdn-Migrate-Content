@@ -23,25 +23,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ServerBackupScanner {
 
 	/**
-	 * Cache for scanned files.
-	 *
-	 * @var array|null
-	 */
-	private ?array $cache = null;
-
-	/**
 	 * Cache TTL in seconds.
 	 *
 	 * @var int
 	 */
 	private int $cache_ttl = 30;
-
-	/**
-	 * Cache timestamp.
-	 *
-	 * @var int|null
-	 */
-	private ?int $cache_timestamp = null;
 
 	/**
 	 * Validate imports directory.
@@ -82,20 +68,24 @@ class ServerBackupScanner {
 			return $validation_error;
 		}
 
-		// Check cache.
-		if ( null !== $this->cache && null !== $this->cache_timestamp ) {
-			if ( time() - $this->cache_timestamp < $this->cache_ttl ) {
-				return $this->cache;
-			}
+		// Check WordPress transient cache.
+		$cache_key = 'mksddn_mc_server_backups';
+		$cached = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return $cached;
 		}
 
 		$files = array();
 		$items = @scandir( $imports_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- directory existence checked above
 
 		if ( false === $items ) {
+			$error_message = __( 'Failed to scan imports directory.', 'mksddn-migrate-content' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( 'MksDdn Migrate Content: %s (Directory: %s)', $error_message, $imports_dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 			return new WP_Error(
 				'mksddn_mc_imports_scan_failed',
-				__( 'Failed to scan imports directory.', 'mksddn-migrate-content' )
+				$error_message
 			);
 		}
 
@@ -143,9 +133,8 @@ class ServerBackupScanner {
 			}
 		);
 
-		// Cache result.
-		$this->cache = $files;
-		$this->cache_timestamp = time();
+		// Cache result in WordPress transient.
+		set_transient( $cache_key, $files, $this->cache_ttl );
 
 		return $files;
 	}
@@ -171,7 +160,19 @@ class ServerBackupScanner {
 		$real_path = realpath( $file_path );
 		$real_imports_dir = realpath( $imports_dir );
 
-		if ( ! $real_path || ! $real_imports_dir || strpos( $real_path, $real_imports_dir ) !== 0 ) {
+		if ( ! $real_path || ! $real_imports_dir ) {
+			return new WP_Error(
+				'mksddn_mc_import_file_invalid_path',
+				__( 'Invalid file path.', 'mksddn-migrate-content' )
+			);
+		}
+
+		// Normalize paths for cross-platform compatibility.
+		$real_imports_dir_normalized = trailingslashit( str_replace( '\\', '/', $real_imports_dir ) );
+		$real_path_normalized = str_replace( '\\', '/', $real_path );
+
+		// Ensure the file path is within the imports directory.
+		if ( strpos( $real_path_normalized, $real_imports_dir_normalized ) !== 0 ) {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )

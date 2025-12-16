@@ -115,9 +115,7 @@
 		.catch(function(error) {
 			self.isLoading = false;
 			self.showError(self.i18n.loadError || 'Error loading files');
-			if (console && console.error) {
-				console.error('Error loading server files:', error);
-			}
+			console.error('Error loading server files:', error);
 		});
 	};
 
@@ -184,7 +182,67 @@
 		}
 	};
 
+	/**
+	 * Auto-initialize server file selectors on the page.
+	 *
+	 * @param {Object} config Global configuration.
+	 */
+	function autoInit(config) {
+		var forms = document.querySelectorAll('form[data-mksddn-full-import="true"], .mksddn-mc-card form');
+		var defaultConfig = {
+			ajaxAction: config && config.ajaxAction ? config.ajaxAction : 'mksddn_mc_get_server_backups',
+			nonce: config && config.nonce ? config.nonce : '',
+			i18n: config && config.i18n ? config.i18n : {}
+		};
+
+		forms.forEach(function(form) {
+			if (form.dataset.serverFileSelectorInitialized === 'true') {
+				return;
+			}
+
+			var uploadRadio = form.querySelector('input[name="import_source"][value="upload"]');
+			var serverRadio = form.querySelector('input[name="import_source"][value="server"]');
+			var uploadDiv = form.querySelector('.mksddn-mc-import-source-upload');
+			var serverDiv = form.querySelector('.mksddn-mc-import-source-server');
+			var fileInput = form.querySelector('input[type="file"]');
+			var serverSelect = form.querySelector('select[name="server_file"]');
+
+			if (!uploadRadio || !serverRadio || !uploadDiv || !serverDiv || !fileInput || !serverSelect) {
+				return;
+			}
+
+			new ServerFileSelector({
+				form: form,
+				uploadRadio: uploadRadio,
+				serverRadio: serverRadio,
+				uploadDiv: uploadDiv,
+				serverDiv: serverDiv,
+				fileInput: fileInput,
+				serverSelect: serverSelect,
+				ajaxAction: defaultConfig.ajaxAction,
+				nonce: defaultConfig.nonce,
+				i18n: defaultConfig.i18n
+			});
+
+			form.dataset.serverFileSelectorInitialized = 'true';
+		});
+	}
+
 	// Export for use in forms.
 	window.MksDdnServerFileSelector = ServerFileSelector;
+	window.MksDdnServerFileSelector.autoInit = autoInit;
+
+	// Auto-initialize if config is available.
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', function() {
+			if (window.mksddnServerFileSelector) {
+				autoInit(window.mksddnServerFileSelector);
+			}
+		});
+	} else {
+		if (window.mksddnServerFileSelector) {
+			autoInit(window.mksddnServerFileSelector);
+		}
+	}
 })();
 
