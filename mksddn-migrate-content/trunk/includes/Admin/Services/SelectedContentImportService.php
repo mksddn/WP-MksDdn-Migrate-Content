@@ -14,6 +14,7 @@ use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Recovery\SnapshotManager;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Support\MimeTypeHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -84,6 +85,13 @@ class SelectedContentImportService {
 	private ImportPayloadPreparer $payload_preparer;
 
 	/**
+	 * Server backup scanner.
+	 *
+	 * @var ServerBackupScanner
+	 */
+	private ServerBackupScanner $server_scanner;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Extractor|null              $extractor        Archive extractor.
@@ -94,6 +102,7 @@ class SelectedContentImportService {
 	 * @param ProgressService|null        $progress         Progress service.
 	 * @param ImportFileValidator|null    $file_validator   File validator.
 	 * @param ImportPayloadPreparer|null  $payload_preparer Payload preparer.
+	 * @param ServerBackupScanner|null    $server_scanner   Server backup scanner.
 	 * @since 1.0.0
 	 */
 	public function __construct(
@@ -104,7 +113,8 @@ class SelectedContentImportService {
 		?NotificationService $notifications = null,
 		?ProgressService $progress = null,
 		?ImportFileValidator $file_validator = null,
-		?ImportPayloadPreparer $payload_preparer = null
+		?ImportPayloadPreparer $payload_preparer = null,
+		?ServerBackupScanner $server_scanner = null
 	) {
 		$this->extractor        = $extractor ?? new Extractor();
 		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
@@ -114,6 +124,7 @@ class SelectedContentImportService {
 		$this->progress         = $progress ?? new ProgressService();
 		$this->file_validator   = $file_validator ?? new ImportFileValidator();
 		$this->payload_preparer  = $payload_preparer ?? new ImportPayloadPreparer( $this->extractor );
+		$this->server_scanner   = $server_scanner ?? new ServerBackupScanner();
 	}
 
 	/**
@@ -146,8 +157,7 @@ class SelectedContentImportService {
 			$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
 
 			if ( $server_file ) {
-				$scanner = new ServerBackupScanner();
-				$file_info = $scanner->get_file( $server_file );
+				$file_info = $this->server_scanner->get_file( $server_file );
 
 				if ( is_wp_error( $file_info ) ) {
 					$this->notifications->show_error( $file_info->get_error_message() );
@@ -160,7 +170,7 @@ class SelectedContentImportService {
 					'path'      => $file_info['path'],
 					'size'      => $file_info['size'],
 					'extension' => $file_info['extension'],
-					'mime'      => $this->detect_mime_type( $file_info['path'], $file_info['extension'] ),
+					'mime'      => MimeTypeHelper::detect( $file_info['path'], $file_info['extension'] ),
 				);
 			} else {
 				if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
@@ -272,30 +282,6 @@ class SelectedContentImportService {
 		}
 
 		return $import_handler->import_single_page( $data );
-	}
-
-	/**
-	 * Detect MIME type for file.
-	 *
-	 * @param string $file_path File path.
-	 * @param string $extension File extension.
-	 * @return string MIME type.
-	 * @since 1.0.1
-	 */
-	private function detect_mime_type( string $file_path, string $extension ): string {
-		if ( function_exists( 'mime_content_type' ) ) {
-			$mime = mime_content_type( $file_path );
-			if ( $mime ) {
-				return $mime;
-			}
-		}
-
-		$mime_map = array(
-			'wpbkp' => 'application/zip',
-			'json'  => 'application/json',
-		);
-
-		return $mime_map[ $extension ] ?? 'application/octet-stream';
 	}
 }
 

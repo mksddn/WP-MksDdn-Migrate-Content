@@ -35,6 +35,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<select name="server_file" id="mksddn-mc-full-server-file" style="width: 100%; max-width: 500px;">
 			<option value=""><?php esc_html_e( 'Select a file...', 'mksddn-migrate-content' ); ?></option>
 		</select>
+		<div class="mksddn-mc-server-file-notice notice notice-error" style="display: none; margin-top: 0.5rem;"></div>
 	</div>
 
 	<br>
@@ -43,82 +44,42 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 <script>
 (function() {
-	const form = document.getElementById('mksddn-mc-full-import-form');
-	if (!form) return;
+	function initServerFileSelector() {
+		if (typeof window.MksDdnServerFileSelector === 'undefined') {
+			// Retry after a short delay if script not loaded yet.
+			setTimeout(initServerFileSelector, 100);
+			return;
+		}
 
-	const uploadRadio = form.querySelector('input[value="upload"]');
-	const serverRadio = form.querySelector('input[value="server"]');
-	const uploadDiv = form.querySelector('.mksddn-mc-import-source-upload');
-	const serverDiv = form.querySelector('.mksddn-mc-import-source-server');
-	const fileInput = form.querySelector('#mksddn-mc-full-import-file');
-	const serverSelect = form.querySelector('#mksddn-mc-full-server-file');
+		const form = document.getElementById('mksddn-mc-full-import-form');
+		if (!form) return;
 
-	function loadServerFiles() {
-		serverSelect.innerHTML = '<option value=""><?php echo esc_js( __( 'Loading...', 'mksddn-migrate-content' ) ); ?></option>';
-		
-		fetch(ajaxurl, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
-			},
-			body: new URLSearchParams({
-				action: 'mksddn_mc_get_server_backups',
-				nonce: '<?php echo esc_js( wp_create_nonce( 'mksddn_mc_admin' ) ); ?>'
-			})
-		})
-		.then(response => response.json())
-		.then(data => {
-			if (data.success && data.data.files && data.data.files.length > 0) {
-				serverSelect.innerHTML = '<option value=""><?php echo esc_js( __( 'Select a file...', 'mksddn-migrate-content' ) ); ?></option>';
-				data.data.files.forEach(file => {
-					const option = document.createElement('option');
-					option.value = file.name;
-					option.textContent = file.name + ' (' + file.size_human + ', ' + file.modified_human + ')';
-					serverSelect.appendChild(option);
-				});
-			} else {
-				serverSelect.innerHTML = '<option value=""><?php echo esc_js( __( 'No backup files found', 'mksddn-migrate-content' ) ); ?></option>';
-			}
-		})
-		.catch(error => {
-			serverSelect.innerHTML = '<option value=""><?php echo esc_js( __( 'Error loading files', 'mksddn-migrate-content' ) ); ?></option>';
-			console.error('Error loading server files:', error);
+		// Check if already initialized.
+		if (form.dataset.serverFileSelectorInitialized === 'true') {
+			return;
+		}
+
+		const selector = new window.MksDdnServerFileSelector({
+			form: form,
+			uploadRadio: form.querySelector('input[value="upload"]'),
+			serverRadio: form.querySelector('input[value="server"]'),
+			uploadDiv: form.querySelector('.mksddn-mc-import-source-upload'),
+			serverDiv: form.querySelector('.mksddn-mc-import-source-server'),
+			fileInput: form.querySelector('#mksddn-mc-full-import-file'),
+			serverSelect: form.querySelector('#mksddn-mc-full-server-file'),
+			ajaxAction: window.mksddnServerFileSelector ? window.mksddnServerFileSelector.ajaxAction : 'mksddn_mc_get_server_backups',
+			nonce: window.mksddnServerFileSelector ? window.mksddnServerFileSelector.nonce : '',
+			i18n: window.mksddnServerFileSelector ? window.mksddnServerFileSelector.i18n : {}
 		});
+
+		form.dataset.serverFileSelectorInitialized = 'true';
 	}
 
-	function toggleSource() {
-		if (uploadRadio.checked) {
-			uploadDiv.style.display = 'block';
-			serverDiv.style.display = 'none';
-			fileInput.required = true;
-			serverSelect.required = false;
-			serverSelect.value = '';
-		} else {
-			uploadDiv.style.display = 'none';
-			serverDiv.style.display = 'block';
-			fileInput.required = false;
-			fileInput.value = '';
-			serverSelect.required = true;
-			loadServerFiles();
-		}
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', initServerFileSelector);
+	} else {
+		initServerFileSelector();
 	}
-
-	uploadRadio.addEventListener('change', toggleSource);
-	serverRadio.addEventListener('change', toggleSource);
-
-	form.addEventListener('submit', function(e) {
-		if (serverRadio.checked) {
-			if (!serverSelect.value) {
-				e.preventDefault();
-				alert('<?php echo esc_js( __( 'Please select a file from the server.', 'mksddn-migrate-content' ) ); ?>');
-				return false;
-			}
-			fileInput.removeAttribute('required');
-			fileInput.disabled = true;
-		} else {
-			serverSelect.removeAttribute('required');
-		}
-	});
 })();
 </script>
 

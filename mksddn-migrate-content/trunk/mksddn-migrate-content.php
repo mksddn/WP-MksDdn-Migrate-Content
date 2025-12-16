@@ -58,7 +58,13 @@ register_activation_hook(
 
 		// Create required directories.
 		if ( class_exists( '\MksDdn\MigrateContent\Config\PluginConfig' ) ) {
-			\MksDdn\MigrateContent\Config\PluginConfig::create_required_directories();
+			$result = \MksDdn\MigrateContent\Config\PluginConfig::create_required_directories();
+			if ( is_wp_error( $result ) ) {
+				// Log error but don't prevent activation.
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'MksDdn Migrate Content activation error: ' . $result->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
+			}
 		}
 	}
 );

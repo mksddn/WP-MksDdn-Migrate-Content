@@ -97,6 +97,13 @@ class AdminPageController {
 	private UserPreviewStoreInterface $preview_store;
 
 	/**
+	 * Server backup scanner.
+	 *
+	 * @var ServerBackupScanner
+	 */
+	private ServerBackupScanner $server_scanner;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ServiceContainer $container Service container.
@@ -112,6 +119,7 @@ class AdminPageController {
 		$this->notifications     = $container->get( NotificationServiceInterface::class );
 		$this->progress          = $container->get( ProgressServiceInterface::class );
 		$this->preview_store     = $container->get( UserPreviewStoreInterface::class );
+		$this->server_scanner    = $container->get( ServerBackupScanner::class );
 	}
 
 	/**
@@ -195,6 +203,31 @@ class AdminPageController {
 		if ( 'toplevel_page_' . PluginConfig::text_domain() !== $hook ) {
 			return;
 		}
+
+		// Enqueue server file selector script.
+		wp_enqueue_script(
+			'mksddn-server-file-selector',
+			PluginConfig::assets_url() . 'js/server-file-selector.js',
+			array(),
+			PluginConfig::version(),
+			true
+		);
+
+		wp_localize_script(
+			'mksddn-server-file-selector',
+			'mksddnServerFileSelector',
+			array(
+				'ajaxAction' => 'mksddn_mc_get_server_backups',
+				'nonce'     => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'      => array(
+					'loading'     => __( 'Loading...', 'mksddn-migrate-content' ),
+					'selectFile'  => __( 'Select a file...', 'mksddn-migrate-content' ),
+					'noFiles'     => __( 'No backup files found', 'mksddn-migrate-content' ),
+					'loadError'   => __( 'Error loading files', 'mksddn-migrate-content' ),
+					'pleaseSelect' => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+				),
+			)
+		);
 
 		if ( ! PluginConfig::is_chunked_disabled() ) {
 			wp_enqueue_script(
@@ -297,8 +330,7 @@ class AdminPageController {
 			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
 		}
 
-		$scanner = new ServerBackupScanner();
-		$files   = $scanner->scan();
+		$files = $this->server_scanner->scan();
 
 		if ( is_wp_error( $files ) ) {
 			wp_send_json_error( array( 'message' => $files->get_error_message() ) );

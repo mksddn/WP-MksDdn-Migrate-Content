@@ -8,6 +8,8 @@
 
 namespace MksDdn\MigrateContent\Config;
 
+use WP_Error;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -204,22 +206,37 @@ class PluginConfig {
 	/**
 	 * Create all required plugin directories.
 	 *
-	 * @return bool True if all directories were created successfully, false otherwise.
+	 * @return bool|WP_Error True if all directories were created successfully, WP_Error with failed directories otherwise.
 	 * @since 1.0.1
 	 */
-	public static function create_required_directories(): bool {
+	public static function create_required_directories(): bool|WP_Error {
 		$directories = self::get_required_directories();
-		$all_created = true;
+		$failed = array();
 
-		foreach ( $directories as $dir ) {
+		foreach ( $directories as $key => $dir ) {
 			if ( ! is_dir( $dir ) ) {
 				if ( ! wp_mkdir_p( $dir ) ) {
-					$all_created = false;
+					$failed[ $key ] = $dir;
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						error_log( sprintf( 'MksDdn Migrate Content: Failed to create directory: %s', $dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					}
 				}
 			}
 		}
 
-		return $all_created;
+		if ( ! empty( $failed ) ) {
+			return new WP_Error(
+				'mksddn_mc_directories_creation_failed',
+				sprintf(
+					/* translators: %s: list of failed directories */
+					__( 'Failed to create required directories: %s', 'mksddn-migrate-content' ),
+					implode( ', ', $failed )
+				),
+				$failed
+			);
+		}
+
+		return true;
 	}
 }
 

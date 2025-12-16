@@ -75,6 +75,13 @@ class FullSiteImportService {
 	private ResponseHandler $response_handler;
 
 	/**
+	 * Server backup scanner.
+	 *
+	 * @var ServerBackupScanner
+	 */
+	private ServerBackupScanner $server_scanner;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param SnapshotManager|null    $snapshot_manager Snapshot manager.
@@ -83,6 +90,7 @@ class FullSiteImportService {
 	 * @param UserPreviewStore|null   $preview_store    User preview store.
 	 * @param NotificationService|null $notifications    Notification service.
 	 * @param ResponseHandler|null    $response_handler Response handler.
+	 * @param ServerBackupScanner|null $server_scanner   Server backup scanner.
 	 * @since 1.0.0
 	 */
 	public function __construct(
@@ -91,7 +99,8 @@ class FullSiteImportService {
 		?JobLock $job_lock = null,
 		?UserPreviewStore $preview_store = null,
 		?NotificationService $notifications = null,
-		?ResponseHandler $response_handler = null
+		?ResponseHandler $response_handler = null,
+		?ServerBackupScanner $server_scanner = null
 	) {
 		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
 		$this->history          = $history ?? new HistoryRepository();
@@ -99,6 +108,7 @@ class FullSiteImportService {
 		$this->preview_store    = $preview_store ?? new UserPreviewStore();
 		$this->notifications    = $notifications ?? new NotificationService();
 		$this->response_handler = $response_handler ?? new ResponseHandler( $this->notifications );
+		$this->server_scanner   = $server_scanner ?? new ServerBackupScanner();
 	}
 
 	/**
@@ -422,8 +432,7 @@ class FullSiteImportService {
 		$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
 
 		if ( $server_file ) {
-			$scanner = new ServerBackupScanner();
-			$file_info = $scanner->get_file( $server_file );
+			$file_info = $this->server_scanner->get_file( $server_file );
 
 			if ( is_wp_error( $file_info ) ) {
 				return $file_info;

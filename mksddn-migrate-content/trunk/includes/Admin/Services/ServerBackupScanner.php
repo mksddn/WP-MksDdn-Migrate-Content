@@ -2,14 +2,13 @@
 /**
  * @file: ServerBackupScanner.php
  * @description: Service for scanning server imports directory for available backup files
- * @dependencies: Config\PluginConfig, Support\FilesystemHelper
+ * @dependencies: Config\PluginConfig
  * @created: 2024-12-15
  */
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Config\PluginConfig;
-use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -24,14 +23,34 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ServerBackupScanner {
 
 	/**
-	 * Get list of available import files from server directory.
+	 * Cache for scanned files.
 	 *
-	 * @return array|WP_Error List of import files with metadata or error.
+	 * @var array|null
+	 */
+	private ?array $cache = null;
+
+	/**
+	 * Cache TTL in seconds.
+	 *
+	 * @var int
+	 */
+	private int $cache_ttl = 30;
+
+	/**
+	 * Cache timestamp.
+	 *
+	 * @var int|null
+	 */
+	private ?int $cache_timestamp = null;
+
+	/**
+	 * Validate imports directory.
+	 *
+	 * @param string $imports_dir Directory path.
+	 * @return WP_Error|null Error if validation fails, null otherwise.
 	 * @since 1.0.1
 	 */
-	public function scan(): array|WP_Error {
-		$imports_dir = PluginConfig::imports_dir();
-
+	private function validate_imports_dir( string $imports_dir ): ?WP_Error {
 		if ( ! is_dir( $imports_dir ) ) {
 			return new WP_Error(
 				'mksddn_mc_imports_dir_invalid',
@@ -44,6 +63,30 @@ class ServerBackupScanner {
 				'mksddn_mc_imports_dir_unreadable',
 				__( 'Imports directory is not readable.', 'mksddn-migrate-content' )
 			);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get list of available import files from server directory.
+	 *
+	 * @return array|WP_Error List of import files with metadata or error.
+	 * @since 1.0.1
+	 */
+	public function scan(): array|WP_Error {
+		$imports_dir = PluginConfig::imports_dir();
+
+		$validation_error = $this->validate_imports_dir( $imports_dir );
+		if ( $validation_error ) {
+			return $validation_error;
+		}
+
+		// Check cache.
+		if ( null !== $this->cache && null !== $this->cache_timestamp ) {
+			if ( time() - $this->cache_timestamp < $this->cache_ttl ) {
+				return $this->cache;
+			}
 		}
 
 		$files = array();
@@ -100,6 +143,10 @@ class ServerBackupScanner {
 			}
 		);
 
+		// Cache result.
+		$this->cache = $files;
+		$this->cache_timestamp = time();
+
 		return $files;
 	}
 
@@ -113,14 +160,23 @@ class ServerBackupScanner {
 	public function get_file( string $filename ): array|WP_Error {
 		$imports_dir = PluginConfig::imports_dir();
 
-		if ( ! is_dir( $imports_dir ) ) {
-			return new WP_Error(
-				'mksddn_mc_imports_dir_invalid',
-				__( 'Imports directory does not exist. Please reactivate the plugin to create required directories.', 'mksddn-migrate-content' )
-			);
+		$validation_error = $this->validate_imports_dir( $imports_dir );
+		if ( $validation_error ) {
+			return $validation_error;
 		}
 
 		$file_path = trailingslashit( $imports_dir ) . basename( $filename );
+
+		// Security: prevent path traversal attacks.
+		$real_path = realpath( $file_path );
+		$real_imports_dir = realpath( $imports_dir );
+
+		if ( ! $real_path || ! $real_imports_dir || strpos( $real_path, $real_imports_dir ) !== 0 ) {
+			return new WP_Error(
+				'mksddn_mc_import_file_invalid_path',
+				__( 'Invalid file path.', 'mksddn-migrate-content' )
+			);
+		}
 
 		if ( ! file_exists( $file_path ) ) {
 			return new WP_Error(
