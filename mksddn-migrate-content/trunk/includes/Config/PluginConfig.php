@@ -157,5 +157,69 @@ class PluginConfig {
 	public static function languages_dir(): string {
 		return self::dir() . 'languages/';
 	}
+
+	/**
+	 * Get imports directory path for server-uploaded backup files.
+	 *
+	 * @return string Imports directory path.
+	 * @since 1.0.1
+	 */
+	public static function imports_dir(): string {
+		$uploads = wp_upload_dir();
+		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		$default = trailingslashit( $base ) . 'mksddn-mc/imports/';
+		return apply_filters( 'mksddn_mc_imports_dir', $default );
+	}
+
+	/**
+	 * Get base uploads directory for plugin.
+	 *
+	 * @return string Base directory path.
+	 * @since 1.0.1
+	 */
+	public static function uploads_base_dir(): string {
+		$uploads = wp_upload_dir();
+		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		return trailingslashit( $base ) . 'mksddn-mc/';
+	}
+
+	/**
+	 * Get all required plugin directories.
+	 *
+	 * @return array Array of directory paths.
+	 * @since 1.0.1
+	 */
+	public static function get_required_directories(): array {
+		$base = self::uploads_base_dir();
+
+		return array(
+			'base'       => $base,
+			'jobs'       => $base . 'jobs/',
+			'scheduled'  => $base . 'scheduled/',
+			'snapshots'  => $base . 'snapshots/',
+			'imports'    => $base . 'imports/',
+		);
+	}
+
+	/**
+	 * Create all required plugin directories.
+	 *
+	 * @return bool True if all directories were created successfully, false otherwise.
+	 * @since 1.0.1
+	 */
+	public static function create_required_directories(): bool {
+		$directories = self::get_required_directories();
+		$all_created = true;
+
+		foreach ( $directories as $dir ) {
+			if ( ! is_dir( $dir ) ) {
+				if ( ! wp_mkdir_p( $dir ) ) {
+					$all_created = false;
+				}
+			}
+		}
+
+		return $all_created;
+	}
 }
 

@@ -52,6 +52,14 @@ register_activation_hook(
 			deactivate_plugins( plugin_basename( __FILE__ ) );
 			wp_die( esc_html__( 'MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+.', 'mksddn-migrate-content' ) );
 		}
+
+		// Load autoloader to access plugin classes.
+		require_once MKSDDN_MC_DIR . 'includes/autoload.php';
+
+		// Create required directories.
+		if ( class_exists( '\MksDdn\MigrateContent\Config\PluginConfig' ) ) {
+			\MksDdn\MigrateContent\Config\PluginConfig::create_required_directories();
+		}
 	}
 );
 

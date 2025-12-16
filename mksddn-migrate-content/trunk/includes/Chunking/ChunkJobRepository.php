@@ -21,7 +21,6 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 		$uploads          = wp_upload_dir();
 		$base_dir         = trailingslashit( $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads' ) . 'mksddn-mc/';
 		$this->storage_dir = $base_dir . 'jobs/';
-		$this->ensure_storage_dir();
 		$this->cleanup_expired();
 	}
 
@@ -32,12 +31,6 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 	public function create(): ChunkJob {
 		$job_id = wp_generate_password( 20, false, false );
 		return new ChunkJob( $job_id, $this->storage_dir );
-	}
-
-	private function ensure_storage_dir(): void {
-		if ( ! is_dir( $this->storage_dir ) ) {
-			wp_mkdir_p( $this->storage_dir );
-		}
 	}
 
 	private function cleanup_expired( int $ttl = DAY_IN_SECONDS ): void {

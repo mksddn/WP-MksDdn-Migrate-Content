@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
+use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
@@ -132,6 +133,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_schedule_run', array( $this->schedule_handler, 'handle_run_now' ) );
 		add_action( 'admin_post_mksddn_mc_download_scheduled', array( $this->schedule_handler, 'handle_download' ) );
 		add_action( 'admin_post_mksddn_mc_delete_scheduled', array( $this->schedule_handler, 'handle_delete' ) );
+		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 	}
 
 	/**
@@ -280,6 +282,29 @@ class AdminPageController {
 			'original_name' => $preview['original_name'] ?? '',
 			'summary'       => $summary,
 		);
+	}
+
+	/**
+	 * Handle AJAX request to get list of server backup files.
+	 *
+	 * @return void
+	 * @since 1.0.1
+	 */
+	public function handle_ajax_get_server_backups(): void {
+		check_ajax_referer( 'mksddn_mc_admin', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		$scanner = new ServerBackupScanner();
+		$files   = $scanner->scan();
+
+		if ( is_wp_error( $files ) ) {
+			wp_send_json_error( array( 'message' => $files->get_error_message() ) );
+		}
+
+		wp_send_json_success( array( 'files' => $files ) );
 	}
 }
 

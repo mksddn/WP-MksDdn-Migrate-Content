@@ -44,5 +44,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 .mksddn-mc-user-table td select{width:100%;}
 .mksddn-mc-user-actions{margin-top:1rem;}
 .mksddn-mc-inline-form{margin-top:0.75rem;}
+.mksddn-mc-import-source-toggle{display:flex;gap:1rem;margin-bottom:1rem;padding-bottom:0.75rem;border-bottom:1px solid #e5e7eb;}
+.mksddn-mc-import-source-toggle label{display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-weight:500;}
+.mksddn-mc-import-source-toggle input[type="radio"]{margin:0;}
+.mksddn-mc-import-source-server select{margin-bottom:0.5rem;}
 </style>
 

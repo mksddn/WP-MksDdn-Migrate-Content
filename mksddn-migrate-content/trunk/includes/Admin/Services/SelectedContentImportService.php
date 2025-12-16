@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Recovery\SnapshotManager;
+use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -140,17 +141,40 @@ class SelectedContentImportService {
 		$history_id = null;
 
 		try {
-			if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
-				$this->notifications->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
-				$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
-				return;
-			}
+			// Check if server file is provided.
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+			$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
 
-			$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated in validator
-			if ( is_wp_error( $file_data ) ) {
-				$this->notifications->show_error( $file_data->get_error_message() );
-				$this->progress->update( 100, __( 'Validation failed', 'mksddn-migrate-content' ) );
-				return;
+			if ( $server_file ) {
+				$scanner = new ServerBackupScanner();
+				$file_info = $scanner->get_file( $server_file );
+
+				if ( is_wp_error( $file_info ) ) {
+					$this->notifications->show_error( $file_info->get_error_message() );
+					$this->progress->update( 100, __( 'Server file not found', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				$file_data = array(
+					'name'      => $file_info['name'],
+					'path'      => $file_info['path'],
+					'size'      => $file_info['size'],
+					'extension' => $file_info['extension'],
+					'mime'      => $this->detect_mime_type( $file_info['path'], $file_info['extension'] ),
+				);
+			} else {
+				if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
+					$this->notifications->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
+					$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated in validator
+				if ( is_wp_error( $file_data ) ) {
+					$this->notifications->show_error( $file_data->get_error_message() );
+					$this->progress->update( 100, __( 'Validation failed', 'mksddn-migrate-content' ) );
+					return;
+				}
 			}
 
 			$this->progress->update( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
@@ -248,6 +272,30 @@ class SelectedContentImportService {
 		}
 
 		return $import_handler->import_single_page( $data );
+	}
+
+	/**
+	 * Detect MIME type for file.
+	 *
+	 * @param string $file_path File path.
+	 * @param string $extension File extension.
+	 * @return string MIME type.
+	 * @since 1.0.1
+	 */
+	private function detect_mime_type( string $file_path, string $extension ): string {
+		if ( function_exists( 'mime_content_type' ) ) {
+			$mime = mime_content_type( $file_path );
+			if ( $mime ) {
+				return $mime;
+			}
+		}
+
+		$mime_map = array(
+			'wpbkp' => 'application/zip',
+			'json'  => 'application/json',
+		);
+
+		return $mime_map[ $extension ] ?? 'application/octet-stream';
 	}
 }
 
