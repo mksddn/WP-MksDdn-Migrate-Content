@@ -138,11 +138,15 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	/**
 	 * Fetch all entries (descending), filtering out entries with missing files.
 	 *
+	 * Automatically cleans up stale "running" entries before returning.
+	 *
 	 * @param int $limit Optional limit. Default 20.
 	 * @return array<int, array<string, mixed>> Array of history entries.
 	 * @since 1.0.0
 	 */
 	public function all( int $limit = 20 ): array {
+		$this->cleanup_stale();
+
 		$entries  = $this->load();
 		$filtered = array_filter( $entries, array( $this, 'entry_file_exists' ) );
 
@@ -193,6 +197,50 @@ class HistoryRepository implements HistoryRepositoryInterface {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Mark stale "running" entries as failed.
+	 *
+	 * Entries stuck in "running" status for longer than threshold are
+	 * considered crashed and marked as errors.
+	 *
+	 * @param int $threshold_seconds Max seconds before marking as stale. Default 1 hour.
+	 * @return int Number of entries cleaned up.
+	 * @since 1.0.0
+	 */
+	public function cleanup_stale( int $threshold_seconds = 3600 ): int {
+		$entries = $this->load();
+		$now     = time();
+		$cleaned = 0;
+
+		foreach ( $entries as &$entry ) {
+			if ( 'running' !== ( $entry['status'] ?? '' ) ) {
+				continue;
+			}
+
+			$started = strtotime( $entry['started_at'] ?? '' );
+			if ( false === $started ) {
+				continue;
+			}
+
+			if ( ( $now - $started ) > $threshold_seconds ) {
+				$entry['status']      = 'error';
+				$entry['finished_at'] = gmdate( 'c' );
+				$entry['context']     = array_merge(
+					$entry['context'] ?? array(),
+					array( 'message' => __( 'Operation timed out or crashed.', 'mksddn-migrate-content' ) )
+				);
+				++$cleaned;
+			}
+		}
+		unset( $entry );
+
+		if ( $cleaned > 0 ) {
+			$this->persist( $entries );
+		}
+
+		return $cleaned;
 	}
 
 	/**

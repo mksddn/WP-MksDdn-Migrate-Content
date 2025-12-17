@@ -70,6 +70,11 @@ class ScheduledBackupRunner {
 	 * @return array|WP_Error
 	 */
 	private function perform_export( array $settings, string $lock_id ) {
+		// Ensure wp_tempnam() is available (not loaded during cron).
+		if ( ! function_exists( 'wp_tempnam' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
 		$history_id = $this->history->start(
 			'export',
 			array(
@@ -77,7 +82,7 @@ class ScheduledBackupRunner {
 			)
 		);
 
-		$temp = wp_tempnam( 'mksddn-scheduled-' );
+		$temp = \wp_tempnam( 'mksddn-scheduled-' );
 		if ( ! $temp ) {
 			return $this->fail_run( $history_id, __( 'Unable to allocate temporary file for scheduled export.', 'mksddn-migrate-content' ) );
 		}

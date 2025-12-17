@@ -26,20 +26,18 @@ final class FilesystemHelper {
 
 	/**
 	 * Get filesystem instance (direct transport).
+	 *
+	 * @return \WP_Filesystem_Direct
 	 */
-	public static function instance() {
+	public static function instance(): \WP_Filesystem_Direct {
 		if ( null === self::$filesystem ) {
 			$root = defined( 'ABSPATH' ) ? constant( 'ABSPATH' ) : dirname( __DIR__, 5 ) . '/';
 			require_once $root . 'wp-admin/includes/file.php';
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-base.php';
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-direct.php';
 
-			global $wp_filesystem;
-			if ( ! $wp_filesystem && function_exists( 'WP_Filesystem' ) ) {
-				call_user_func( 'WP_Filesystem' );
-			}
-
-			self::$filesystem = $wp_filesystem;
+			// Always use direct filesystem for reliability.
+			self::$filesystem = new \WP_Filesystem_Direct( null );
 		}
 
 		return self::$filesystem;

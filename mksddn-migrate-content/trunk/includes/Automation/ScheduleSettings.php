@@ -82,14 +82,43 @@ class ScheduleSettings {
 	}
 
 	/**
-	 * Get recorded run history entries.
+	 * Get recorded run history entries based on actual files in storage directory.
 	 *
 	 * @return array
 	 */
 	public function get_recent_runs(): array {
-		$value = get_option( self::RUNS_OPTION, array() );
+		$dir = $this->get_storage_dir();
+		if ( ! is_dir( $dir ) ) {
+			return array();
+		}
 
-		return is_array( $value ) ? $value : array();
+		$files = glob( trailingslashit( $dir ) . '*.wpbkp' );
+		if ( ! is_array( $files ) || empty( $files ) ) {
+			return array();
+		}
+
+		// Sort by modification time descending.
+		usort(
+			$files,
+			static function ( $a, $b ) {
+				return filemtime( $b ) - filemtime( $a );
+			}
+		);
+
+		$runs = array();
+		foreach ( array_slice( $files, 0, self::HISTORY_SIZE ) as $file ) {
+			$runs[] = array(
+				'status'     => 'success',
+				'message'    => __( 'Scheduled backup', 'mksddn-migrate-content' ),
+				'created_at' => gmdate( 'c', filemtime( $file ) ),
+				'file'       => array(
+					'name' => basename( $file ),
+					'size' => filesize( $file ),
+				),
+			);
+		}
+
+		return $runs;
 	}
 
 	/**
@@ -125,7 +154,8 @@ class ScheduleSettings {
 	 * @return string|null
 	 */
 	public function resolve_backup_path( string $filename ): ?string {
-		$filename = sanitize_file_name( $filename );
+		// Use basename to prevent directory traversal, but preserve dots in filename.
+		$filename = basename( $filename );
 		if ( '' === $filename ) {
 			return null;
 		}
@@ -135,30 +165,6 @@ class ScheduleSettings {
 		return file_exists( $path ) ? $path : null;
 	}
 
-	/**
-	 * Remove run entry by filename.
-	 *
-	 * @param string $filename Archive filename.
-	 * @return void
-	 */
-	public function remove_run_by_file( string $filename ): void {
-		$filename = sanitize_file_name( $filename );
-		if ( '' === $filename ) {
-			return;
-		}
-
-		$runs = $this->get_recent_runs();
-		$runs = array_values(
-			array_filter(
-				$runs,
-				static function ( $run ) use ( $filename ) {
-					return ( $run['file']['name'] ?? '' ) !== $filename;
-				}
-			)
-		);
-
-		update_option( self::RUNS_OPTION, $runs, false );
-	}
 
 	/**
 	 * Sanitize recurrence slug.

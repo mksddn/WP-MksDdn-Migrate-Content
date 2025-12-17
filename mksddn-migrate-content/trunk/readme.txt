@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,13 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.2.2 =
+* Fixed history entries filtering to exclude records with missing archive files.
+* Improved RecoveryRequestHandler with enhanced error handling and validation.
+* Refactored file handling in ExportImportAdmin and ScheduleRequestHandler.
+* Enhanced ScheduledBackupRunner reliability and HistoryRepository functionality.
+* Improved ScheduleManager with better job status tracking.
 
 = 1.2.1 =
 * Added automatic filtering of history entries with missing archive files.
