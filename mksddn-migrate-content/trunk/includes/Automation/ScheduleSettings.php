@@ -165,31 +165,6 @@ class ScheduleSettings {
 		return file_exists( $path ) ? $path : null;
 	}
 
-	/**
-	 * Remove run entry by filename (no-op since runs are now file-based).
-	 *
-	 * @param string $filename Archive filename.
-	 * @return void
-	 * @deprecated Runs are now derived from filesystem. Use delete_backup_file() instead.
-	 */
-	public function remove_run_by_file( string $filename ): void {
-		// No-op: runs are now derived from filesystem scan.
-	}
-
-	/**
-	 * Delete backup file from storage directory.
-	 *
-	 * @param string $filename Archive filename.
-	 * @return bool
-	 */
-	public function delete_backup_file( string $filename ): bool {
-		$path = $this->resolve_backup_path( $filename );
-		if ( ! $path || ! file_exists( $path ) ) {
-			return false;
-		}
-
-		return wp_delete_file( $path ) || ! file_exists( $path );
-	}
 
 	/**
 	 * Sanitize recurrence slug.

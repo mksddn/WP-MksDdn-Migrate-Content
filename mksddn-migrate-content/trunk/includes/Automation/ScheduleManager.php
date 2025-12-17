@@ -208,16 +208,20 @@ class ScheduleManager implements ScheduleManagerInterface {
 	 * @return bool
 	 */
 	public function delete_backup( string $filename ): bool {
-		$path = $this->resolve_backup_path( $filename );
-		if ( ! $path ) {
+		$filename = basename( $filename );
+		if ( '' === $filename ) {
 			return false;
 		}
+
+		$path = trailingslashit( $this->settings->get_storage_dir() ) . $filename;
 
 		if ( ! file_exists( $path ) ) {
 			return true;
 		}
 
-		return FilesystemHelper::delete( $path, false );
+		FilesystemHelper::delete( $path, false );
+
+		return ! file_exists( $path );
 	}
 
 	/**

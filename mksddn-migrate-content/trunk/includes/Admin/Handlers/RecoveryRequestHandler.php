@@ -66,16 +66,35 @@ class RecoveryRequestHandler implements RecoveryRequestHandlerInterface {
 	 * @param NotificationService|null $notifications    Notification service.
 	 * @since 1.0.0
 	 */
+	/**
+	 * Schedule manager.
+	 *
+	 * @var ScheduleManager
+	 */
+	private ScheduleManager $schedule_manager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param SnapshotManager|null     $snapshot_manager Snapshot manager.
+	 * @param HistoryRepository|null   $history          History repository.
+	 * @param JobLock|null             $job_lock         Job lock.
+	 * @param NotificationService|null $notifications    Notification service.
+	 * @param ScheduleManager|null     $schedule_manager Schedule manager.
+	 * @since 1.0.0
+	 */
 	public function __construct(
 		?SnapshotManager $snapshot_manager = null,
 		?HistoryRepository $history = null,
 		?JobLock $job_lock = null,
-		?NotificationService $notifications = null
+		?NotificationService $notifications = null,
+		?ScheduleManager $schedule_manager = null
 	) {
 		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
 		$this->history          = $history ?? new HistoryRepository();
 		$this->job_lock         = $job_lock ?? new JobLock();
 		$this->notifications    = $notifications ?? new NotificationService();
+		$this->schedule_manager = $schedule_manager ?? new ScheduleManager();
 	}
 
 	/**
@@ -150,8 +169,7 @@ class RecoveryRequestHandler implements RecoveryRequestHandlerInterface {
 			$context = $entry['context'] ?? array();
 
 			if ( 'scheduled' === ( $context['mode'] ?? '' ) && ! empty( $context['file'] ) ) {
-				$schedule_manager = new ScheduleManager();
-				$schedule_manager->delete_backup( $context['file'] );
+				$this->schedule_manager->delete_backup( $context['file'] );
 			}
 
 			$this->history->update_context(
