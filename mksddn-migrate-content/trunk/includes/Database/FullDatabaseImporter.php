@@ -63,8 +63,6 @@ class FullDatabaseImporter {
 				continue;
 			}
 
-			$auto_increment_key = $this->get_auto_increment_key( $wpdb, $table_name );
-
 			$truncate = $wpdb->query( "TRUNCATE TABLE `{$table_name}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
 			if ( false === $truncate ) {
 				$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -93,11 +91,6 @@ class FullDatabaseImporter {
 					}
 
 					$row = $rows[ $row_key ];
-
-					// Remove AUTO_INCREMENT PRIMARY KEY to let database generate new values.
-					if ( null !== $auto_increment_key && isset( $row[ $auto_increment_key ] ) ) {
-						unset( $row[ $auto_increment_key ] );
-					}
 
 					$inserted = $this->insert_row_safe( $wpdb, $table_name, $row );
 					if ( false === $inserted ) {
@@ -198,34 +191,6 @@ class FullDatabaseImporter {
 		$found = $wpdb->get_var( $query ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return ( $found === $table_name );
-	}
-
-	/**
-	 * Get AUTO_INCREMENT PRIMARY KEY column name for a table.
-	 *
-	 * @param wpdb   $wpdb       Database object.
-	 * @param string $table_name Table name.
-	 * @return string|null Column name if found, null otherwise.
-	 * @since 1.0.0
-	 */
-	private function get_auto_increment_key( wpdb $wpdb, string $table_name ): ?string {
-		$columns = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_name}`", ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
-
-		if ( ! is_array( $columns ) ) {
-			return null;
-		}
-
-		foreach ( $columns as $column ) {
-			if ( ! isset( $column['Key'] ) || ! isset( $column['Extra'] ) ) {
-				continue;
-			}
-
-			if ( 'PRI' === $column['Key'] && false !== strpos( strtolower( $column['Extra'] ), 'auto_increment' ) ) {
-				return $column['Field'] ?? null;
-			}
-		}
-
-		return null;
 	}
 
 	/**
