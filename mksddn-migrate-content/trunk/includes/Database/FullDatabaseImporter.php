@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Database;
 
+use MksDdn\MigrateContent\Config\PluginConfig;
 use wpdb;
 use WP_Error;
 
@@ -45,17 +46,14 @@ class FullDatabaseImporter {
 		$table_count = count( $dump['tables'] );
 		$processed   = 0;
 
-		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log import start.
-		error_log( sprintf( 'MksDdn Migrate: FullDatabaseImporter::import() - Processing %d tables', $table_count ) );
+		$this->log( sprintf( 'FullDatabaseImporter::import() - Processing %d tables', $table_count ) );
 
 		foreach ( $dump['tables'] as $table_name => $table_data ) {
 			if ( ! $this->is_valid_table_name( $table_name ) ) {
 				continue;
 			}
 
-			// Log every table for debugging.
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Progress logging.
-			error_log( sprintf( 'MksDdn Migrate: Importing table %d/%d: %s', $processed + 1, $table_count, $table_name ) );
+			$this->log( sprintf( 'Importing table %d/%d: %s', $processed + 1, $table_count, $table_name ) );
 
 			$this->ensure_table_exists( $wpdb, $table_name, $table_data['schema'] ?? '' );
 
@@ -74,8 +72,9 @@ class FullDatabaseImporter {
 			$row_count = count( $rows );
 			$row_index = 0;
 
-			// For very large tables (>5k rows), process in chunks to save memory.
-			$chunk_size = $row_count > 5000 ? 2000 : $row_count;
+			// For very large tables, process in chunks to save memory.
+			$large_threshold = PluginConfig::large_table_threshold();
+			$chunk_size      = $row_count > $large_threshold ? PluginConfig::db_row_chunk_size() : $row_count;
 
 			// Process rows in chunks to avoid loading all into memory at once.
 			$offset = 0;
@@ -111,14 +110,13 @@ class FullDatabaseImporter {
 				$offset = $chunk_end;
 
 				// Force garbage collection after each chunk for large tables.
-				if ( $row_count > 5000 && function_exists( 'gc_collect_cycles' ) ) {
+				if ( $row_count > $large_threshold && function_exists( 'gc_collect_cycles' ) ) {
 					gc_collect_cycles();
 				}
 
 				// Log progress for very large tables.
 				if ( $row_count > 10000 && 0 === $offset % 10000 ) {
-					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Progress logging.
-					error_log( sprintf( 'MksDdn Migrate: Processed %d/%d rows in table %s', min( $offset, $row_count ), $row_count, $table_name ) );
+					$this->log( sprintf( 'Processed %d/%d rows in table %s', min( $offset, $row_count ), $row_count, $table_name ) );
 				}
 			}
 
@@ -261,6 +259,20 @@ class FullDatabaseImporter {
 		$wpdb->query( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		return $wpdb->rows_affected;
+	}
+
+	/**
+	 * Log message if WP_DEBUG is enabled.
+	 *
+	 * @param string $message Message to log.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function log( string $message ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
+			error_log( 'MksDdn Migrate: ' . $message );
+		}
 	}
 }
 

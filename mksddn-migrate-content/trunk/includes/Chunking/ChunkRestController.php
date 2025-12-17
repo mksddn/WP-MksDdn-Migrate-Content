@@ -8,6 +8,7 @@
 namespace MksDdn\MigrateContent\Chunking;
 
 use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
+use MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface;
 use MksDdn\MigrateContent\Filesystem\FullContentExporter;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
@@ -23,16 +24,20 @@ class ChunkRestController {
 
 	private ChunkJobRepositoryInterface $repository;
 
+	private HistoryRepositoryInterface $history;
+
 	private int $chunk_size = 5242880; // 5 MB.
 
 	/**
 	 * Constructor.
 	 *
-	 * @param ChunkJobRepositoryInterface $repository Chunk job repository.
+	 * @param ChunkJobRepositoryInterface  $repository Chunk job repository.
+	 * @param HistoryRepositoryInterface|null $history    History repository (optional).
 	 * @since 1.0.0
 	 */
-	public function __construct( ChunkJobRepositoryInterface $repository ) {
+	public function __construct( ChunkJobRepositoryInterface $repository, ?HistoryRepositoryInterface $history = null ) {
 		$this->repository = $repository;
+		$this->history    = $history ?? new HistoryRepository();
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
 
@@ -277,14 +282,13 @@ class ChunkRestController {
 	 * @return array|WP_Error
 	 * @since 1.0.0
 	 */
-	public function get_import_status( WP_REST_Request $request ) {
+	public function get_import_status( WP_REST_Request $request ): array|WP_Error {
 		$history_id = sanitize_text_field( $request->get_param( 'history_id' ) );
 		if ( empty( $history_id ) ) {
 			return new WP_Error( 'mksddn_missing_id', __( 'History ID is required.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
 		}
 
-		$history = new HistoryRepository();
-		$entry   = $history->find( $history_id );
+		$entry = $this->history->find( $history_id );
 
 		if ( ! $entry ) {
 			return new WP_Error( 'mksddn_not_found', __( 'Import not found.', 'mksddn-migrate-content' ), array( 'status' => 404 ) );
