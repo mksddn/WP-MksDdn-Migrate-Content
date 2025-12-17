@@ -227,6 +227,17 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	public function execute( array $upload, array $options = array() ): void {
+		// Disable time limit for long-running import operations.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+		}
+
+		// Increase max execution time via ini_set as fallback.
+		@ini_set( 'max_execution_time', '0' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+
+		// Continue execution even if client disconnects.
+		@ignore_user_abort( true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+
 		$temp = $upload['temp'] ?? '';
 		if ( '' === $temp || ! file_exists( $temp ) ) {
 			$this->response_handler->redirect_with_status( 'error', __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
@@ -236,10 +247,24 @@ class FullSiteImportService {
 		$job           = $upload['job'] ?? null;
 		$original_name = $upload['original_name'] ?? '';
 
+		// Create history entry early to get ID for response.
+		$history_id = $this->history->start(
+			'import',
+			array(
+				'mode' => 'full',
+				'file' => $original_name,
+			)
+		);
+
+		// Send response to browser IMMEDIATELY to prevent timeout.
+		// This must happen before any long-running operations.
+		$this->send_import_start_response( $history_id );
+
 		$lock_id = $this->job_lock->acquire( 'full-import' );
 		if ( is_wp_error( $lock_id ) ) {
+			$this->history->finish( $history_id, 'error', array( 'message' => $lock_id->get_error_message() ) );
 			$this->cleanup( $temp, $cleanup, $job );
-			$this->response_handler->redirect_with_status( 'error', $lock_id->get_error_message() );
+			return;
 		}
 
 		$snapshot = $this->snapshot_manager->create(
@@ -252,16 +277,16 @@ class FullSiteImportService {
 		);
 
 		if ( is_wp_error( $snapshot ) ) {
+			$this->history->finish( $history_id, 'error', array( 'message' => $snapshot->get_error_message() ) );
 			$this->job_lock->release( $lock_id );
 			$this->cleanup( $temp, $cleanup, $job );
-			$this->response_handler->redirect_with_status( 'error', $snapshot->get_error_message() );
+			return;
 		}
 
-		$history_id = $this->history->start(
-			'import',
+		// Update history with snapshot info.
+		$this->history->update_context(
+			$history_id,
 			array(
-				'mode'           => 'full',
-				'file'           => $original_name,
 				'snapshot_id'    => $snapshot['id'],
 				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
 			)
@@ -313,7 +338,79 @@ class FullSiteImportService {
 
 		$this->job_lock->release( $lock_id );
 		$this->cleanup( $temp, $cleanup, $job );
-		$this->response_handler->redirect_with_status( $status, $message );
+
+		// Update history context with final status.
+		if ( $message ) {
+			$this->history->update_context( $history_id, array( 'message' => $message ) );
+		}
+	}
+
+	/**
+	 * Send HTML response to browser immediately to prevent timeout.
+	 * Browser will poll for completion status.
+	 *
+	 * @param string $history_id History entry ID for status polling.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function send_import_start_response( string $history_id ): void {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log response sending.
+		error_log( sprintf( 'MksDdn Migrate: Sending response to browser (history_id: %s)', $history_id ) );
+
+		// Clear any existing output buffers.
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+
+		// Send headers first.
+		if ( ! headers_sent() ) {
+			nocache_headers();
+			header( 'Content-Type: text/html; charset=utf-8' );
+			header( 'Content-Length: 0' ); // Will be updated after content.
+		}
+
+		$redirect_url = admin_url( 'admin.php?page=' . \MksDdn\MigrateContent\Config\PluginConfig::text_domain() );
+		$redirect_url = add_query_arg(
+			array(
+				'mksddn_mc_import_status' => $history_id,
+			),
+			$redirect_url
+		);
+
+		// Send minimal HTML with auto-refresh to check status.
+		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Import in progress</title></head><body>';
+		$html .= '<p>' . esc_html__( 'Import started. Please wait...', 'mksddn-migrate-content' ) . '</p>';
+		$html .= '<script>';
+		$html .= 'setTimeout(function(){ window.location.href = ' . wp_json_encode( $redirect_url ) . '; }, 2000);';
+		$html .= '</script>';
+		$html .= '</body></html>';
+
+		// Update Content-Length header.
+		if ( ! headers_sent() ) {
+			header( 'Content-Length: ' . strlen( $html ) );
+		}
+
+		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML is safe, contains only escaped strings.
+
+		// Flush all output buffers.
+		while ( ob_get_level() > 0 ) {
+			ob_end_flush();
+		}
+
+		// Force flush to send data immediately.
+		if ( function_exists( 'flush' ) ) {
+			flush();
+		}
+
+		// Finish request if FastCGI is available (allows script to continue).
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			fastcgi_finish_request();
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log fastcgi finish.
+			error_log( 'MksDdn Migrate: fastcgi_finish_request() called, connection closed to browser' );
+		} else {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log fallback.
+			error_log( 'MksDdn Migrate: fastcgi_finish_request() not available, using flush()' );
+		}
 	}
 
 	/**
