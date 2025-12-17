@@ -9,13 +9,13 @@
 Plugin Name: MksDdn Migrate Content
 Plugin URI: https://github.com/mksddn/WP-MksDdn-Migrate-Content
 Description: Export and import single pages (and more) with metadata and media.
-Version: 1.1.0
+Version: 1.2.0
 Author: mksddn
 Author URI: https://github.com/mksddn
 Text Domain: mksddn-migrate-content
 Domain Path: /languages
 Requires at least: 6.2
-Requires PHP: 7.4
+Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constants.
-define( 'MKSDDN_MC_VERSION', '1.1.0' );
+define( 'MKSDDN_MC_VERSION', '1.2.0' );
 define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -39,7 +39,7 @@ define( 'MKSDDN_MC_TEXT_DOMAIN', 'mksddn-migrate-content' );
  */
 function mksddn_mc_meets_requirements(): bool {
 	global $wp_version;
-	$php_ok = version_compare( PHP_VERSION, '7.4', '>=' );
+	$php_ok = version_compare( PHP_VERSION, '8.0', '>=' );
 	$wp_ok  = isset( $wp_version ) && version_compare( $wp_version, '6.2', '>=' );
 	return $php_ok && $wp_ok;
 }
@@ -50,7 +50,7 @@ register_activation_hook(
 	function (): void {
 		if ( ! mksddn_mc_meets_requirements() ) {
 			deactivate_plugins( plugin_basename( __FILE__ ) );
-			wp_die( esc_html__( 'MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+.', 'mksddn-migrate-content' ) );
+			wp_die( esc_html__( 'MksDdn Migrate Content requires WordPress 6.2+ and PHP 8.0+.', 'mksddn-migrate-content' ) );
 		}
 
 		// Load autoloader to access plugin classes.
