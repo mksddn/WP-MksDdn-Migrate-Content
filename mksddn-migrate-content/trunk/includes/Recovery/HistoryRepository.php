@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Recovery;
 
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -167,8 +168,7 @@ class HistoryRepository implements HistoryRepositoryInterface {
 
 			// Handle relative paths.
 			if ( ! path_is_absolute( $path ) ) {
-				$upload_dir = wp_upload_dir();
-				$path       = trailingslashit( $upload_dir['basedir'] ) . 'mksddn-mc/' . $path;
+				$path = PluginConfig::uploads_base_dir() . $path;
 			}
 
 			return file_exists( $path );
