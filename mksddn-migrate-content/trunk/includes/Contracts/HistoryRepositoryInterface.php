@@ -77,5 +77,14 @@ interface HistoryRepositoryInterface {
 	 * @since 1.0.0
 	 */
 	public function update_context( string $id, array $context ): void;
+
+	/**
+	 * Cleanup stale running entries.
+	 *
+	 * @param int $threshold_seconds Seconds before marking as stale.
+	 * @return int Number of cleaned entries.
+	 * @since 1.0.0
+	 */
+	public function cleanup_stale( int $threshold_seconds = 3600 ): int;
 }
 

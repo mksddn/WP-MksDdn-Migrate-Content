@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SnapshotManager implements SnapshotManagerInterface {
 
-	private const DEFAULT_RETENTION = 3;
+	private const DEFAULT_RETENTION = 1;
 
 	private FullDatabaseExporter $db_exporter;
 	private ContentCollector $collector;
