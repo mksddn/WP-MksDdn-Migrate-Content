@@ -16,6 +16,7 @@ use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Recovery\SnapshotManager;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ImportProgressPage;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
@@ -227,6 +228,17 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	public function execute( array $upload, array $options = array() ): void {
+		// Disable time limit for long-running import operations.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+		}
+
+		// Increase max execution time via ini_set as fallback.
+		@ini_set( 'max_execution_time', '0' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+
+		// Continue execution even if client disconnects.
+		@ignore_user_abort( true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+
 		$temp = $upload['temp'] ?? '';
 		if ( '' === $temp || ! file_exists( $temp ) ) {
 			$this->response_handler->redirect_with_status( 'error', __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
@@ -236,10 +248,24 @@ class FullSiteImportService {
 		$job           = $upload['job'] ?? null;
 		$original_name = $upload['original_name'] ?? '';
 
+		// Create history entry early to get ID for response.
+		$history_id = $this->history->start(
+			'import',
+			array(
+				'mode' => 'full',
+				'file' => $original_name,
+			)
+		);
+
+		// Send response to browser IMMEDIATELY to prevent timeout.
+		// This must happen before any long-running operations.
+		ImportProgressPage::send( $history_id );
+
 		$lock_id = $this->job_lock->acquire( 'full-import' );
 		if ( is_wp_error( $lock_id ) ) {
+			$this->history->finish( $history_id, 'error', array( 'message' => $lock_id->get_error_message() ) );
 			$this->cleanup( $temp, $cleanup, $job );
-			$this->response_handler->redirect_with_status( 'error', $lock_id->get_error_message() );
+			return;
 		}
 
 		$snapshot = $this->snapshot_manager->create(
@@ -252,16 +278,16 @@ class FullSiteImportService {
 		);
 
 		if ( is_wp_error( $snapshot ) ) {
+			$this->history->finish( $history_id, 'error', array( 'message' => $snapshot->get_error_message() ) );
 			$this->job_lock->release( $lock_id );
 			$this->cleanup( $temp, $cleanup, $job );
-			$this->response_handler->redirect_with_status( 'error', $snapshot->get_error_message() );
+			return;
 		}
 
-		$history_id = $this->history->start(
-			'import',
+		// Update history with snapshot info.
+		$this->history->update_context(
+			$history_id,
 			array(
-				'mode'           => 'full',
-				'file'           => $original_name,
 				'snapshot_id'    => $snapshot['id'],
 				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
 			)
@@ -269,7 +295,15 @@ class FullSiteImportService {
 
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
-		$result     = $importer->import_from( $temp, $site_guard, $options );
+
+		// Set progress callback to update history.
+		$importer->set_progress_callback(
+			function ( int $percent, string $message ) use ( $history_id ) {
+				$this->history->update_progress( $history_id, $percent, $message );
+			}
+		);
+
+		$result = $importer->import_from( $temp, $site_guard, $options );
 
 		$status  = 'success';
 		$message = null;
@@ -313,7 +347,11 @@ class FullSiteImportService {
 
 		$this->job_lock->release( $lock_id );
 		$this->cleanup( $temp, $cleanup, $job );
-		$this->response_handler->redirect_with_status( $status, $message );
+
+		// Update history context with final status.
+		if ( $message ) {
+			$this->history->update_context( $history_id, array( 'message' => $message ) );
+		}
 	}
 
 	/**

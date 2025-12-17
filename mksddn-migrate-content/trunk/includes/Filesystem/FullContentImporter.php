@@ -7,6 +7,7 @@
 
 namespace MksDdn\MigrateContent\Filesystem;
 
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Database\FullDatabaseImporter;
 use MksDdn\MigrateContent\Support\DomainReplacer;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
@@ -29,6 +30,13 @@ class FullContentImporter {
 	private array $user_merge_summary = array();
 
 	/**
+	 * Progress callback.
+	 *
+	 * @var callable|null
+	 */
+	private $progress_callback = null;
+
+	/**
 	 * Setup importer.
 	 *
 	 * @param FullDatabaseImporter|null $db_importer Optional database importer.
@@ -38,12 +46,51 @@ class FullContentImporter {
 	}
 
 	/**
+	 * Set progress callback.
+	 *
+	 * @param callable $callback Callback receiving (int $percent, string $message).
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function set_progress_callback( callable $callback ): void {
+		$this->progress_callback = $callback;
+	}
+
+	/**
+	 * Report progress.
+	 *
+	 * @param int    $percent Progress percentage (0-100).
+	 * @param string $message Progress message.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function report_progress( int $percent, string $message ): void {
+		if ( is_callable( $this->progress_callback ) ) {
+			call_user_func( $this->progress_callback, $percent, $message );
+		}
+	}
+
+	/**
 	 * Extract allowed paths to wp-content and restore DB if present.
 	 *
 	 * @param string $archive_path Uploaded archive.
+	 * @param SiteUrlGuard|null $url_guard Optional URL guard instance.
+	 * @param array $options Import options.
 	 * @return true|WP_Error
 	 */
 	public function import_from( string $archive_path, ?SiteUrlGuard $url_guard = null, array $options = array() ) {
+		// Disable time limit for long-running import operations.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+		}
+
+		// Disable output buffering to prevent timeout issues.
+		if ( ob_get_level() > 0 ) {
+			@ob_end_flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+
+		$this->report_progress( 5, __( 'Opening archive...', 'mksddn-migrate-content' ) );
+
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $archive_path ) ) {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to open archive for import.', 'mksddn-migrate-content' ) );
@@ -51,18 +98,36 @@ class FullContentImporter {
 		$url_guard = $url_guard ?? new SiteUrlGuard();
 
 		$this->user_merge_summary = array();
+
+		$this->log( 'Starting database import...' );
+
+		$this->report_progress( 10, __( 'Importing database...', 'mksddn-migrate-content' ) );
+
+		// Flush output to keep connection alive.
+		$this->flush_output();
+
 		$db_result = $this->maybe_import_database( $zip, $options );
 		if ( is_wp_error( $db_result ) ) {
 			$zip->close();
 			return $db_result;
 		}
 
+		$this->log( 'Starting files extraction...' );
+
+		$this->report_progress( 50, __( 'Extracting files...', 'mksddn-migrate-content' ) );
+
 		$files_result = $this->extract_files( $zip );
 		$zip->close();
+
+		$this->log( 'Import completed successfully.' );
+
+		$this->report_progress( 95, __( 'Finalizing...', 'mksddn-migrate-content' ) );
 
 		if ( $this->database_imported ) {
 			$url_guard->restore();
 		}
+
+		$this->report_progress( 100, __( 'Import complete', 'mksddn-migrate-content' ) );
 
 		return $files_result;
 	}
@@ -107,6 +172,7 @@ class FullContentImporter {
 	 * Import database dump when present in archive payload.
 	 *
 	 * @param ZipArchive $zip Archive instance.
+	 * @param array      $options Import options.
 	 * @return true|WP_Error
 	 */
 	private function maybe_import_database( ZipArchive $zip, array $options = array() ) {
@@ -115,14 +181,78 @@ class FullContentImporter {
 			return true;
 		}
 
+		// Calculate required memory: JSON size * 3-5x for decoding and processing.
+		$json_size      = strlen( $payload_json );
+		$json_size_mb   = round( $json_size / ( 1024 * 1024 ), 2 );
+		$required_bytes = $json_size * 5; // Conservative estimate.
+		$required_mb    = ceil( $required_bytes / ( 1024 * 1024 ) );
+
+		// Log large file import for monitoring.
+		if ( $json_size > 100 * 1024 * 1024 ) { // > 100MB.
+			$this->log( sprintf( 'Importing large database file (%s MB). Memory management enabled.', $json_size_mb ) );
+		}
+
+		// Check if file is too large to process safely.
+		$absolute_max = PluginConfig::max_import_json_size();
+		if ( $json_size > $absolute_max ) {
+			return new WP_Error(
+				'mksddn_mc_file_too_large',
+				sprintf(
+					/* translators: %1$s: file size in MB, %2$s: maximum size in MB. */
+					__( 'Import file is too large (%1$s MB). Maximum supported size is %2$s MB. Please split the export or contact support.', 'mksddn-migrate-content' ),
+					$json_size_mb,
+					round( $absolute_max / ( 1024 * 1024 ), 0 )
+				)
+			);
+		}
+
+		// Increase memory limit dynamically based on file size.
+		$original_limit = ini_get( 'memory_limit' );
+		$current_limit  = wp_convert_hr_to_bytes( $original_limit );
+		$min_limit      = PluginConfig::min_import_memory_limit();
+		$max_limit      = PluginConfig::max_import_memory_limit();
+		$target_limit   = max( $min_limit, min( $required_mb * 1024 * 1024, $max_limit ) );
+
+		if ( $current_limit < $target_limit && '-1' !== $original_limit ) {
+			$target_limit_mb = ceil( $target_limit / ( 1024 * 1024 ) );
+			$set_result      = @ini_set( 'memory_limit', $target_limit_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
+			if ( false === $set_result && $json_size > 100 * 1024 * 1024 ) {
+				$this->log( sprintf( 'Warning - Unable to increase memory limit to %d MB. Large file import may fail.', $target_limit_mb ) );
+			} else {
+				$this->log( sprintf( 'Memory limit increased to %d MB for import.', $target_limit_mb ) );
+			}
+		}
+
+		$this->log( sprintf( 'Starting JSON decode (size: %s MB)...', $json_size_mb ) );
+
+		// Flush before long operation.
+		$this->flush_output();
+
 		$data = json_decode( $payload_json, true );
+
+		unset( $payload_json ); // Free memory immediately after decoding.
+
+		$this->log( 'JSON decode completed.' );
+
+		// Flush after long operation.
+		$this->flush_output();
+
 		if ( JSON_ERROR_NONE !== json_last_error() ) {
+			// Restore original memory limit on error.
+			if ( isset( $original_limit ) ) {
+				@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
+			}
 			return new WP_Error( 'mksddn_mc_full_import_payload', __( 'Corrupted payload inside archive.', 'mksddn-migrate-content' ) );
 		}
 
 		if ( empty( $data['database'] ) || ! is_array( $data['database'] ) ) {
+			$this->log( 'No database data found in payload.' );
+			$this->restore_memory_limit( $original_limit );
 			return true;
 		}
+
+		$table_count = isset( $data['database']['tables'] ) ? count( $data['database']['tables'] ) : 0;
+		$this->log( sprintf( 'Found %d tables to import. Starting environment replacement...', $table_count ) );
 
 		$current_base  = function_exists( 'home_url' ) ? home_url() : (string) get_option( 'home' );
 		$uploads       = wp_upload_dir();
@@ -134,6 +264,8 @@ class FullContentImporter {
 
 		$replacer = new DomainReplacer();
 		$replacer->replace_dump_environment( $data['database'], $current_base, $current_paths );
+
+		$this->log( 'Environment replacement completed.' );
 
 		$user_merge      = isset( $options['user_merge'] ) && is_array( $options['user_merge'] ) ? $options['user_merge'] : array();
 		$merge_enabled   = ! empty( $user_merge['enabled'] );
@@ -148,21 +280,35 @@ class FullContentImporter {
 			$user_applier->strip_user_tables( $data['database'], $user_tables );
 		}
 
+		// Import database.
 		$result = $this->db_importer->import( $data['database'] );
+		unset( $data['database'] ); // Free database data immediately.
+		unset( $data ); // Free remaining data.
+
 		if ( true !== $result ) {
+			$this->restore_memory_limit( $original_limit );
 			return $result;
 		}
 
-			$this->database_imported = true;
+		$this->database_imported = true;
 
 		if ( $user_applier ) {
 			$merge_result = $user_applier->merge( $remote_snapshot['users'], $merge_plan, $remote_snapshot['prefix'] ?? '' );
+			unset( $remote_snapshot ); // Free snapshot data.
 			if ( is_wp_error( $merge_result ) ) {
+				$this->restore_memory_limit( $original_limit );
 				return $merge_result;
 			}
 
 			$this->user_merge_summary = $merge_result;
 		}
+
+		// Force garbage collection after large import.
+		if ( function_exists( 'gc_collect_cycles' ) ) {
+			gc_collect_cycles();
+		}
+
+		$this->restore_memory_limit( $original_limit );
 
 		return true;
 	}
@@ -251,6 +397,49 @@ class FullContentImporter {
 		return '' === $path ? null : $path;
 	}
 
+	/**
+	 * Flush output buffers to keep connection alive during long operations.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function flush_output(): void {
+		if ( function_exists( 'ob_flush' ) && ob_get_level() > 0 ) {
+			@ob_flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+
+		if ( function_exists( 'flush' ) ) {
+			@flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	}
+
+	/**
+	 * Log message if WP_DEBUG is enabled.
+	 *
+	 * @param string $message Message to log.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function log( string $message ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
+			error_log( 'MksDdn Migrate: ' . $message );
+		}
+	}
+
+	/**
+	 * Restore original memory limit safely.
+	 *
+	 * @param string $original_limit Original memory limit value.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function restore_memory_limit( string $original_limit ): void {
+		// Don't restore if original was unlimited (-1).
+		if ( '-1' !== $original_limit && '' !== $original_limit ) {
+			@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
+		}
+	}
 }
 
 

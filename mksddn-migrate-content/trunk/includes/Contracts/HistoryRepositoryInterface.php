@@ -56,5 +56,26 @@ interface HistoryRepositoryInterface {
 	 * @since 1.0.0
 	 */
 	public function find( string $id ): ?array;
+
+	/**
+	 * Update progress for running entry.
+	 *
+	 * @param string $id      Entry ID.
+	 * @param int    $percent Progress percentage (0-100).
+	 * @param string $message Progress message.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function update_progress( string $id, int $percent, string $message = '' ): void;
+
+	/**
+	 * Update context for existing entry.
+	 *
+	 * @param string $id      Entry ID.
+	 * @param array  $context Context data to merge.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function update_context( string $id, array $context ): void;
 }
 

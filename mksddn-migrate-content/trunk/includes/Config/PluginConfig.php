@@ -185,6 +185,60 @@ class PluginConfig {
 		return trailingslashit( $base ) . 'mksddn-mc/';
 	}
 
+	// ==========================================================================
+	// Import Memory/Size Limits
+	// ==========================================================================
+
+	/**
+	 * Maximum JSON payload size for import (bytes).
+	 *
+	 * @return int Size in bytes (default 1GB).
+	 * @since 1.0.0
+	 */
+	public static function max_import_json_size(): int {
+		return apply_filters( 'mksddn_mc_max_import_json_size', 1024 * 1024 * 1024 );
+	}
+
+	/**
+	 * Minimum memory limit for large imports (bytes).
+	 *
+	 * @return int Size in bytes (default 1GB).
+	 * @since 1.0.0
+	 */
+	public static function min_import_memory_limit(): int {
+		return apply_filters( 'mksddn_mc_min_import_memory_limit', 1024 * 1024 * 1024 );
+	}
+
+	/**
+	 * Maximum memory limit for imports (bytes).
+	 *
+	 * @return int Size in bytes (default 3GB).
+	 * @since 1.0.0
+	 */
+	public static function max_import_memory_limit(): int {
+		return apply_filters( 'mksddn_mc_max_import_memory_limit', 3072 * 1024 * 1024 );
+	}
+
+	/**
+	 * Database row chunk size for large tables.
+	 *
+	 * @return int Number of rows per chunk (default 2000).
+	 * @since 1.0.0
+	 */
+	public static function db_row_chunk_size(): int {
+		return apply_filters( 'mksddn_mc_db_row_chunk_size', 2000 );
+	}
+
+	/**
+	 * Threshold for large table processing (rows).
+	 *
+	 * @return int Number of rows (default 5000).
+	 * @since 1.0.0
+	 */
+	public static function large_table_threshold(): int {
+		return apply_filters( 'mksddn_mc_large_table_threshold', 5000 );
+	}
+
 	/**
 	 * Get all required plugin directories.
 	 *

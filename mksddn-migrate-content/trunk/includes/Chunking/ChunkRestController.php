@@ -8,7 +8,9 @@
 namespace MksDdn\MigrateContent\Chunking;
 
 use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
+use MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface;
 use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_REST_Request;
@@ -22,16 +24,20 @@ class ChunkRestController {
 
 	private ChunkJobRepositoryInterface $repository;
 
+	private HistoryRepositoryInterface $history;
+
 	private int $chunk_size = 5242880; // 5 MB.
 
 	/**
 	 * Constructor.
 	 *
-	 * @param ChunkJobRepositoryInterface $repository Chunk job repository.
+	 * @param ChunkJobRepositoryInterface  $repository Chunk job repository.
+	 * @param HistoryRepositoryInterface|null $history    History repository (optional).
 	 * @since 1.0.0
 	 */
-	public function __construct( ChunkJobRepositoryInterface $repository ) {
+	public function __construct( ChunkJobRepositoryInterface $repository, ?HistoryRepositoryInterface $history = null ) {
 		$this->repository = $repository;
+		$this->history    = $history ?? new HistoryRepository();
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
 	}
 
@@ -91,6 +97,16 @@ class ChunkRestController {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'cancel_job' ),
+				'permission_callback' => array( $this, 'ensure_permission' ),
+			)
+		);
+
+		register_rest_route(
+			'mksddn/v1',
+			'/import/status',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_import_status' ),
 				'permission_callback' => array( $this, 'ensure_permission' ),
 			)
 		);
@@ -257,6 +273,31 @@ class ChunkRestController {
 
 		$job = $this->repository->get( $job_id );
 		return $job->get_data();
+	}
+
+	/**
+	 * Get import status by history ID.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return array|WP_Error
+	 * @since 1.0.0
+	 */
+	public function get_import_status( WP_REST_Request $request ): array|WP_Error {
+		$history_id = sanitize_text_field( $request->get_param( 'history_id' ) );
+		if ( empty( $history_id ) ) {
+			return new WP_Error( 'mksddn_missing_id', __( 'History ID is required.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
+		}
+
+		$entry = $this->history->find( $history_id );
+
+		if ( ! $entry ) {
+			return new WP_Error( 'mksddn_not_found', __( 'Import not found.', 'mksddn-migrate-content' ), array( 'status' => 404 ) );
+		}
+
+		return array(
+			'status'   => $entry['status'] ?? 'unknown',
+			'progress' => $entry['progress'] ?? array( 'percent' => 0, 'message' => '' ),
+		);
 	}
 }
 

@@ -3,8 +3,8 @@ Contributors: mksddn
 Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
-Requires PHP: 7.4
-Stable tag: 1.1.0
+Requires PHP: 8.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,15 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.2.0 =
+* Added real-time progress tracking for import operations with visual progress bar.
+* Introduced ImportProgressPage for streaming progress updates during long-running imports.
+* Implemented incremental database import to optimize memory usage for large backups.
+* Enhanced memory and time limit management based on file size to prevent failures.
+* Added output flushing for better responsiveness during import.
+* Improved error handling and logging for large file imports.
+* Removed unused auto-increment key handling code for cleaner codebase.
 
 = 1.1.0 =
 * Added server file import feature - users can now select backup files directly from the server imports directory.
