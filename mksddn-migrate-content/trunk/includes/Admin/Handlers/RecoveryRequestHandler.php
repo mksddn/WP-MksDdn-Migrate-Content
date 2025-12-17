@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
+use MksDdn\MigrateContent\Automation\ScheduleManager;
 use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
 use MksDdn\MigrateContent\Filesystem\FullContentImporter;
 use MksDdn\MigrateContent\Recovery\HistoryRepository;
@@ -143,12 +144,22 @@ class RecoveryRequestHandler implements RecoveryRequestHandlerInterface {
 			$this->snapshot_manager->delete( $snapshot_id );
 		}
 
+		// Delete scheduled backup file if this is a scheduled entry.
 		if ( $history_id ) {
+			$entry   = $this->history->find( $history_id );
+			$context = $entry['context'] ?? array();
+
+			if ( 'scheduled' === ( $context['mode'] ?? '' ) && ! empty( $context['file'] ) ) {
+				$schedule_manager = new ScheduleManager();
+				$schedule_manager->delete_backup( $context['file'] );
+			}
+
 			$this->history->update_context(
 				$history_id,
 				array(
 					'snapshot_id'    => '',
 					'snapshot_label' => '',
+					'file'           => '',
 					'action'         => 'snapshot_deleted',
 				)
 			);

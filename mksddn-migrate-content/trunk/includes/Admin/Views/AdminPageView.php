@@ -397,7 +397,7 @@ class AdminPageView {
 			$processed_runs[] = array(
 				'created_at'   => $this->format_history_date( $run['created_at'] ?? '' ),
 				'status_badge' => $this->format_status_badge( $run['status'] ?? '' ),
-				'filename'     => isset( $run['file']['name'] ) ? sanitize_file_name( $run['file']['name'] ) : '',
+				'filename'     => isset( $run['file']['name'] ) ? basename( $run['file']['name'] ) : '',
 				'size'         => isset( $run['file']['size'] ) ? size_format( (int) $run['file']['size'] ) : '—',
 				'message'      => isset( $run['message'] ) && '' !== $run['message'] ? $run['message'] : '',
 			);

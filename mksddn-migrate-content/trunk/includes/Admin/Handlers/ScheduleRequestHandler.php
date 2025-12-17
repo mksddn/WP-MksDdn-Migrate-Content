@@ -115,7 +115,7 @@ class ScheduleRequestHandler implements ScheduleRequestHandlerInterface {
 			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
 		}
 
-		$filename = isset( $_GET['file'] ) ? sanitize_file_name( wp_unslash( $_GET['file'] ) ) : '';
+		$filename = isset( $_GET['file'] ) ? basename( wp_unslash( $_GET['file'] ) ) : '';
 		if ( '' === $filename ) {
 			$this->notifications->redirect_with_notice( 'error', __( 'Backup file is missing.', 'mksddn-migrate-content' ) );
 		}
@@ -141,14 +141,19 @@ class ScheduleRequestHandler implements ScheduleRequestHandlerInterface {
 			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
 		}
 
-		$filename = isset( $_GET['file'] ) ? sanitize_file_name( wp_unslash( $_GET['file'] ) ) : '';
+		$filename = isset( $_GET['file'] ) ? basename( wp_unslash( $_GET['file'] ) ) : '';
 		if ( '' === $filename ) {
 			$this->notifications->redirect_with_notice( 'error', __( 'Backup file is missing.', 'mksddn-migrate-content' ) );
 		}
 
 		check_admin_referer( 'mksddn_mc_delete_scheduled_' . $filename );
 
-		$this->schedule_manager->delete_backup( $filename );
+		$deleted = $this->schedule_manager->delete_backup( $filename );
+
+		if ( ! $deleted ) {
+			$this->notifications->redirect_with_notice( 'error', __( 'Failed to delete scheduled backup. Check file permissions.', 'mksddn-migrate-content' ) );
+			return;
+		}
 
 		$this->notifications->redirect_with_notice( 'success', __( 'Scheduled backup deleted.', 'mksddn-migrate-content' ) );
 	}

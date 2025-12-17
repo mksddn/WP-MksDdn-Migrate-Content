@@ -202,20 +202,22 @@ class ScheduleManager implements ScheduleManagerInterface {
 	}
 
 	/**
-	 * Delete stored backup and remove from history.
+	 * Delete stored backup file.
 	 *
 	 * @param string $filename Archive filename.
 	 * @return bool
 	 */
 	public function delete_backup( string $filename ): bool {
 		$path = $this->resolve_backup_path( $filename );
-		if ( $path && file_exists( $path ) ) {
-			FilesystemHelper::delete( $path );
+		if ( ! $path ) {
+			return false;
 		}
 
-		$this->settings->remove_run_by_file( $filename );
+		if ( ! file_exists( $path ) ) {
+			return true;
+		}
 
-		return true;
+		return FilesystemHelper::delete( $path, false );
 	}
 
 	/**

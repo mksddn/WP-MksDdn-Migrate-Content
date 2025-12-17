@@ -653,7 +653,7 @@ class ExportImportAdmin {
 		echo '</tr></thead><tbody>';
 
 		foreach ( $runs as $run ) {
-			$filename = isset( $run['file']['name'] ) ? sanitize_file_name( $run['file']['name'] ) : '';
+			$filename = isset( $run['file']['name'] ) ? basename( $run['file']['name'] ) : '';
 			$size     = isset( $run['file']['size'] ) ? size_format( (int) $run['file']['size'] ) : '—';
 			$download = '';
 
