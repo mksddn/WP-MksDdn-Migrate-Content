@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,11 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.2.1 =
+* Added automatic filtering of history entries with missing archive files.
+* Refactored HistoryRepository to use PluginConfig for consistent path handling.
+* Updated PHPCS ignore comments for set_time_limit and ini_set to current standards.
 
 = 1.2.0 =
 * Added real-time progress tracking for import operations with visual progress bar.

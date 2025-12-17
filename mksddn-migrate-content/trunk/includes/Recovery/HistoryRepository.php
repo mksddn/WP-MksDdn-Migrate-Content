@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Recovery;
 
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -135,14 +136,46 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	}
 
 	/**
-	 * Fetch all entries (descending).
+	 * Fetch all entries (descending), filtering out entries with missing files.
 	 *
 	 * @param int $limit Optional limit. Default 20.
 	 * @return array<int, array<string, mixed>> Array of history entries.
 	 * @since 1.0.0
 	 */
 	public function all( int $limit = 20 ): array {
-		return array_slice( $this->load(), 0, $limit );
+		$entries  = $this->load();
+		$filtered = array_filter( $entries, array( $this, 'entry_file_exists' ) );
+
+		return array_slice( array_values( $filtered ), 0, $limit );
+	}
+
+	/**
+	 * Check if the file associated with entry exists.
+	 *
+	 * @param array<string, mixed> $entry History entry.
+	 * @return bool True if file exists or entry has no file.
+	 * @since 1.0.0
+	 */
+	private function entry_file_exists( array $entry ): bool {
+		$file_keys = array( 'file', 'archive_path', 'snapshot_id' );
+
+		foreach ( $file_keys as $key ) {
+			if ( empty( $entry['context'][ $key ] ) ) {
+				continue;
+			}
+
+			$path = $entry['context'][ $key ];
+
+			// Handle relative paths.
+			if ( ! path_is_absolute( $path ) ) {
+				$path = PluginConfig::uploads_base_dir() . $path;
+			}
+
+			return file_exists( $path );
+		}
+
+		// Entry without file reference - keep it.
+		return true;
 	}
 
 	/**
