@@ -1632,7 +1632,15 @@ class ExportImportAdmin {
 
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
-		$result     = $importer->import_from( $temp, $site_guard, $options );
+
+		// Set progress callback to update history.
+		$importer->set_progress_callback(
+			function ( int $percent, string $message ) use ( $history_id ) {
+				$this->history->update_progress( $history_id, $percent, $message );
+			}
+		);
+
+		$result = $importer->import_from( $temp, $site_guard, $options );
 
 		$status  = 'success';
 		$message = null;
@@ -2058,11 +2066,34 @@ class ExportImportAdmin {
 			$redirect_url
 		);
 
-		// Send minimal HTML with auto-refresh to check status.
-		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Import in progress</title></head><body>';
-		$html .= '<p>' . esc_html__( 'Import started. Please wait...', 'mksddn-migrate-content' ) . '</p>';
+		// Send progress page with polling.
+		$rest_url = rest_url( 'mksddn/v1/import/status' );
+		$nonce    = wp_create_nonce( 'wp_rest' );
+
+		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' . esc_html__( 'Import in progress', 'mksddn-migrate-content' ) . '</title>';
+		$html .= '<style>
+			body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;padding:40px;max-width:500px;margin:0 auto}
+			.progress-bar{width:100%;height:16px;background:#f0f0f0;border-radius:999px;overflow:hidden;margin:20px 0}
+			.progress-bar span{display:block;height:100%;width:0%;background:#2c7be5;transition:width .3s ease}
+			.progress-label{color:#444;font-size:14px}
+			h2{margin:0 0 10px}
+		</style></head><body>';
+		$html .= '<h2>' . esc_html__( 'Import in progress', 'mksddn-migrate-content' ) . '</h2>';
+		$html .= '<div class="progress-bar"><span id="bar"></span></div>';
+		$html .= '<p class="progress-label" id="label">' . esc_html__( 'Starting...', 'mksddn-migrate-content' ) . '</p>';
 		$html .= '<script>';
-		$html .= 'setTimeout(function(){ window.location.href = ' . wp_json_encode( $redirect_url ) . '; }, 2000);';
+		$html .= '(function(){';
+		$html .= 'var bar=document.getElementById("bar"),label=document.getElementById("label");';
+		$html .= 'var url=' . wp_json_encode( $rest_url . '?history_id=' . $history_id ) . ';';
+		$html .= 'var redirect=' . wp_json_encode( $redirect_url ) . ';';
+		$html .= 'var nonce=' . wp_json_encode( $nonce ) . ';';
+		$html .= 'function poll(){';
+		$html .= 'fetch(url,{headers:{"X-WP-Nonce":nonce}}).then(function(r){return r.json()}).then(function(d){';
+		$html .= 'var p=d.progress||{};bar.style.width=(p.percent||0)+"%";label.textContent=p.message||"Processing...";';
+		$html .= 'if(d.status==="running"){setTimeout(poll,1000)}else{bar.style.width="100%";setTimeout(function(){location.href=redirect},1000)}';
+		$html .= '}).catch(function(){setTimeout(poll,2000)});';
+		$html .= '}poll();';
+		$html .= '})();';
 		$html .= '</script>';
 		$html .= '</body></html>';
 

@@ -29,12 +29,44 @@ class FullContentImporter {
 	private array $user_merge_summary = array();
 
 	/**
+	 * Progress callback.
+	 *
+	 * @var callable|null
+	 */
+	private $progress_callback = null;
+
+	/**
 	 * Setup importer.
 	 *
 	 * @param FullDatabaseImporter|null $db_importer Optional database importer.
 	 */
 	public function __construct( ?FullDatabaseImporter $db_importer = null ) {
 		$this->db_importer = $db_importer ?? new FullDatabaseImporter();
+	}
+
+	/**
+	 * Set progress callback.
+	 *
+	 * @param callable $callback Callback receiving (int $percent, string $message).
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function set_progress_callback( callable $callback ): void {
+		$this->progress_callback = $callback;
+	}
+
+	/**
+	 * Report progress.
+	 *
+	 * @param int    $percent Progress percentage (0-100).
+	 * @param string $message Progress message.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function report_progress( int $percent, string $message ): void {
+		if ( is_callable( $this->progress_callback ) ) {
+			call_user_func( $this->progress_callback, $percent, $message );
+		}
 	}
 
 	/**
@@ -56,6 +88,8 @@ class FullContentImporter {
 			@ob_end_flush(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 
+		$this->report_progress( 5, __( 'Opening archive...', 'mksddn-migrate-content' ) );
+
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $archive_path ) ) {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to open archive for import.', 'mksddn-migrate-content' ) );
@@ -66,6 +100,8 @@ class FullContentImporter {
 
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log import start.
 		error_log( 'MksDdn Migrate: Starting database import...' );
+
+		$this->report_progress( 10, __( 'Importing database...', 'mksddn-migrate-content' ) );
 
 		// Flush output to keep connection alive.
 		$this->flush_output();
@@ -79,15 +115,21 @@ class FullContentImporter {
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log files extraction start.
 		error_log( 'MksDdn Migrate: Starting files extraction...' );
 
+		$this->report_progress( 50, __( 'Extracting files...', 'mksddn-migrate-content' ) );
+
 		$files_result = $this->extract_files( $zip );
 		$zip->close();
 
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log import completion.
 		error_log( 'MksDdn Migrate: Import completed successfully.' );
 
+		$this->report_progress( 95, __( 'Finalizing...', 'mksddn-migrate-content' ) );
+
 		if ( $this->database_imported ) {
 			$url_guard->restore();
 		}
+
+		$this->report_progress( 100, __( 'Import complete', 'mksddn-migrate-content' ) );
 
 		return $files_result;
 	}
@@ -324,6 +366,14 @@ class FullContentImporter {
 		foreach ( $database['tables'] as $table_name => $table_data ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log table processing.
 			error_log( sprintf( 'MksDdn Migrate: Processing table %d/%d: %s', $processed + 1, $table_count, $table_name ) );
+
+			// Report progress: 10-50% range for database import.
+			$db_progress = 10 + (int) ( ( $processed / $table_count ) * 40 );
+			$this->report_progress(
+				$db_progress,
+				/* translators: 1: current table number, 2: total tables */
+				sprintf( __( 'Importing table %1$d of %2$d...', 'mksddn-migrate-content' ), $processed + 1, $table_count )
+			);
 
 			// Flush periodically to keep connection alive.
 			if ( 0 === $processed % 5 ) {

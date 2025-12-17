@@ -109,6 +109,32 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	}
 
 	/**
+	 * Update progress for running entry.
+	 *
+	 * @param string $id      Entry ID.
+	 * @param int    $percent Progress percentage (0-100).
+	 * @param string $message Progress message.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function update_progress( string $id, int $percent, string $message = '' ): void {
+		$entries = $this->load();
+		foreach ( $entries as &$entry ) {
+			if ( $entry['id'] !== $id ) {
+				continue;
+			}
+
+			$entry['progress'] = array(
+				'percent' => max( 0, min( 100, $percent ) ),
+				'message' => sanitize_text_field( $message ),
+			);
+		}
+		unset( $entry );
+
+		$this->persist( $entries );
+	}
+
+	/**
 	 * Fetch all entries (descending).
 	 *
 	 * @param int $limit Optional limit. Default 20.
