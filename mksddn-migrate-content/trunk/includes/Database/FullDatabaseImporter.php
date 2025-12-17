@@ -37,7 +37,7 @@ class FullDatabaseImporter {
 
 		// Disable time limit for database import.
 		if ( function_exists( 'set_time_limit' ) ) {
-			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 		}
 
 		global $wpdb;
@@ -246,6 +246,7 @@ class FullDatabaseImporter {
 
 		// Use INSERT ... ON DUPLICATE KEY UPDATE to handle transients and other options
 		// that may be created by WordPress during import.
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$table_name = $wpdb->options;
 		$query      = $wpdb->prepare(
 			"INSERT INTO `{$table_name}` (`option_name`, `option_value`, `autoload`) 
@@ -254,7 +255,8 @@ class FullDatabaseImporter {
 			$option_name,
 			$option_value,
 			$autoload
-		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$wpdb->query( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 

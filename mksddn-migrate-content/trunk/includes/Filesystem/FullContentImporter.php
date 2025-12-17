@@ -81,7 +81,7 @@ class FullContentImporter {
 	public function import_from( string $archive_path, ?SiteUrlGuard $url_guard = null, array $options = array() ) {
 		// Disable time limit for long-running import operations.
 		if ( function_exists( 'set_time_limit' ) ) {
-			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.max_execution_time_Disallowed
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 		}
 
 		// Disable output buffering to prevent timeout issues.
@@ -215,7 +215,7 @@ class FullContentImporter {
 
 		if ( $current_limit < $target_limit && '-1' !== $original_limit ) {
 			$target_limit_mb = ceil( $target_limit / ( 1024 * 1024 ) );
-			$set_result      = @ini_set( 'memory_limit', $target_limit_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
+			$set_result      = @ini_set( 'memory_limit', $target_limit_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 			if ( false === $set_result && $json_size > 100 * 1024 * 1024 ) {
 				$this->log( sprintf( 'Warning - Unable to increase memory limit to %d MB. Large file import may fail.', $target_limit_mb ) );
 			} else {
@@ -240,7 +240,7 @@ class FullContentImporter {
 		if ( JSON_ERROR_NONE !== json_last_error() ) {
 			// Restore original memory limit on error.
 			if ( isset( $original_limit ) ) {
-				@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
+				@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 			}
 			return new WP_Error( 'mksddn_mc_full_import_payload', __( 'Corrupted payload inside archive.', 'mksddn-migrate-content' ) );
 		}
@@ -437,7 +437,7 @@ class FullContentImporter {
 	private function restore_memory_limit( string $original_limit ): void {
 		// Don't restore if original was unlimited (-1).
 		if ( '-1' !== $original_limit && '' !== $original_limit ) {
-			@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.IniSet.memory_limit_Disallowed
+			@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 		}
 	}
 }
