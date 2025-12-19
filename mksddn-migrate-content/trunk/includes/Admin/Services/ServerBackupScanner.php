@@ -63,6 +63,14 @@ class ServerBackupScanner {
 	public function scan(): array|WP_Error {
 		$imports_dir = PluginConfig::imports_dir();
 
+		// Ensure directory exists, create if needed.
+		if ( ! is_dir( $imports_dir ) ) {
+			$create_result = PluginConfig::create_required_directories();
+			if ( is_wp_error( $create_result ) ) {
+				return $create_result;
+			}
+		}
+
 		$validation_error = $this->validate_imports_dir( $imports_dir );
 		if ( $validation_error ) {
 			return $validation_error;
@@ -116,7 +124,7 @@ class ServerBackupScanner {
 			}
 
 			$files[] = array(
-				'name'     => sanitize_file_name( $item ),
+				'name'     => $item, // Use actual filename from filesystem.
 				'path'     => $file_path,
 				'size'     => $file_size,
 				'size_human' => size_format( $file_size ),
@@ -149,21 +157,56 @@ class ServerBackupScanner {
 	public function get_file( string $filename ): array|WP_Error {
 		$imports_dir = PluginConfig::imports_dir();
 
+		// Ensure directory exists, create if needed.
+		if ( ! is_dir( $imports_dir ) ) {
+			$create_result = PluginConfig::create_required_directories();
+			if ( is_wp_error( $create_result ) ) {
+				return $create_result;
+			}
+		}
+
 		$validation_error = $this->validate_imports_dir( $imports_dir );
 		if ( $validation_error ) {
 			return $validation_error;
 		}
 
-		$file_path = trailingslashit( $imports_dir ) . basename( $filename );
+		// Prevent path traversal attacks by using basename.
+		$safe_filename = basename( $filename );
+		$file_path = trailingslashit( $imports_dir ) . $safe_filename;
+
+		// Check if file exists.
+		if ( ! file_exists( $file_path ) ) {
+			return new WP_Error(
+				'mksddn_mc_import_file_not_found',
+				__( 'Import file not found.', 'mksddn-migrate-content' )
+			);
+		}
 
 		// Security: prevent path traversal attacks.
 		$real_path = realpath( $file_path );
 		$real_imports_dir = realpath( $imports_dir );
 
-		if ( ! $real_path || ! $real_imports_dir ) {
+		// If realpath fails for directory but directory exists, use normalized original path.
+		if ( ! $real_imports_dir && is_dir( $imports_dir ) ) {
+			$real_imports_dir = rtrim( str_replace( '\\', '/', $imports_dir ), '/' );
+		}
+
+		// If realpath fails for file but file exists, use normalized original path.
+		if ( ! $real_path && file_exists( $file_path ) ) {
+			$real_path = str_replace( '\\', '/', $file_path );
+		}
+
+		if ( ! $real_path ) {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )
+			);
+		}
+
+		if ( ! $real_imports_dir ) {
+			return new WP_Error(
+				'mksddn_mc_imports_dir_invalid',
+				__( 'Imports directory path is invalid.', 'mksddn-migrate-content' )
 			);
 		}
 
@@ -176,13 +219,6 @@ class ServerBackupScanner {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )
-			);
-		}
-
-		if ( ! file_exists( $file_path ) ) {
-			return new WP_Error(
-				'mksddn_mc_import_file_not_found',
-				__( 'Import file not found.', 'mksddn-migrate-content' )
 			);
 		}
 
@@ -210,7 +246,7 @@ class ServerBackupScanner {
 		}
 
 		return array(
-			'name'     => sanitize_file_name( $filename ),
+			'name'     => $safe_filename,
 			'path'     => $file_path,
 			'size'     => $file_size,
 			'extension' => $extension,

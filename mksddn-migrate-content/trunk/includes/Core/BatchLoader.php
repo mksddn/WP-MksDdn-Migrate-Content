@@ -281,8 +281,30 @@ class BatchLoader {
 		}
 
 		foreach ( $to_load as $post_id ) {
-			$fields = get_fields( $post_id );
-			$this->acf_cache[ $post_id ] = is_array( $fields ) ? $fields : array();
+			$fields = array();
+
+			// Try get_fields() first (ACF API method).
+			if ( function_exists( 'get_fields' ) ) {
+				$fields_raw = get_fields( $post_id, false );
+				// get_fields() can return false or null, ensure we always have an array.
+				if ( is_array( $fields_raw ) ) {
+					$fields = $fields_raw;
+				}
+			}
+
+			// Fallback: get ACF fields from field objects if get_fields() didn't work.
+			if ( empty( $fields ) && function_exists( 'get_field_objects' ) ) {
+				$field_objects = get_field_objects( $post_id, false );
+				if ( is_array( $field_objects ) ) {
+					foreach ( $field_objects as $field_name => $field_object ) {
+						if ( isset( $field_object['value'] ) ) {
+							$fields[ $field_name ] = $field_object['value'];
+						}
+					}
+				}
+			}
+
+			$this->acf_cache[ $post_id ] = $fields;
 		}
 	}
 

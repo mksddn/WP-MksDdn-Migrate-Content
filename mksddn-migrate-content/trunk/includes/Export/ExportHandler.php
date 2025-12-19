@@ -167,6 +167,11 @@ class ExportHandler implements ExporterInterface {
 			\wp_die( \esc_html__( 'Requested type is not allowed for this export.', 'mksddn-migrate-content' ) );
 		}
 
+		// Preload ACF fields for single post export.
+		if ( function_exists( 'get_fields' ) ) {
+			$this->batch_loader->load_acf_fields_batch( array( $post_id ) );
+		}
+
 		$media = $this->collect_media_for_post( $post );
 		$data  = $this->prepare_payload_for_post( $post, $media );
 		$this->deliver_payload( $data, 'selected', $media );

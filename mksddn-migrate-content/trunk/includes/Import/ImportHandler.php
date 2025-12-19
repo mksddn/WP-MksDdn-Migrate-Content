@@ -142,8 +142,10 @@ class ImportHandler implements ImporterInterface {
 		$id_map     = $media_maps['id_map'] ?? array();
 		$url_map    = $media_maps['url_map'] ?? array();
 
-		$this->import_acf_fields( $data, $post_id, $id_map, $url_map );
+		// Import meta data first (includes ACF flat meta format).
 		$this->import_meta_data( $data, $post_id, $id_map, $url_map );
+		// Then import ACF fields using ACF API (for proper structure handling).
+		$this->import_acf_fields( $data, $post_id, $id_map, $url_map );
 
 		return true;
 	}
@@ -307,18 +309,550 @@ class ImportHandler implements ImporterInterface {
 	 *
 	 * @param array      $data    Payload containing 'acf_fields'.
 	 * @param int|string $post_id Target post ID.
+	 * @param array      $id_map  Media ID mapping.
+	 * @param array      $url_map Media URL mapping.
 	 * @return void
 	 */
 	private function import_acf_fields( array $data, int|string $post_id, array $id_map = array(), array $url_map = array() ): void {
-		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
+		// Log start of import (always log to file).
+		$this->log_debug( sprintf( '[ACF Import] ===== START import_acf_fields: post_id=%d =====', $post_id ) );
+		$this->log_debug( sprintf( '[ACF Import] acf_fields exists: %s', isset( $data['acf_fields'] ) ? 'yes' : 'no' ) );
+		if ( isset( $data['acf_fields'] ) ) {
+			$this->log_debug( sprintf( '[ACF Import] acf_fields is_array: %s, count: %d', is_array( $data['acf_fields'] ) ? 'yes' : 'no', is_array( $data['acf_fields'] ) ? count( $data['acf_fields'] ) : 0 ) );
+			$this->log_debug( sprintf( '[ACF Import] acf_fields keys: %s', wp_json_encode( array_keys( $data['acf_fields'] ) ) ) );
+		}
+
+		if ( ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) || empty( $data['acf_fields'] ) ) {
+			$this->log_debug( '[ACF Import] No acf_fields found, exiting' );
 			return;
 		}
 
-		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
-			$value = $this->remap_media_values( $field_value, $id_map, $url_map );
-			update_field( sanitize_text_field( $field_name ), $value, $post_id );
+		// Use ACF API if available (preferred method).
+		if ( function_exists( 'update_field' ) ) {
+			$this->log_debug( '[ACF Import] ACF API available, starting recursive import' );
+			// Process fields recursively to handle nested structures (groups, repeaters, etc.).
+			$this->import_acf_fields_recursive( $data['acf_fields'], $post_id, $id_map, $url_map );
+		} else {
+			$this->log_debug( '[ACF Import] ACF API not available, using fallback' );
+			// Fallback: update meta fields directly if ACF API is not available.
+			foreach ( $data['acf_fields'] as $field_name => $field_value ) {
+				if ( empty( $field_name ) || ! is_string( $field_name ) ) {
+					continue;
+				}
+
+				$value = $this->remap_media_values( $field_value, $id_map, $url_map );
+				$this->wp_functions->update_post_meta( $post_id, sanitize_text_field( $field_name ), $value );
+			}
 		}
 	}
+
+	/**
+	 * Recursively import ACF fields, handling nested structures.
+	 *
+	 * @param array      $fields  ACF fields data (can be nested).
+	 * @param int|string $post_id Target post ID.
+	 * @param array      $id_map  Media ID mapping.
+	 * @param array      $url_map Media URL mapping.
+	 * @param string     $parent_field_name Parent field name for nested fields.
+	 * @return void
+	 */
+	private function import_acf_fields_recursive( array $fields, int|string $post_id, array $id_map = array(), array $url_map = array(), string $parent_field_name = '' ): void {
+		$this->log_debug( sprintf( '[ACF Import] Starting recursive import for post_id=%d, parent_field=%s, fields_count=%d', $post_id, $parent_field_name, count( $fields ) ) );
+
+		foreach ( $fields as $field_name => $field_value ) {
+			if ( empty( $field_name ) || ! is_string( $field_name ) ) {
+				continue;
+			}
+
+			$sanitized_name = sanitize_text_field( $field_name );
+			$full_field_name = $parent_field_name ? $parent_field_name . '_' . $sanitized_name : $sanitized_name;
+
+			$this->log_debug( sprintf( '[ACF Import] Processing field: name=%s, full_name=%s, value_type=%s', $field_name, $full_field_name, gettype( $field_value ) ) );
+
+			// Get field object to determine field type.
+			$field_object = null;
+			if ( function_exists( 'get_field_object' ) ) {
+				// Try to get field object with full name first (for nested fields).
+				$field_object = get_field_object( $full_field_name, $post_id, false, true );
+				// If not found, try without parent prefix.
+				if ( ! $field_object && $parent_field_name ) {
+					$field_object = get_field_object( $sanitized_name, $post_id, false, true );
+				}
+			}
+
+			// Recursively remap media values in the entire field structure.
+			$value = $this->remap_media_values( $field_value, $id_map, $url_map );
+
+			// Process value based on field type.
+			$field_type = $field_object['type'] ?? null;
+			$this->log_debug( sprintf( '[ACF Import] Field type detected: name=%s, type=%s', $field_name, $field_type ?? 'unknown' ) );
+
+			// Handle group fields - process nested fields and update group.
+			if ( 'group' === $field_type && is_array( $value ) ) {
+				$this->log_debug( sprintf( '[ACF Import] Processing GROUP field: name=%s, sub_fields_count=%d', $field_name, count( $value ) ) );
+				// Get group field object to access sub-field definitions.
+				$group_field_object = $field_object;
+
+				// Process group value with all nested structures.
+				$processed_group_value = $this->process_group_value( $value, $post_id, $id_map, $url_map, $full_field_name, $group_field_object );
+				$this->log_debug( sprintf( '[ACF Import] Group processed: name=%s, processed_fields=%s', $field_name, wp_json_encode( array_keys( $processed_group_value ) ) ) );
+
+				// Update each sub-field individually instead of updating group as a whole.
+				// This is more reliable for ACF group fields.
+				if ( function_exists( 'update_field' ) && $group_field_object && isset( $group_field_object['sub_fields'] ) ) {
+					foreach ( $processed_group_value as $sub_field_name => $sub_field_value ) {
+						$sub_field_name_sanitized = sanitize_text_field( $sub_field_name );
+						$sub_field_full_name = $full_field_name . '_' . $sub_field_name_sanitized;
+
+						// Find sub-field definition to get its type.
+						$sub_field_type = null;
+						foreach ( $group_field_object['sub_fields'] as $sub_field_def ) {
+							if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+								$sub_field_type = $sub_field_def['type'] ?? null;
+								break;
+							}
+						}
+
+						// Skip repeater fields - they are already updated separately in process_group_value.
+						if ( 'repeater' === $sub_field_type ) {
+							$this->log_debug( sprintf( '[ACF Import] Skipping REPEATER sub-field (already updated): full_name=%s', $sub_field_full_name ) );
+							continue;
+						}
+
+						// Find sub-field key for update_field with field_key.
+						$sub_field_key = null;
+						foreach ( $group_field_object['sub_fields'] as $sub_field_def ) {
+							if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+								$sub_field_key = $sub_field_def['key'] ?? null;
+								break;
+							}
+						}
+						
+						// Update each non-repeater sub-field individually.
+						$this->log_debug( sprintf( '[ACF Import] Updating sub-field in group: full_name=%s, type=%s, key=%s', $sub_field_full_name, $sub_field_type ?? 'unknown', $sub_field_key ?? 'none' ) );
+						
+						// For nested group fields, recursively process them.
+						if ( 'group' === $sub_field_type && is_array( $sub_field_value ) ) {
+							// Get sub-field object for nested group.
+							$nested_group_field_object = null;
+							foreach ( $group_field_object['sub_fields'] as $sub_field_def ) {
+								if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+									$nested_group_field_object = $sub_field_def;
+									break;
+								}
+							}
+							
+							// Process nested group and update its sub-fields.
+							$nested_processed = $this->process_group_value( $sub_field_value, $post_id, $id_map, $url_map, $sub_field_full_name, $nested_group_field_object );
+							
+							// Update each nested sub-field using full field name (not field_key for nested groups).
+							if ( $nested_group_field_object && isset( $nested_group_field_object['sub_fields'] ) ) {
+								foreach ( $nested_processed as $nested_sub_field_name => $nested_sub_field_value ) {
+									$nested_sub_field_name_sanitized = sanitize_text_field( $nested_sub_field_name );
+									$nested_sub_field_full_name = $sub_field_full_name . '_' . $nested_sub_field_name_sanitized;
+									
+									// Find nested sub-field type.
+									$nested_sub_field_type = null;
+									$nested_sub_field_key = null;
+									foreach ( $nested_group_field_object['sub_fields'] as $nested_sub_field_def ) {
+										if ( isset( $nested_sub_field_def['name'] ) && $nested_sub_field_def['name'] === $nested_sub_field_name_sanitized ) {
+											$nested_sub_field_type = $nested_sub_field_def['type'] ?? null;
+											$nested_sub_field_key = $nested_sub_field_def['key'] ?? null;
+											break;
+										}
+									}
+									
+									// Skip repeaters in nested groups.
+									if ( 'repeater' === $nested_sub_field_type ) {
+										continue;
+									}
+									
+									// Try field_key first, then fallback to full name, then direct meta update.
+									$nested_update_result = false;
+									if ( $nested_sub_field_key ) {
+										$nested_update_result = update_field( $nested_sub_field_key, $nested_sub_field_value, $post_id );
+									}
+									if ( ! $nested_update_result ) {
+										// Try full name.
+										$nested_update_result = update_field( $nested_sub_field_full_name, $nested_sub_field_value, $post_id );
+									}
+									if ( ! $nested_update_result ) {
+										// Fallback to direct meta update for nested group fields.
+										// ACF stores nested group fields with field name as meta key.
+										$this->wp_functions->update_post_meta( $post_id, $nested_sub_field_full_name, $nested_sub_field_value );
+										// Also update with field_key format if available.
+										if ( $nested_sub_field_key ) {
+											$this->wp_functions->update_post_meta( $post_id, $nested_sub_field_key, $nested_sub_field_value );
+										}
+										$this->log_debug( sprintf( '[ACF Import] Nested sub-field update via meta: name=%s, full_name=%s, key=%s', $nested_sub_field_name, $nested_sub_field_full_name, $nested_sub_field_key ?? 'none' ) );
+										$nested_update_result = true; // Assume success for meta update.
+									}
+									$this->log_debug( sprintf( '[ACF Import] Nested sub-field update: name=%s, full_name=%s, type=%s, key=%s, result=%s', $nested_sub_field_name, $nested_sub_field_full_name, $nested_sub_field_type ?? 'unknown', $nested_sub_field_key ?? 'none', $nested_update_result ? 'success' : 'failed' ) );
+								}
+							}
+						} else {
+							// Update simple sub-field using field_key with update_field, with fallback to direct meta.
+							$sub_update_result = false;
+							if ( $sub_field_key ) {
+								// Try field_key first.
+								$sub_update_result = update_field( $sub_field_key, $sub_field_value, $post_id );
+							}
+							if ( ! $sub_update_result ) {
+								// Fallback to full name if field_key fails.
+								$sub_update_result = update_field( $sub_field_full_name, $sub_field_value, $post_id );
+							}
+							if ( ! $sub_update_result ) {
+								// Final fallback: direct meta update for group sub-fields.
+								$this->wp_functions->update_post_meta( $post_id, $sub_field_full_name, $sub_field_value );
+								// Also update with field_key format if available.
+								if ( $sub_field_key ) {
+									$this->wp_functions->update_post_meta( $post_id, $sub_field_key, $sub_field_value );
+								}
+								$this->log_debug( sprintf( '[ACF Import] Sub-field update via meta: full_name=%s, key=%s', $sub_field_full_name, $sub_field_key ?? 'none' ) );
+								$sub_update_result = true; // Assume success for meta update.
+							} else {
+								$this->log_debug( sprintf( '[ACF Import] Sub-field update with key: full_name=%s, key=%s, result=%s', $sub_field_full_name, $sub_field_key ?? 'none', $sub_update_result ? 'success' : 'failed' ) );
+							}
+						}
+					}
+				}
+				continue;
+			}
+
+			// For gallery fields, convert array of objects to array of IDs.
+			if ( 'gallery' === $field_type && is_array( $value ) ) {
+				$value = $this->convert_gallery_to_ids( $value );
+			}
+
+			// For image fields, extract ID if it's an object.
+			if ( 'image' === $field_type && is_array( $value ) && isset( $value['ID'] ) ) {
+				$value = (int) $value['ID'];
+			}
+
+			// For file fields, extract ID if it's an object.
+			if ( 'file' === $field_type && is_array( $value ) && isset( $value['ID'] ) ) {
+				$value = (int) $value['ID'];
+			}
+
+			// For repeater fields, ensure proper format and process rows.
+			if ( 'repeater' === $field_type && is_array( $value ) ) {
+				$this->log_debug( sprintf( '[ACF Import] Processing REPEATER field: name=%s, rows_count=%d', $field_name, count( $value ) ) );
+				$value = $this->process_repeater_value( $value, $post_id, $id_map, $url_map, $full_field_name, $field_object );
+				$this->log_debug( sprintf( '[ACF Import] REPEATER processed: name=%s, processed_rows=%d', $field_name, is_array( $value ) ? count( $value ) : 0 ) );
+				
+				// Update repeater field using field_key if available, otherwise use field name.
+				if ( function_exists( 'update_field' ) && ! empty( $value ) ) {
+					$repeater_field_key = $field_object['key'] ?? null;
+					$update_field_name = $parent_field_name ? $full_field_name : $sanitized_name;
+					$this->log_debug( sprintf( '[ACF Import] Updating REPEATER field: name=%s, key=%s, rows=%d', $update_field_name, $repeater_field_key ?? 'none', is_array( $value ) ? count( $value ) : 0 ) );
+					
+					// Try field_key first, then fallback to field name.
+					$update_result = false;
+					if ( $repeater_field_key ) {
+						$update_result = update_field( $repeater_field_key, $value, $post_id );
+					}
+					if ( ! $update_result ) {
+						$update_result = update_field( $update_field_name, $value, $post_id );
+					}
+					$this->log_debug( sprintf( '[ACF Import] REPEATER field update result: name=%s, key=%s, result=%s', $update_field_name, $repeater_field_key ?? 'none', $update_result ? 'success' : 'failed' ) );
+					
+					// If update_field fails, try direct meta update as fallback.
+					if ( ! $update_result ) {
+						$this->log_debug( sprintf( '[ACF Import] REPEATER update_field failed, trying direct meta update: name=%s, key=%s', $update_field_name, $repeater_field_key ?? 'none' ) );
+						$repeater_count = is_array( $value ) ? count( $value ) : 0;
+						$this->wp_functions->update_post_meta( $post_id, $update_field_name, $repeater_count );
+						if ( $repeater_field_key ) {
+							$this->wp_functions->update_post_meta( $post_id, $repeater_field_key, $repeater_count );
+						}
+						// Update each row's sub-fields.
+						foreach ( $value as $row_index => $row_data ) {
+							if ( is_array( $row_data ) ) {
+								foreach ( $row_data as $row_sub_field_name => $row_sub_field_value ) {
+									$row_sub_field_full_name = $update_field_name . '_' . $row_index . '_' . sanitize_text_field( $row_sub_field_name );
+									$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $row_sub_field_value );
+									// Also try with field_key format if we have sub-field definitions.
+									if ( $field_object && isset( $field_object['sub_fields'] ) ) {
+										foreach ( $field_object['sub_fields'] as $row_sub_field_def ) {
+											if ( isset( $row_sub_field_def['name'] ) && $row_sub_field_def['name'] === sanitize_text_field( $row_sub_field_name ) ) {
+												$row_sub_field_key = $row_sub_field_def['key'] ?? null;
+												if ( $row_sub_field_key ) {
+													$row_sub_field_key_full = $update_field_name . '_' . $row_index . '_' . $row_sub_field_key;
+													$this->wp_functions->update_post_meta( $post_id, $row_sub_field_key_full, $row_sub_field_value );
+												}
+												break;
+											}
+										}
+									}
+								}
+							}
+						}
+						$this->log_debug( sprintf( '[ACF Import] REPEATER update via meta: name=%s, rows=%d', $update_field_name, $repeater_count ) );
+					}
+					continue; // Skip normal field update for repeater fields.
+				}
+			}
+
+			// Update field using ACF API.
+			if ( function_exists( 'update_field' ) ) {
+				// Use full field name for nested fields, simple name for root fields.
+				$update_field_name = $parent_field_name ? $full_field_name : $sanitized_name;
+				$this->log_debug( sprintf( '[ACF Import] Updating field: name=%s, type=%s, value_type=%s', $update_field_name, $field_type ?? 'unknown', gettype( $value ) ) );
+				$update_result = update_field( $update_field_name, $value, $post_id );
+				$this->log_debug( sprintf( '[ACF Import] Field update result: name=%s, result=%s', $update_field_name, $update_result ? 'success' : 'failed' ) );
+			}
+		}
+	}
+
+	/**
+	 * Process group field value, handling nested structures.
+	 *
+	 * @param array      $value              Group field value.
+	 * @param int|string $post_id            Post ID.
+	 * @param array      $id_map             Media ID mapping.
+	 * @param array      $url_map            Media URL mapping.
+	 * @param string     $parent_field_name  Parent field name.
+	 * @param array|null $parent_field_object Parent field object (optional).
+	 * @return array Processed group value.
+	 */
+	private function process_group_value( array $value, int|string $post_id, array $id_map = array(), array $url_map = array(), string $parent_field_name = '', ?array $parent_field_object = null ): array {
+		$this->log_debug( sprintf( '[ACF Import] process_group_value: parent=%s, sub_fields_count=%d', $parent_field_name, count( $value ) ) );
+		$processed = array();
+
+		// Use provided parent field object or get it.
+		if ( null === $parent_field_object && function_exists( 'get_field_object' ) && ! empty( $parent_field_name ) ) {
+			$parent_field_object = get_field_object( $parent_field_name, $post_id, false, true );
+		}
+
+		foreach ( $value as $sub_field_name => $sub_field_value ) {
+			$this->log_debug( sprintf( '[ACF Import] Processing sub-field in group: parent=%s, sub_field=%s, value_type=%s', $parent_field_name, $sub_field_name, gettype( $sub_field_value ) ) );
+			$sub_field_name_sanitized = sanitize_text_field( $sub_field_name );
+			$sub_field_full_name = $parent_field_name ? $parent_field_name . '_' . $sub_field_name_sanitized : $sub_field_name_sanitized;
+
+			// Get sub-field object from parent group field definition.
+			$sub_field_object = null;
+			$sub_field_type = null;
+
+			if ( $parent_field_object && isset( $parent_field_object['sub_fields'] ) && is_array( $parent_field_object['sub_fields'] ) ) {
+				// Find sub-field definition in parent group.
+				foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
+					if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+						$sub_field_object = $sub_field_def;
+						$sub_field_type = $sub_field_def['type'] ?? null;
+						break;
+					}
+				}
+			}
+
+			// Fallback: try to get field object directly.
+			if ( ! $sub_field_type && function_exists( 'get_field_object' ) ) {
+				$sub_field_object = get_field_object( $sub_field_full_name, $post_id, false, true );
+				$sub_field_type = $sub_field_object['type'] ?? null;
+			}
+
+			// Detect repeater by structure if type is not found.
+			if ( ! $sub_field_type && is_array( $sub_field_value ) && $this->is_repeater_structure( $sub_field_value ) ) {
+				$sub_field_type = 'repeater';
+			}
+
+			// Process based on sub-field type.
+			if ( 'repeater' === $sub_field_type && is_array( $sub_field_value ) ) {
+				$this->log_debug( sprintf( '[ACF Import] Processing REPEATER in group: parent=%s, sub_field=%s, rows=%d', $parent_field_name, $sub_field_name, count( $sub_field_value ) ) );
+				$processed[ $sub_field_name ] = $this->process_repeater_value( $sub_field_value, $post_id, $id_map, $url_map, $sub_field_full_name, $sub_field_object );
+				$this->log_debug( sprintf( '[ACF Import] REPEATER processed in group: parent=%s, sub_field=%s, processed_rows=%d', $parent_field_name, $sub_field_name, is_array( $processed[ $sub_field_name ] ) ? count( $processed[ $sub_field_name ] ) : 0 ) );
+
+				// Update repeater field immediately using field_key if available.
+				if ( function_exists( 'update_field' ) && ! empty( $processed[ $sub_field_name ] ) ) {
+					$repeater_field_key = $sub_field_object['key'] ?? null;
+					$this->log_debug( sprintf( '[ACF Import] Updating REPEATER field in process_group_value: full_name=%s, key=%s, rows=%d', $sub_field_full_name, $repeater_field_key ?? 'none', is_array( $processed[ $sub_field_name ] ) ? count( $processed[ $sub_field_name ] ) : 0 ) );
+					
+					// Try field_key first, then fallback to full name.
+					$repeater_update_result = false;
+					if ( $repeater_field_key ) {
+						$repeater_update_result = update_field( $repeater_field_key, $processed[ $sub_field_name ], $post_id );
+					}
+					if ( ! $repeater_update_result ) {
+						$repeater_update_result = update_field( $sub_field_full_name, $processed[ $sub_field_name ], $post_id );
+					}
+					$this->log_debug( sprintf( '[ACF Import] REPEATER update result in process_group_value: full_name=%s, key=%s, result=%s', $sub_field_full_name, $repeater_field_key ?? 'none', $repeater_update_result ? 'success' : 'failed' ) );
+					
+					// If update_field fails, try direct meta update as fallback.
+					if ( ! $repeater_update_result ) {
+						$this->log_debug( sprintf( '[ACF Import] REPEATER update_field failed, trying direct meta update: full_name=%s, key=%s', $sub_field_full_name, $repeater_field_key ?? 'none' ) );
+						// ACF stores repeater count in main field name.
+						$repeater_count = is_array( $processed[ $sub_field_name ] ) ? count( $processed[ $sub_field_name ] ) : 0;
+						$this->wp_functions->update_post_meta( $post_id, $sub_field_full_name, $repeater_count );
+						if ( $repeater_field_key ) {
+							$this->wp_functions->update_post_meta( $post_id, $repeater_field_key, $repeater_count );
+						}
+						// Update each row's sub-fields.
+						foreach ( $processed[ $sub_field_name ] as $row_index => $row_data ) {
+							if ( is_array( $row_data ) ) {
+								foreach ( $row_data as $row_sub_field_name => $row_sub_field_value ) {
+									$row_sub_field_full_name = $sub_field_full_name . '_' . $row_index . '_' . sanitize_text_field( $row_sub_field_name );
+									$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $row_sub_field_value );
+									// Also try with field_key format if we have sub-field definitions.
+									if ( $sub_field_object && isset( $sub_field_object['sub_fields'] ) ) {
+										foreach ( $sub_field_object['sub_fields'] as $row_sub_field_def ) {
+											if ( isset( $row_sub_field_def['name'] ) && $row_sub_field_def['name'] === sanitize_text_field( $row_sub_field_name ) ) {
+												$row_sub_field_key = $row_sub_field_def['key'] ?? null;
+												if ( $row_sub_field_key ) {
+													$row_sub_field_key_full = $sub_field_full_name . '_' . $row_index . '_' . $row_sub_field_key;
+													$this->wp_functions->update_post_meta( $post_id, $row_sub_field_key_full, $row_sub_field_value );
+												}
+												break;
+											}
+										}
+									}
+								}
+							}
+						}
+						$this->log_debug( sprintf( '[ACF Import] REPEATER update via meta: full_name=%s, rows=%d', $sub_field_full_name, $repeater_count ) );
+					}
+				}
+			} elseif ( 'gallery' === $sub_field_type && is_array( $sub_field_value ) ) {
+				$processed[ $sub_field_name ] = $this->convert_gallery_to_ids( $sub_field_value );
+			} elseif ( 'image' === $sub_field_type && is_array( $sub_field_value ) && isset( $sub_field_value['ID'] ) ) {
+				$processed[ $sub_field_name ] = (int) $sub_field_value['ID'];
+			} elseif ( 'file' === $sub_field_type && is_array( $sub_field_value ) && isset( $sub_field_value['ID'] ) ) {
+				$processed[ $sub_field_name ] = (int) $sub_field_value['ID'];
+			} elseif ( 'group' === $sub_field_type && is_array( $sub_field_value ) ) {
+				$processed[ $sub_field_name ] = $this->process_group_value( $sub_field_value, $post_id, $id_map, $url_map, $sub_field_full_name );
+			} else {
+				// Remap media values for simple fields.
+				$processed[ $sub_field_name ] = $this->remap_media_values( $sub_field_value, $id_map, $url_map );
+			}
+		}
+		return $processed;
+	}
+
+	/**
+	 * Check if array structure looks like a repeater field.
+	 *
+	 * @param array $value Array to check.
+	 * @return bool True if structure looks like repeater.
+	 */
+	private function is_repeater_structure( array $value ): bool {
+		if ( empty( $value ) ) {
+			return false;
+		}
+
+		$keys = array_keys( $value );
+		// Check if all keys are numeric (0, 1, 2, ...).
+		$all_numeric = true;
+		foreach ( $keys as $key ) {
+			if ( ! is_numeric( $key ) || (int) $key != $key ) {
+				$all_numeric = false;
+				break;
+			}
+		}
+
+		if ( ! $all_numeric ) {
+			return false;
+		}
+
+		// Check if values are arrays (repeater rows).
+		foreach ( $value as $row ) {
+			if ( ! is_array( $row ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Process repeater field value, handling nested structures in rows.
+	 *
+	 * @param array      $value              Repeater field value.
+	 * @param int|string $post_id            Post ID.
+	 * @param array      $id_map             Media ID mapping.
+	 * @param array      $url_map            Media URL mapping.
+	 * @param string     $parent_field_name  Parent field name.
+	 * @param array|null $parent_field_object Parent field object (optional).
+	 * @return array Processed repeater value.
+	 */
+	private function process_repeater_value( array $value, int|string $post_id, array $id_map = array(), array $url_map = array(), string $parent_field_name = '', ?array $parent_field_object = null ): array {
+		$this->log_debug( sprintf( '[ACF Import] process_repeater_value: parent=%s, rows_count=%d', $parent_field_name, count( $value ) ) );
+		if ( empty( $value ) || ! is_array( $value ) ) {
+			$this->log_debug( sprintf( '[ACF Import] REPEATER value is empty or not array: parent=%s', $parent_field_name ) );
+			return array();
+		}
+
+		// Use provided parent field object or get it if not provided.
+		if ( null === $parent_field_object && function_exists( 'get_field_object' ) && ! empty( $parent_field_name ) ) {
+			$parent_field_object = get_field_object( $parent_field_name, $post_id, false, true );
+		}
+
+		$processed = array();
+		foreach ( $value as $row_index => $row_data ) {
+			$this->log_debug( sprintf( '[ACF Import] Processing repeater row: parent=%s, row_index=%d, row_fields_count=%d', $parent_field_name, $row_index, is_array( $row_data ) ? count( $row_data ) : 0 ) );
+			if ( ! is_array( $row_data ) ) {
+				$processed[ $row_index ] = $this->remap_media_values( $row_data, $id_map, $url_map );
+				continue;
+			}
+
+			$processed_row = array();
+			foreach ( $row_data as $sub_field_name => $sub_field_value ) {
+				$sub_field_name_sanitized = sanitize_text_field( $sub_field_name );
+
+				// Get sub-field object from parent repeater field definition.
+				$sub_field_object = null;
+				$sub_field_type = null;
+
+				if ( $parent_field_object && isset( $parent_field_object['sub_fields'] ) && is_array( $parent_field_object['sub_fields'] ) ) {
+					// Find sub-field definition in parent repeater.
+					foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
+						if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+							$sub_field_object = $sub_field_def;
+							$sub_field_type = $sub_field_def['type'] ?? null;
+							break;
+						}
+					}
+				}
+
+				// Process based on sub-field type.
+				if ( 'gallery' === $sub_field_type && is_array( $sub_field_value ) ) {
+					$processed_row[ $sub_field_name ] = $this->convert_gallery_to_ids( $sub_field_value );
+				} elseif ( 'image' === $sub_field_type && is_array( $sub_field_value ) && isset( $sub_field_value['ID'] ) ) {
+					$processed_row[ $sub_field_name ] = (int) $sub_field_value['ID'];
+				} elseif ( 'file' === $sub_field_type && is_array( $sub_field_value ) && isset( $sub_field_value['ID'] ) ) {
+					$processed_row[ $sub_field_name ] = (int) $sub_field_value['ID'];
+				} elseif ( 'repeater' === $sub_field_type && is_array( $sub_field_value ) ) {
+					// Handle nested repeater fields within repeater rows.
+					$sub_field_full_name = $parent_field_name . '_' . $row_index . '_' . $sub_field_name_sanitized;
+					$processed_row[ $sub_field_name ] = $this->process_repeater_value( $sub_field_value, $post_id, $id_map, $url_map, $sub_field_full_name, $sub_field_object );
+				} elseif ( 'group' === $sub_field_type && is_array( $sub_field_value ) ) {
+					$sub_field_full_name = $parent_field_name . '_' . $row_index . '_' . $sub_field_name_sanitized;
+					$processed_row[ $sub_field_name ] = $this->process_group_value( $sub_field_value, $post_id, $id_map, $url_map, $sub_field_full_name, $sub_field_object );
+				} else {
+					// Remap media values for simple fields.
+					$processed_row[ $sub_field_name ] = $this->remap_media_values( $sub_field_value, $id_map, $url_map );
+				}
+			}
+			$processed[ $row_index ] = $processed_row;
+		}
+		return array_values( $processed );
+	}
+
+	/**
+	 * Convert gallery array (objects) to array of IDs.
+	 *
+	 * @param array $gallery_array Gallery array (may contain objects or IDs).
+	 * @return array Array of attachment IDs.
+	 */
+	private function convert_gallery_to_ids( array $gallery_array ): array {
+		$ids = array();
+		foreach ( $gallery_array as $item ) {
+			if ( is_array( $item ) && isset( $item['ID'] ) ) {
+				$ids[] = (int) $item['ID'];
+			} elseif ( is_numeric( $item ) ) {
+				$ids[] = (int) $item;
+			}
+		}
+		return $ids;
+	}
+
+
 
 	/**
 	 * Import meta for a post.
@@ -332,8 +866,11 @@ class ImportHandler implements ImporterInterface {
 			return;
 		}
 
+		// Import all meta fields, including ACF flat format for nested structures.
 		foreach ( $data['meta'] as $key => $values ) {
 			$meta_key = sanitize_text_field( $key );
+
+			// Delete existing meta before adding new.
 			delete_post_meta( $post_id, $meta_key );
 
 			if ( is_array( $values ) ) {
@@ -342,6 +879,32 @@ class ImportHandler implements ImporterInterface {
 					$value = $this->remap_media_values( $value, $id_map, $url_map );
 					add_post_meta( $post_id, $meta_key, $value );
 				}
+			} else {
+				// Single value.
+				$value = maybe_unserialize( $values );
+				$value = $this->remap_media_values( $value, $id_map, $url_map );
+				update_post_meta( $post_id, $meta_key, $value );
+			}
+		}
+	}
+
+	/**
+	 * Recursively find field keys in ACF field structure.
+	 *
+	 * @param array $fields     ACF fields array.
+	 * @param array $acf_fields Fields to import.
+	 * @param array $field_key_map Field key map (passed by reference).
+	 * @return void
+	 */
+	private function find_field_keys_recursive( array $fields, array $acf_fields, array &$field_key_map ): void {
+		foreach ( $fields as $field ) {
+			if ( isset( $field['name'], $field['key'] ) && isset( $acf_fields[ $field['name'] ] ) ) {
+				$field_key_map[ $field['name'] ] = $field['key'];
+			}
+
+			// Check for sub_fields (repeater, group, etc.).
+			if ( isset( $field['sub_fields'] ) && is_array( $field['sub_fields'] ) ) {
+				$this->find_field_keys_recursive( $field['sub_fields'], $acf_fields, $field_key_map );
 			}
 		}
 	}
@@ -395,5 +958,26 @@ class ImportHandler implements ImporterInterface {
 		if ( isset( $options_bundle['widgets'] ) && is_array( $options_bundle['widgets'] ) ) {
 			$this->options_importer->import_widgets( $options_bundle['widgets'] );
 		}
+	}
+
+	/**
+	 * Log debug message to file and error_log.
+	 *
+	 * @param string $message Message to log.
+	 * @return void
+	 */
+	private function log_debug( string $message ): void {
+		$timestamp = gmdate( 'Y-m-d H:i:s' );
+		$log_message = sprintf( '[%s] %s', $timestamp, $message ) . PHP_EOL;
+
+		// Log to error_log if WP_DEBUG is enabled.
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( $message );
+		}
+
+		// Always log to custom file.
+		$upload_dir = wp_upload_dir();
+		$log_file = $upload_dir['basedir'] . '/mksddn-acf-import-debug.log';
+		@file_put_contents( $log_file, $log_message, FILE_APPEND | LOCK_EX );
 	}
 }
