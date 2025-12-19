@@ -143,7 +143,6 @@ class ImportHandler implements ImporterInterface {
 		$url_map    = $media_maps['url_map'] ?? array();
 
 		$this->import_acf_fields( $data, $post_id, $id_map, $url_map );
-		$this->import_meta_data( $data, $post_id, $id_map, $url_map );
 
 		return true;
 	}
@@ -316,8 +315,8 @@ class ImportHandler implements ImporterInterface {
 			return;
 		}
 
-		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
-			$value = $this->remap_media_values( $field_value, $id_map, $url_map );
+			foreach ( $data['acf_fields'] as $field_name => $field_value ) {
+				$value = $this->remap_media_values( $field_value, $id_map, $url_map );
 			update_field( sanitize_text_field( $field_name ), $value, $post_id );
 		}
 	}
