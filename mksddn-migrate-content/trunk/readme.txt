@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,12 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.2.3 =
+* Enhanced FilesystemHelper with dynamic definition of FS_CHMOD_FILE and FS_CHMOD_DIR based on existing WordPress file permissions, improving filesystem operations compatibility.
+* Added ensure_directory() method to FilesystemHelper for consistent directory creation with proper error handling.
+* Refactored directory creation logic in ChunkJobRepository, ChunkRestController, and FullContentExporter to utilize FilesystemHelper for improved error handling and consistency.
+* Improved file permissions handling in put_stream() method to ensure proper chmod after streaming operations.
 
 = 1.2.2 =
 * Fixed history entries filtering to exclude records with missing archive files.
