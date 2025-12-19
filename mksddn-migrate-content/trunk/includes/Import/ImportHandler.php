@@ -378,6 +378,10 @@ class ImportHandler implements ImporterInterface {
 				if ( ! $field_object && $parent_field_name ) {
 					$field_object = get_field_object( $sanitized_name, $post_id, false, true );
 				}
+				// Normalize false to null for type safety.
+				if ( false === $field_object ) {
+					$field_object = null;
+				}
 			}
 
 			// Recursively remap media values in the entire field structure.
@@ -621,6 +625,10 @@ class ImportHandler implements ImporterInterface {
 		// Use provided parent field object or get it.
 		if ( null === $parent_field_object && function_exists( 'get_field_object' ) && ! empty( $parent_field_name ) ) {
 			$parent_field_object = get_field_object( $parent_field_name, $post_id, false, true );
+			// Normalize false to null for type safety.
+			if ( false === $parent_field_object ) {
+				$parent_field_object = null;
+			}
 		}
 
 		foreach ( $value as $sub_field_name => $sub_field_value ) {
@@ -646,6 +654,10 @@ class ImportHandler implements ImporterInterface {
 			// Fallback: try to get field object directly.
 			if ( ! $sub_field_type && function_exists( 'get_field_object' ) ) {
 				$sub_field_object = get_field_object( $sub_field_full_name, $post_id, false, true );
+				// Normalize false to null for type safety.
+				if ( false === $sub_field_object ) {
+					$sub_field_object = null;
+				}
 				$sub_field_type = $sub_field_object['type'] ?? null;
 			}
 
@@ -781,6 +793,10 @@ class ImportHandler implements ImporterInterface {
 		// Use provided parent field object or get it if not provided.
 		if ( null === $parent_field_object && function_exists( 'get_field_object' ) && ! empty( $parent_field_name ) ) {
 			$parent_field_object = get_field_object( $parent_field_name, $post_id, false, true );
+			// Normalize false to null for type safety.
+			if ( false === $parent_field_object ) {
+				$parent_field_object = null;
+			}
 		}
 
 		$processed = array();
