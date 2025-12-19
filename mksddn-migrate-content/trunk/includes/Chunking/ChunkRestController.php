@@ -179,16 +179,25 @@ class ChunkRestController {
 	public function init_download( WP_REST_Request $request ) {
 		$job    = $this->repository->create();
 		$file   = $job->get_file_path();
+		
+		$dir = dirname( $file );
+		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+			$job->delete();
+			return new WP_Error( 'mksddn_dir_create', __( 'Unable to create export directory.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
+		}
+
 		$export = new FullContentExporter();
 		$result = $export->export_to( $file );
 
 		if ( is_wp_error( $result ) ) {
+			$job->delete();
 			return $result;
 		}
 
 		$size = filesize( $file );
-		if ( false === $size ) {
-			return new WP_Error( 'mksddn_chunk_size', __( 'Unable to determine export size.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
+		if ( false === $size || 0 === $size ) {
+			$job->delete();
+			return new WP_Error( 'mksddn_chunk_size', __( 'Export file is empty or cannot be read.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
 		}
 
 		$total_chunks = (int) max( 1, ceil( $size / $this->chunk_size ) );

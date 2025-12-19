@@ -21,6 +21,11 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 		$uploads          = wp_upload_dir();
 		$base_dir         = trailingslashit( $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads' ) . 'mksddn-mc/';
 		$this->storage_dir = $base_dir . 'jobs/';
+		
+		if ( ! is_dir( $this->storage_dir ) ) {
+			wp_mkdir_p( $this->storage_dir );
+		}
+		
 		$this->cleanup_expired();
 	}
 

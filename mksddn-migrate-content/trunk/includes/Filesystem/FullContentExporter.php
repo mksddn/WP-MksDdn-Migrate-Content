@@ -40,6 +40,11 @@ class FullContentExporter {
 	 * @return string|WP_Error
 	 */
 	public function export_to( string $target_path ) {
+		$dir = dirname( $target_path );
+		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+			return new WP_Error( 'mksddn_zip_dir', __( 'Unable to create export directory.', 'mksddn-migrate-content' ) );
+		}
+
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $target_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
