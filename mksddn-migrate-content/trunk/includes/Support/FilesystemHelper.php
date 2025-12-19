@@ -33,6 +33,31 @@ final class FilesystemHelper {
 		if ( null === self::$filesystem ) {
 			$root = defined( 'ABSPATH' ) ? constant( 'ABSPATH' ) : dirname( __DIR__, 5 ) . '/';
 			require_once $root . 'wp-admin/includes/file.php';
+			
+			// Ensure FS_CHMOD_FILE is defined before creating filesystem instance.
+			if ( ! defined( 'FS_CHMOD_FILE' ) ) {
+				$index_file = $root . 'index.php';
+				$perms = file_exists( $index_file ) ? fileperms( $index_file ) : false;
+				
+				if ( false !== $perms ) {
+					// Preserve existing permissions but ensure read/write for owner and read for others.
+					define( 'FS_CHMOD_FILE', ( $perms & 0777 ) | 0644 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
+				} else {
+					define( 'FS_CHMOD_FILE', 0644 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
+				}
+			}
+			
+			if ( ! defined( 'FS_CHMOD_DIR' ) ) {
+				$perms = file_exists( $root ) ? fileperms( $root ) : false;
+				
+				if ( false !== $perms ) {
+					// Preserve existing permissions but ensure read/write/execute for owner and read/execute for others.
+					define( 'FS_CHMOD_DIR', ( $perms & 0777 ) | 0755 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
+				} else {
+					define( 'FS_CHMOD_DIR', 0755 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
+				}
+			}
+			
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-base.php';
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-direct.php';
 
@@ -47,9 +72,11 @@ final class FilesystemHelper {
 	 * Write a string into file.
 	 */
 	public static function put_contents( string $path, string $contents, ?int $mode = null ): bool {
-		$chmod = $mode ?? ( defined( 'FS_CHMOD_FILE' ) ? (int) constant( 'FS_CHMOD_FILE' ) : null );
+		// Ensure instance is created (this will define FS_CHMOD_FILE if needed).
+		self::instance();
+		$chmod = $mode ?? FS_CHMOD_FILE;
 
-		return self::instance()->put_contents( $path, $contents, $chmod );
+		return self::$filesystem->put_contents( $path, $contents, $chmod );
 	}
 
 	/**
@@ -79,9 +106,9 @@ final class FilesystemHelper {
 
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen for streaming
 
-		if ( defined( 'FS_CHMOD_FILE' ) ) {
-			@chmod( $path, (int) constant( 'FS_CHMOD_FILE' ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- best effort chmod after streaming
-		}
+		// Ensure instance is created (this will define FS_CHMOD_FILE if needed).
+		self::instance();
+		@chmod( $path, FS_CHMOD_FILE ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- best effort chmod after streaming
 
 		return true;
 	}
@@ -150,6 +177,33 @@ final class FilesystemHelper {
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen
 
 		return $data;
+	}
+
+	/**
+	 * Ensure directory exists, create if needed.
+	 *
+	 * @param string $path File path (directory will be created for this file).
+	 * @return bool|WP_Error True if directory exists or was created, WP_Error on failure.
+	 */
+	public static function ensure_directory( string $path ) {
+		$dir = dirname( $path );
+		
+		if ( is_dir( $dir ) ) {
+			return true;
+		}
+		
+		if ( ! wp_mkdir_p( $dir ) ) {
+			return new \WP_Error(
+				'mksddn_dir_create',
+				__( 'Unable to create directory.', 'mksddn-migrate-content' ),
+				array(
+					'status' => 500,
+					'path'   => $dir,
+				)
+			);
+		}
+		
+		return true;
 	}
 }
 

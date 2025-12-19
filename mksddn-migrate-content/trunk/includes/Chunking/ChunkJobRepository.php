@@ -21,6 +21,13 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 		$uploads          = wp_upload_dir();
 		$base_dir         = trailingslashit( $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads' ) . 'mksddn-mc/';
 		$this->storage_dir = $base_dir . 'jobs/';
+		
+		if ( ! is_dir( $this->storage_dir ) && ! wp_mkdir_p( $this->storage_dir ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( 'MksDdn Migrate Content: Failed to create directory: %s', $this->storage_dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+		}
+		
 		$this->cleanup_expired();
 	}
 

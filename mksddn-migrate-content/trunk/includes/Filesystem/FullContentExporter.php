@@ -8,6 +8,7 @@
 namespace MksDdn\MigrateContent\Filesystem;
 
 use MksDdn\MigrateContent\Database\FullDatabaseExporter;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use ZipArchive;
 
@@ -40,6 +41,11 @@ class FullContentExporter {
 	 * @return string|WP_Error
 	 */
 	public function export_to( string $target_path ) {
+		$dir_result = FilesystemHelper::ensure_directory( $target_path );
+		if ( is_wp_error( $dir_result ) ) {
+			return new WP_Error( 'mksddn_zip_dir', __( 'Unable to create export directory.', 'mksddn-migrate-content' ) );
+		}
+
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $target_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
