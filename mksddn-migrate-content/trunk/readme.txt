@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,13 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.2.4 =
+* Enhanced ACF field export and import support for groups and repeaters.
+* Improved ACF field handling in BatchLoader by using get_fields() directly for better efficiency.
+* Enhanced link field processing in repeaters and groups during import operations.
+* Refactored ACF field retrieval in WpFunctionsWrapper to ensure consistent array return types.
+* Improved data integrity during ACF imports with better field value handling and recursive media remapping.
 
 = 1.2.3 =
 * Enhanced FilesystemHelper with dynamic definition of FS_CHMOD_FILE and FS_CHMOD_DIR based on existing WordPress file permissions, improving filesystem operations compatibility.

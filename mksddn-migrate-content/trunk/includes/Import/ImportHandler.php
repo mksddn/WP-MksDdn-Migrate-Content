@@ -143,7 +143,6 @@ class ImportHandler implements ImporterInterface {
 		$url_map    = $media_maps['url_map'] ?? array();
 
 		$this->import_acf_fields( $data, $post_id, $id_map, $url_map );
-		$this->import_meta_data( $data, $post_id, $id_map, $url_map );
 
 		return true;
 	}
@@ -307,6 +306,8 @@ class ImportHandler implements ImporterInterface {
 	 *
 	 * @param array      $data    Payload containing 'acf_fields'.
 	 * @param int|string $post_id Target post ID.
+	 * @param array      $id_map  Media ID mapping.
+	 * @param array      $url_map Media URL mapping.
 	 * @return void
 	 */
 	private function import_acf_fields( array $data, int|string $post_id, array $id_map = array(), array $url_map = array() ): void {
@@ -342,9 +343,15 @@ class ImportHandler implements ImporterInterface {
 					$value = $this->remap_media_values( $value, $id_map, $url_map );
 					add_post_meta( $post_id, $meta_key, $value );
 				}
+			} else {
+				// Single value.
+				$value = maybe_unserialize( $values );
+				$value = $this->remap_media_values( $value, $id_map, $url_map );
+				update_post_meta( $post_id, $meta_key, $value );
 			}
 		}
 	}
+
 
 	private function remap_media_values( mixed $value, array $id_map, array $url_map ): mixed {
 		if ( is_array( $value ) ) {
@@ -396,4 +403,5 @@ class ImportHandler implements ImporterInterface {
 			$this->options_importer->import_widgets( $options_bundle['widgets'] );
 		}
 	}
+
 }

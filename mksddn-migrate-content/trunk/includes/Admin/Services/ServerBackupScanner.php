@@ -30,6 +30,25 @@ class ServerBackupScanner {
 	private int $cache_ttl = 30;
 
 	/**
+	 * Ensure imports directory exists, create if needed.
+	 *
+	 * @return WP_Error|null Error if creation fails, null otherwise.
+	 * @since 1.0.1
+	 */
+	private function ensure_imports_dir(): ?WP_Error {
+		$imports_dir = PluginConfig::imports_dir();
+
+		if ( ! is_dir( $imports_dir ) ) {
+			$create_result = PluginConfig::create_required_directories();
+			if ( is_wp_error( $create_result ) ) {
+				return $create_result;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Validate imports directory.
 	 *
 	 * @param string $imports_dir Directory path.
@@ -62,6 +81,12 @@ class ServerBackupScanner {
 	 */
 	public function scan(): array|WP_Error {
 		$imports_dir = PluginConfig::imports_dir();
+
+		// Ensure directory exists, create if needed.
+		$ensure_error = $this->ensure_imports_dir();
+		if ( $ensure_error ) {
+			return $ensure_error;
+		}
 
 		$validation_error = $this->validate_imports_dir( $imports_dir );
 		if ( $validation_error ) {
@@ -116,7 +141,8 @@ class ServerBackupScanner {
 			}
 
 			$files[] = array(
-				'name'     => sanitize_file_name( $item ),
+				// Use actual filename from filesystem. Sanitization should be done when displaying in UI.
+				'name'     => $item,
 				'path'     => $file_path,
 				'size'     => $file_size,
 				'size_human' => size_format( $file_size ),
@@ -149,21 +175,57 @@ class ServerBackupScanner {
 	public function get_file( string $filename ): array|WP_Error {
 		$imports_dir = PluginConfig::imports_dir();
 
+		// Ensure directory exists, create if needed.
+		$ensure_error = $this->ensure_imports_dir();
+		if ( $ensure_error ) {
+			return $ensure_error;
+		}
+
 		$validation_error = $this->validate_imports_dir( $imports_dir );
 		if ( $validation_error ) {
 			return $validation_error;
 		}
 
-		$file_path = trailingslashit( $imports_dir ) . basename( $filename );
+		// Prevent path traversal attacks by using basename to strip any directory components.
+		$safe_filename = basename( $filename );
+		$file_path = trailingslashit( $imports_dir ) . $safe_filename;
 
-		// Security: prevent path traversal attacks.
+		// Check if file exists before path validation.
+		if ( ! file_exists( $file_path ) ) {
+			return new WP_Error(
+				'mksddn_mc_import_file_not_found',
+				__( 'Import file not found.', 'mksddn-migrate-content' )
+			);
+		}
+
+		// Security: prevent path traversal attacks by resolving real paths.
+		// realpath() resolves symlinks and removes '..' components, ensuring the file
+		// is actually within the imports directory.
 		$real_path = realpath( $file_path );
 		$real_imports_dir = realpath( $imports_dir );
 
-		if ( ! $real_path || ! $real_imports_dir ) {
+		// Fallback: If realpath fails (e.g., on some Windows systems or permission issues),
+		// use normalized path. This is less secure but necessary for cross-platform compatibility.
+		// Note: This fallback should only be used when realpath fails but the path is known to be valid.
+		if ( ! $real_imports_dir && is_dir( $imports_dir ) ) {
+			$real_imports_dir = rtrim( str_replace( '\\', '/', $imports_dir ), '/' );
+		}
+
+		if ( ! $real_path && file_exists( $file_path ) ) {
+			$real_path = str_replace( '\\', '/', $file_path );
+		}
+
+		if ( ! $real_path ) {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )
+			);
+		}
+
+		if ( ! $real_imports_dir ) {
+			return new WP_Error(
+				'mksddn_mc_imports_dir_invalid',
+				__( 'Imports directory path is invalid.', 'mksddn-migrate-content' )
 			);
 		}
 
@@ -176,13 +238,6 @@ class ServerBackupScanner {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )
-			);
-		}
-
-		if ( ! file_exists( $file_path ) ) {
-			return new WP_Error(
-				'mksddn_mc_import_file_not_found',
-				__( 'Import file not found.', 'mksddn-migrate-content' )
 			);
 		}
 
@@ -210,7 +265,7 @@ class ServerBackupScanner {
 		}
 
 		return array(
-			'name'     => sanitize_file_name( $filename ),
+			'name'     => $safe_filename,
 			'path'     => $file_path,
 			'size'     => $file_size,
 			'extension' => $extension,
