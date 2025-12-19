@@ -572,19 +572,90 @@ class ImportHandler implements ImporterInterface {
 						foreach ( $value as $row_index => $row_data ) {
 							if ( is_array( $row_data ) ) {
 								foreach ( $row_data as $row_sub_field_name => $row_sub_field_value ) {
-									$row_sub_field_full_name = $update_field_name . '_' . $row_index . '_' . sanitize_text_field( $row_sub_field_name );
-									$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $row_sub_field_value );
-									// Also try with field_key format if we have sub-field definitions.
+									$row_sub_field_name_sanitized = sanitize_text_field( $row_sub_field_name );
+									$row_sub_field_full_name = $update_field_name . '_' . $row_index . '_' . $row_sub_field_name_sanitized;
+									
+									// Check if this is a link field (array with title, url, target keys).
+									$is_link_field = false;
+									$link_field_def = null;
 									if ( $field_object && isset( $field_object['sub_fields'] ) ) {
 										foreach ( $field_object['sub_fields'] as $row_sub_field_def ) {
-											if ( isset( $row_sub_field_def['name'] ) && $row_sub_field_def['name'] === sanitize_text_field( $row_sub_field_name ) ) {
-												$row_sub_field_key = $row_sub_field_def['key'] ?? null;
-												if ( $row_sub_field_key ) {
-													$row_sub_field_key_full = $update_field_name . '_' . $row_index . '_' . $row_sub_field_key;
-													$this->wp_functions->update_post_meta( $post_id, $row_sub_field_key_full, $row_sub_field_value );
-												}
+											$def_name = $row_sub_field_def['name'] ?? null;
+											$def_key = $row_sub_field_def['key'] ?? null;
+											$def_type = $row_sub_field_def['type'] ?? null;
+											// Check by name or key, and type must be 'link'.
+											if ( 'link' === $def_type && ( ( $def_name && $def_name === $row_sub_field_name_sanitized ) || ( $def_key && $def_key === $row_sub_field_name ) ) ) {
+												$is_link_field = true;
+												$link_field_def = $row_sub_field_def;
 												break;
 											}
+										}
+									}
+									// Also check by structure: if value is array with title, url, target keys, it might be a link field.
+									if ( ! $is_link_field && is_array( $row_sub_field_value ) && isset( $row_sub_field_value['title'], $row_sub_field_value['url'], $row_sub_field_value['target'] ) ) {
+										// Try to find link field in repeater sub_fields.
+										if ( $field_object && isset( $field_object['sub_fields'] ) ) {
+											foreach ( $field_object['sub_fields'] as $row_sub_field_def ) {
+												if ( 'link' === ( $row_sub_field_def['type'] ?? null ) ) {
+													$is_link_field = true;
+													$link_field_def = $row_sub_field_def;
+													// Use the field name from definition, not from data.
+													$row_sub_field_name = $row_sub_field_def['name'] ?? $row_sub_field_name;
+													$row_sub_field_name_sanitized = sanitize_text_field( $row_sub_field_name );
+													$row_sub_field_full_name = $update_field_name . '_' . $row_index . '_' . $row_sub_field_name_sanitized;
+													break;
+												}
+											}
+										}
+									}
+									
+									// For link fields, save the entire array as serialized value.
+									if ( $is_link_field && is_array( $row_sub_field_value ) ) {
+										// Ensure proper structure for ACF link field: title, url, target.
+										$link_data = array(
+											'title'  => $row_sub_field_value['title'] ?? '',
+											'url'    => $row_sub_field_value['url'] ?? '',
+											'target' => $row_sub_field_value['target'] ?? '',
+										);
+										$this->log_debug( sprintf( '[ACF Import] Saving link field via meta: full_name=%s, value=%s', $row_sub_field_full_name, wp_json_encode( $link_data ) ) );
+										$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $link_data );
+										if ( $link_field_def && isset( $link_field_def['key'] ) ) {
+											$link_field_key_full = $update_field_name . '_' . $row_index . '_' . $link_field_def['key'];
+											$this->wp_functions->update_post_meta( $post_id, $link_field_key_full, $link_data );
+										}
+									} else {
+										// Normal field processing.
+										$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $row_sub_field_value );
+										
+										// Also try with field_key format if we have sub-field definitions.
+										$row_sub_field_key = null;
+										if ( $field_object && isset( $field_object['sub_fields'] ) ) {
+											// First, try to find in direct sub-fields of repeater.
+											foreach ( $field_object['sub_fields'] as $row_sub_field_def ) {
+												if ( isset( $row_sub_field_def['name'] ) && $row_sub_field_def['name'] === $row_sub_field_name_sanitized ) {
+													$row_sub_field_key = $row_sub_field_def['key'] ?? null;
+													break;
+												}
+											}
+											
+											// If not found, check if it's a sub-field of a group field (unwrapped group).
+											if ( ! $row_sub_field_key ) {
+												foreach ( $field_object['sub_fields'] as $row_sub_field_def ) {
+													if ( 'group' === ( $row_sub_field_def['type'] ?? null ) && isset( $row_sub_field_def['sub_fields'] ) && is_array( $row_sub_field_def['sub_fields'] ) ) {
+														foreach ( $row_sub_field_def['sub_fields'] as $group_sub_field_def ) {
+															if ( isset( $group_sub_field_def['name'] ) && $group_sub_field_def['name'] === $row_sub_field_name_sanitized ) {
+																$row_sub_field_key = $group_sub_field_def['key'] ?? null;
+																break 2;
+															}
+														}
+													}
+												}
+											}
+										}
+										
+										if ( $row_sub_field_key ) {
+											$row_sub_field_key_full = $update_field_name . '_' . $row_index . '_' . $row_sub_field_key;
+											$this->wp_functions->update_post_meta( $post_id, $row_sub_field_key_full, $row_sub_field_value );
 										}
 									}
 								}
@@ -642,10 +713,14 @@ class ImportHandler implements ImporterInterface {
 
 			if ( $parent_field_object && isset( $parent_field_object['sub_fields'] ) && is_array( $parent_field_object['sub_fields'] ) ) {
 				// Find sub-field definition in parent group.
+				// Check both by name and by key, as data may use field keys instead of names.
 				foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
-					if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+					$def_name = $sub_field_def['name'] ?? null;
+					$def_key = $sub_field_def['key'] ?? null;
+					if ( ( $def_name && $def_name === $sub_field_name_sanitized ) || ( $def_key && $def_key === $sub_field_name ) ) {
 						$sub_field_object = $sub_field_def;
 						$sub_field_type = $sub_field_def['type'] ?? null;
+						$this->log_debug( sprintf( '[ACF Import] Found sub-field definition: name=%s, key=%s, type=%s', $def_name ?? 'null', $def_key ?? 'null', $sub_field_type ?? 'null' ) );
 						break;
 					}
 				}
@@ -669,6 +744,7 @@ class ImportHandler implements ImporterInterface {
 			// Process based on sub-field type.
 			if ( 'repeater' === $sub_field_type && is_array( $sub_field_value ) ) {
 				$this->log_debug( sprintf( '[ACF Import] Processing REPEATER in group: parent=%s, sub_field=%s, rows=%d', $parent_field_name, $sub_field_name, count( $sub_field_value ) ) );
+				$this->log_debug( sprintf( '[ACF Import] sub_field_object for repeater: %s, has_sub_fields: %s', $sub_field_object ? 'exists' : 'null', $sub_field_object && isset( $sub_field_object['sub_fields'] ) ? 'yes' : 'no' ) );
 				$processed[ $sub_field_name ] = $this->process_repeater_value( $sub_field_value, $post_id, $id_map, $url_map, $sub_field_full_name, $sub_field_object );
 				$this->log_debug( sprintf( '[ACF Import] REPEATER processed in group: parent=%s, sub_field=%s, processed_rows=%d', $parent_field_name, $sub_field_name, is_array( $processed[ $sub_field_name ] ) ? count( $processed[ $sub_field_name ] ) : 0 ) );
 
@@ -700,19 +776,90 @@ class ImportHandler implements ImporterInterface {
 						foreach ( $processed[ $sub_field_name ] as $row_index => $row_data ) {
 							if ( is_array( $row_data ) ) {
 								foreach ( $row_data as $row_sub_field_name => $row_sub_field_value ) {
-									$row_sub_field_full_name = $sub_field_full_name . '_' . $row_index . '_' . sanitize_text_field( $row_sub_field_name );
-									$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $row_sub_field_value );
-									// Also try with field_key format if we have sub-field definitions.
+									$row_sub_field_name_sanitized = sanitize_text_field( $row_sub_field_name );
+									$row_sub_field_full_name = $sub_field_full_name . '_' . $row_index . '_' . $row_sub_field_name_sanitized;
+									
+									// Check if this is a link field (array with title, url, target keys).
+									$is_link_field = false;
+									$link_field_def = null;
 									if ( $sub_field_object && isset( $sub_field_object['sub_fields'] ) ) {
 										foreach ( $sub_field_object['sub_fields'] as $row_sub_field_def ) {
-											if ( isset( $row_sub_field_def['name'] ) && $row_sub_field_def['name'] === sanitize_text_field( $row_sub_field_name ) ) {
-												$row_sub_field_key = $row_sub_field_def['key'] ?? null;
-												if ( $row_sub_field_key ) {
-													$row_sub_field_key_full = $sub_field_full_name . '_' . $row_index . '_' . $row_sub_field_key;
-													$this->wp_functions->update_post_meta( $post_id, $row_sub_field_key_full, $row_sub_field_value );
-												}
+											$def_name = $row_sub_field_def['name'] ?? null;
+											$def_key = $row_sub_field_def['key'] ?? null;
+											$def_type = $row_sub_field_def['type'] ?? null;
+											// Check by name or key, and type must be 'link'.
+											if ( 'link' === $def_type && ( ( $def_name && $def_name === $row_sub_field_name_sanitized ) || ( $def_key && $def_key === $row_sub_field_name ) ) ) {
+												$is_link_field = true;
+												$link_field_def = $row_sub_field_def;
 												break;
 											}
+										}
+									}
+									// Also check by structure: if value is array with title, url, target keys, it might be a link field.
+									if ( ! $is_link_field && is_array( $row_sub_field_value ) && isset( $row_sub_field_value['title'], $row_sub_field_value['url'], $row_sub_field_value['target'] ) ) {
+										// Try to find link field in repeater sub_fields.
+										if ( $sub_field_object && isset( $sub_field_object['sub_fields'] ) ) {
+											foreach ( $sub_field_object['sub_fields'] as $row_sub_field_def ) {
+												if ( 'link' === ( $row_sub_field_def['type'] ?? null ) ) {
+													$is_link_field = true;
+													$link_field_def = $row_sub_field_def;
+													// Use the field name from definition, not from data.
+													$row_sub_field_name = $row_sub_field_def['name'] ?? $row_sub_field_name;
+													$row_sub_field_name_sanitized = sanitize_text_field( $row_sub_field_name );
+													$row_sub_field_full_name = $sub_field_full_name . '_' . $row_index . '_' . $row_sub_field_name_sanitized;
+													break;
+												}
+											}
+										}
+									}
+									
+									// For link fields, save the entire array as serialized value.
+									if ( $is_link_field && is_array( $row_sub_field_value ) ) {
+										// Ensure proper structure for ACF link field: title, url, target.
+										$link_data = array(
+											'title'  => $row_sub_field_value['title'] ?? '',
+											'url'    => $row_sub_field_value['url'] ?? '',
+											'target' => $row_sub_field_value['target'] ?? '',
+										);
+										$this->log_debug( sprintf( '[ACF Import] Saving link field via meta: full_name=%s, value=%s', $row_sub_field_full_name, wp_json_encode( $link_data ) ) );
+										$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $link_data );
+										if ( $link_field_def && isset( $link_field_def['key'] ) ) {
+											$link_field_key_full = $sub_field_full_name . '_' . $row_index . '_' . $link_field_def['key'];
+											$this->wp_functions->update_post_meta( $post_id, $link_field_key_full, $link_data );
+										}
+									} else {
+										// Normal field processing.
+										$this->wp_functions->update_post_meta( $post_id, $row_sub_field_full_name, $row_sub_field_value );
+										
+										// Also try with field_key format if we have sub-field definitions.
+										$row_sub_field_key = null;
+										if ( $sub_field_object && isset( $sub_field_object['sub_fields'] ) ) {
+											// First, try to find in direct sub-fields of repeater.
+											foreach ( $sub_field_object['sub_fields'] as $row_sub_field_def ) {
+												if ( isset( $row_sub_field_def['name'] ) && $row_sub_field_def['name'] === $row_sub_field_name_sanitized ) {
+													$row_sub_field_key = $row_sub_field_def['key'] ?? null;
+													break;
+												}
+											}
+											
+											// If not found, check if it's a sub-field of a group field (unwrapped group).
+											if ( ! $row_sub_field_key ) {
+												foreach ( $sub_field_object['sub_fields'] as $row_sub_field_def ) {
+													if ( 'group' === ( $row_sub_field_def['type'] ?? null ) && isset( $row_sub_field_def['sub_fields'] ) && is_array( $row_sub_field_def['sub_fields'] ) ) {
+														foreach ( $row_sub_field_def['sub_fields'] as $group_sub_field_def ) {
+															if ( isset( $group_sub_field_def['name'] ) && $group_sub_field_def['name'] === $row_sub_field_name_sanitized ) {
+																$row_sub_field_key = $group_sub_field_def['key'] ?? null;
+																break 2;
+															}
+														}
+													}
+												}
+											}
+										}
+										
+										if ( $row_sub_field_key ) {
+											$row_sub_field_key_full = $sub_field_full_name . '_' . $row_index . '_' . $row_sub_field_key;
+											$this->wp_functions->update_post_meta( $post_id, $row_sub_field_key_full, $row_sub_field_value );
 										}
 									}
 								}
@@ -791,12 +938,21 @@ class ImportHandler implements ImporterInterface {
 		}
 
 		// Use provided parent field object or get it if not provided.
+		$this->log_debug( sprintf( '[ACF Import] process_repeater_value: parent_field_object provided: %s', $parent_field_object ? 'yes' : 'no' ) );
 		if ( null === $parent_field_object && function_exists( 'get_field_object' ) && ! empty( $parent_field_name ) ) {
+			$this->log_debug( sprintf( '[ACF Import] Trying to get field object for: %s', $parent_field_name ) );
 			$parent_field_object = get_field_object( $parent_field_name, $post_id, false, true );
 			// Normalize false to null for type safety.
 			if ( false === $parent_field_object ) {
 				$parent_field_object = null;
+				$this->log_debug( sprintf( '[ACF Import] get_field_object returned false for: %s', $parent_field_name ) );
+			} else {
+				$this->log_debug( sprintf( '[ACF Import] get_field_object found field: %s, has_sub_fields: %s', $parent_field_name, isset( $parent_field_object['sub_fields'] ) ? 'yes' : 'no' ) );
 			}
+		}
+		
+		if ( $parent_field_object && isset( $parent_field_object['sub_fields'] ) ) {
+			$this->log_debug( sprintf( '[ACF Import] parent_field_object has %d sub_fields', count( $parent_field_object['sub_fields'] ) ) );
 		}
 
 		$processed = array();
@@ -807,24 +963,148 @@ class ImportHandler implements ImporterInterface {
 				continue;
 			}
 
-			$processed_row = array();
-			foreach ( $row_data as $sub_field_name => $sub_field_value ) {
-				$sub_field_name_sanitized = sanitize_text_field( $sub_field_name );
-
-				// Get sub-field object from parent repeater field definition.
-				$sub_field_object = null;
-				$sub_field_type = null;
-
-				if ( $parent_field_object && isset( $parent_field_object['sub_fields'] ) && is_array( $parent_field_object['sub_fields'] ) ) {
-					// Find sub-field definition in parent repeater.
+			// Check if row_data contains only one key that is a group field.
+			// In this case, we need to unwrap the group's sub-fields into the row_data.
+			$unwrapped_group_field_object = null;
+			$row_keys = array_keys( $row_data );
+			if ( count( $row_keys ) === 1 ) {
+				$single_key = $row_keys[0];
+				$single_value = $row_data[ $single_key ];
+				
+				$this->log_debug( sprintf( '[ACF Import] Repeater row has single key: parent=%s, row_index=%d, key=%s, is_array=%s', $parent_field_name, $row_index, $single_key, is_array( $single_value ) ? 'yes' : 'no' ) );
+				
+				// Check if this single key is a group field in the repeater definition.
+				if ( is_array( $single_value ) && $parent_field_object && isset( $parent_field_object['sub_fields'] ) && is_array( $parent_field_object['sub_fields'] ) ) {
+					$this->log_debug( sprintf( '[ACF Import] Checking repeater sub_fields for group match: parent=%s, sub_fields_count=%d', $parent_field_name, count( $parent_field_object['sub_fields'] ) ) );
+					
+					$found_match = false;
 					foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
-						if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
-							$sub_field_object = $sub_field_def;
-							$sub_field_type = $sub_field_def['type'] ?? null;
+						$sub_field_name_in_def = $sub_field_def['name'] ?? null;
+						$sub_field_key_in_def = $sub_field_def['key'] ?? null;
+						$sub_field_type_in_def = $sub_field_def['type'] ?? null;
+						
+						$this->log_debug( sprintf( '[ACF Import] Checking sub_field: name=%s, key=%s, type=%s, single_key=%s', $sub_field_name_in_def ?? 'null', $sub_field_key_in_def ?? 'null', $sub_field_type_in_def ?? 'null', $single_key ) );
+						
+						// Check if single_key matches field name or field key, and it's a group type.
+						if ( ( $single_key === $sub_field_name_in_def || $single_key === $sub_field_key_in_def ) && 'group' === $sub_field_type_in_def ) {
+							$this->log_debug( sprintf( '[ACF Import] Unwrapping group field in repeater row: parent=%s, row_index=%d, group_field=%s', $parent_field_name, $row_index, $single_key ) );
+							// Store the group field object for later use when processing sub-fields.
+							$unwrapped_group_field_object = $sub_field_def;
+							// Unwrap: replace row_data with the group's sub-fields.
+							$row_data = $single_value;
+							$this->log_debug( sprintf( '[ACF Import] Unwrapped row_data keys: %s', wp_json_encode( array_keys( $row_data ) ) ) );
+							$found_match = true;
 							break;
 						}
 					}
+					
+					if ( ! $found_match ) {
+						$this->log_debug( sprintf( '[ACF Import] No group field match found for single_key=%s in repeater sub_fields', $single_key ) );
+						// Try to detect if single_value looks like a group or link field (has multiple keys that might be sub-fields).
+						// If it does, assume it needs to be unwrapped.
+						if ( count( $single_value ) > 0 && ! $this->is_repeater_structure( $single_value ) ) {
+							$this->log_debug( sprintf( '[ACF Import] single_value looks like a group/link structure, attempting to unwrap anyway: keys=%s', wp_json_encode( array_keys( $single_value ) ) ) );
+							// Check if single_value looks like a link field structure (has title, url, target).
+							$looks_like_link = is_array( $single_value ) && isset( $single_value['title'], $single_value['url'] );
+							
+							// Try to find matching field definition (group or link) by checking sub_fields.
+							foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
+								$def_name = $sub_field_def['name'] ?? null;
+								$def_key = $sub_field_def['key'] ?? null;
+								$def_type = $sub_field_def['type'] ?? null;
+								// Check if single_key matches this field definition.
+								if ( ( $single_key === $def_name || $single_key === $def_key ) && ( 'group' === $def_type || 'link' === $def_type ) ) {
+									$unwrapped_group_field_object = $sub_field_def;
+									$this->log_debug( sprintf( '[ACF Import] Found %s field definition for unwrapped data: name=%s', $def_type, $def_name ?? 'null' ) );
+									break;
+								}
+								// Also check if single_value looks like a link and this field is a link type.
+								if ( $looks_like_link && 'link' === $def_type && ! $unwrapped_group_field_object ) {
+									$unwrapped_group_field_object = $sub_field_def;
+									$this->log_debug( sprintf( '[ACF Import] Found link field definition by structure match: name=%s', $def_name ?? 'null' ) );
+									break;
+								}
+							}
+							// If still not found, try to find any group or link field as fallback.
+							if ( ! $unwrapped_group_field_object ) {
+								foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
+									$def_type = $sub_field_def['type'] ?? null;
+									if ( 'group' === $def_type || 'link' === $def_type ) {
+										$unwrapped_group_field_object = $sub_field_def;
+										$this->log_debug( sprintf( '[ACF Import] Found %s field definition as fallback for unwrapped data: name=%s', $def_type, $sub_field_def['name'] ?? 'null' ) );
+										break;
+									}
+								}
+							}
+							
+							// Only unwrap if we found a matching field definition.
+							if ( $unwrapped_group_field_object ) {
+								$row_data = $single_value;
+								$this->log_debug( sprintf( '[ACF Import] Unwrapped row_data for %s field: keys=%s', $unwrapped_group_field_object['type'] ?? 'unknown', wp_json_encode( array_keys( $row_data ) ) ) );
+							}
+						}
+					}
+				} else {
+					$this->log_debug( sprintf( '[ACF Import] Cannot check for group: is_array=%s, has_parent_object=%s', is_array( $single_value ) ? 'yes' : 'no', $parent_field_object ? 'yes' : 'no' ) );
 				}
+			}
+
+			$processed_row = array();
+			
+			// Special handling for unwrapped link fields: save the entire array as the link field value.
+			if ( $unwrapped_group_field_object && 'link' === ( $unwrapped_group_field_object['type'] ?? null ) ) {
+				$link_field_name = $unwrapped_group_field_object['name'] ?? null;
+				if ( $link_field_name ) {
+					$this->log_debug( sprintf( '[ACF Import] Saving unwrapped link field as single array: field_name=%s, keys=%s, value=%s', $link_field_name, wp_json_encode( array_keys( $row_data ) ), wp_json_encode( $row_data ) ) );
+					// For link fields, ensure the structure is correct: must have title, url, and optionally target.
+					// ACF link fields expect: array('title' => string, 'url' => string, 'target' => string)
+					$link_value = $this->remap_media_values( $row_data, $id_map, $url_map );
+					// Ensure proper structure for ACF link field.
+					if ( is_array( $link_value ) && isset( $link_value['title'], $link_value['url'] ) ) {
+						$processed_row[ $link_field_name ] = array(
+							'title'  => $link_value['title'] ?? '',
+							'url'    => $link_value['url'] ?? '',
+							'target' => $link_value['target'] ?? '',
+						);
+					} else {
+						// Fallback: use the value as-is if structure is unexpected.
+						$processed_row[ $link_field_name ] = $link_value;
+					}
+				} else {
+					// Fallback: process each key separately if we can't find the field name.
+					foreach ( $row_data as $sub_field_name => $sub_field_value ) {
+						$processed_row[ $sub_field_name ] = $this->remap_media_values( $sub_field_value, $id_map, $url_map );
+					}
+				}
+			} else {
+				// Normal processing for other field types.
+				foreach ( $row_data as $sub_field_name => $sub_field_value ) {
+					$sub_field_name_sanitized = sanitize_text_field( $sub_field_name );
+
+					// Get sub-field object from parent repeater field definition.
+					// If we unwrapped a group field, look for sub-fields in the unwrapped group field definition.
+					$sub_field_object = null;
+					$sub_field_type = null;
+
+					if ( $unwrapped_group_field_object && isset( $unwrapped_group_field_object['sub_fields'] ) && is_array( $unwrapped_group_field_object['sub_fields'] ) ) {
+						// Find sub-field definition in the unwrapped group field.
+						foreach ( $unwrapped_group_field_object['sub_fields'] as $sub_field_def ) {
+							if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+								$sub_field_object = $sub_field_def;
+								$sub_field_type = $sub_field_def['type'] ?? null;
+								break;
+							}
+						}
+					} elseif ( $parent_field_object && isset( $parent_field_object['sub_fields'] ) && is_array( $parent_field_object['sub_fields'] ) ) {
+						// Find sub-field definition in parent repeater.
+						foreach ( $parent_field_object['sub_fields'] as $sub_field_def ) {
+							if ( isset( $sub_field_def['name'] ) && $sub_field_def['name'] === $sub_field_name_sanitized ) {
+								$sub_field_object = $sub_field_def;
+								$sub_field_type = $sub_field_def['type'] ?? null;
+								break;
+							}
+						}
+					}
 
 				// Process based on sub-field type.
 				if ( 'gallery' === $sub_field_type && is_array( $sub_field_value ) ) {
@@ -833,6 +1113,19 @@ class ImportHandler implements ImporterInterface {
 					$processed_row[ $sub_field_name ] = (int) $sub_field_value['ID'];
 				} elseif ( 'file' === $sub_field_type && is_array( $sub_field_value ) && isset( $sub_field_value['ID'] ) ) {
 					$processed_row[ $sub_field_name ] = (int) $sub_field_value['ID'];
+				} elseif ( 'link' === $sub_field_type && is_array( $sub_field_value ) ) {
+					// Handle link fields: ensure proper structure with title, url, target.
+					$link_value = $this->remap_media_values( $sub_field_value, $id_map, $url_map );
+					if ( is_array( $link_value ) && isset( $link_value['title'], $link_value['url'] ) ) {
+						$processed_row[ $sub_field_name ] = array(
+							'title'  => $link_value['title'] ?? '',
+							'url'    => $link_value['url'] ?? '',
+							'target' => $link_value['target'] ?? '',
+						);
+					} else {
+						// Fallback: use the value as-is if structure is unexpected.
+						$processed_row[ $sub_field_name ] = $link_value;
+					}
 				} elseif ( 'repeater' === $sub_field_type && is_array( $sub_field_value ) ) {
 					// Handle nested repeater fields within repeater rows.
 					$sub_field_full_name = $parent_field_name . '_' . $row_index . '_' . $sub_field_name_sanitized;
@@ -843,6 +1136,7 @@ class ImportHandler implements ImporterInterface {
 				} else {
 					// Remap media values for simple fields.
 					$processed_row[ $sub_field_name ] = $this->remap_media_values( $sub_field_value, $id_map, $url_map );
+				}
 				}
 			}
 			$processed[ $row_index ] = $processed_row;
