@@ -180,8 +180,8 @@ class ChunkRestController {
 		$job    = $this->repository->create();
 		$file   = $job->get_file_path();
 		
-		$dir = dirname( $file );
-		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+		$dir_result = FilesystemHelper::ensure_directory( $file );
+		if ( is_wp_error( $dir_result ) ) {
 			$job->delete();
 			return new WP_Error( 'mksddn_dir_create', __( 'Unable to create export directory.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
 		}
