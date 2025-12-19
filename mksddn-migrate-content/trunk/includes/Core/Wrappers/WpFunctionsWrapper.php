@@ -138,30 +138,12 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @since 1.0.0
 	 */
 	public function get_acf_fields( int|string $post_id ): array {
-		$fields = array();
-
-		// Try get_fields() first (ACF API method).
-		if ( function_exists( 'get_fields' ) ) {
-			$fields_raw = get_fields( $post_id, false );
-			// get_fields() can return false or null, ensure we always have an array.
-			if ( is_array( $fields_raw ) ) {
-				$fields = $fields_raw;
-			}
+		if ( ! function_exists( 'get_fields' ) ) {
+			return array();
 		}
 
-		// Fallback: get ACF fields from field objects if get_fields() didn't work.
-		if ( empty( $fields ) && function_exists( 'get_field_objects' ) ) {
-			$field_objects = get_field_objects( $post_id, false );
-			if ( is_array( $field_objects ) ) {
-				foreach ( $field_objects as $field_name => $field_object ) {
-					if ( isset( $field_object['value'] ) ) {
-						$fields[ $field_name ] = $field_object['value'];
-					}
-				}
-			}
-		}
-
-		return $fields;
+		$fields = get_fields( $post_id );
+		return is_array( $fields ) ? $fields : array();
 	}
 }
 
