@@ -360,7 +360,6 @@ class BatchLoader {
 		return $this->attachment_cache[ $attachment_id ] ?? null;
 	}
 
-
 	/**
 	 * Clear all caches.
 	 *
