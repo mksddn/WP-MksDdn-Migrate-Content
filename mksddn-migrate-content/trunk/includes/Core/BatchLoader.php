@@ -82,11 +82,12 @@ class BatchLoader {
 
 		global $wpdb;
 		$placeholders = implode( ',', array_fill( 0, count( $to_load ), '%d' ) );
-		$query = $wpdb->prepare(
-			"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($placeholders)",
-			...$to_load
+		$query        = sprintf(
+			"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN (%s)",
+			$placeholders
 		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Batch loading with internal caching.
+		$query = $wpdb->prepare( $query, ...$to_load ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Batch loading with internal caching. Query is prepared above.
 		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		foreach ( $to_load as $post_id ) {
@@ -145,11 +146,12 @@ class BatchLoader {
 
 		global $wpdb;
 		$placeholders = implode( ',', array_fill( 0, count( $to_load ), '%d' ) );
-		$query = $wpdb->prepare(
-			"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($placeholders) AND meta_key = '_thumbnail_id'",
-			...$to_load
+		$query        = sprintf(
+			"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE post_id IN (%s) AND meta_key = '_thumbnail_id'",
+			$placeholders
 		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Batch loading with internal caching.
+		$query = $wpdb->prepare( $query, ...$to_load ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Batch loading with internal caching. Query is prepared above.
 		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		foreach ( $to_load as $post_id ) {
