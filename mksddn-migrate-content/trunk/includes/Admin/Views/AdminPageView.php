@@ -82,7 +82,7 @@ class AdminPageView {
 	 * @since 1.0.0
 	 */
 	public function render_styles(): void {
-		$this->renderer->render( 'admin/styles.php' );
+		// Styles are now enqueued via wp_enqueue_style() in AdminPageController::enqueue_assets().
 	}
 
 	/**

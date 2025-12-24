@@ -31,7 +31,10 @@ class NotificationService implements NotificationServiceInterface {
 	 */
 	public function show_success( string $message ): void {
 		echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
-		echo '<script>window.mksddnMcProgress && window.mksddnMcProgress.hide && window.mksddnMcProgress.hide();</script>';
+		wp_add_inline_script(
+			'mksddn-mc-admin-scripts',
+			'if(window.mksddnMcProgress && window.mksddnMcProgress.hide){window.mksddnMcProgress.hide();}'
+		);
 	}
 
 	/**
@@ -43,7 +46,10 @@ class NotificationService implements NotificationServiceInterface {
 	 */
 	public function show_error( string $message ): void {
 		echo '<div class="error"><p>' . esc_html( $message ) . '</p></div>';
-		echo '<script>window.mksddnMcProgress && window.mksddnMcProgress.hide && window.mksddnMcProgress.hide();</script>';
+		wp_add_inline_script(
+			'mksddn-mc-admin-scripts',
+			'if(window.mksddnMcProgress && window.mksddnMcProgress.hide){window.mksddnMcProgress.hide();}'
+		);
 	}
 
 	/**

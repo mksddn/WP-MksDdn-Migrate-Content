@@ -102,7 +102,6 @@ class ExportImportAdmin {
 		echo '<h1>' . esc_html__( 'Migrate Content', 'mksddn-migrate-content' ) . '</h1>';
 		$this->maybe_load_user_preview();
 		$this->render_status_notices();
-		$this->render_progress_container();
 
 		$this->render_full_site_section();
 		$this->render_selected_content_section();
@@ -213,12 +212,23 @@ class ExportImportAdmin {
 	 * Load preview context when user selection query is present.
 	 */
 	private function maybe_load_user_preview(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- preview key arrives via redirect, read-only.
 		if ( empty( $_GET['mksddn_mc_user_review'] ) ) {
 			return;
 		}
 
-		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// Check nonce.
+		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'mksddn_mc_user_preview' ) ) {
+			$this->render_inline_notice( 'error', __( 'Security check failed.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		// Check permissions.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			$this->render_inline_notice( 'error', __( 'You do not have permission to access this page.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) );
 		$preview    = $this->preview_store->get( $preview_id );
 
 		if ( ! $preview ) {
@@ -263,57 +273,6 @@ class ExportImportAdmin {
 	}
 
 
-	/**
-	 * Render progress container.
-	 */
-	private function render_progress_container(): void {
-		echo '<style>
-		#mksddn-mc-progress{margin:1rem 0;padding:1rem;border:1px solid #ddd;border-radius:6px;background:#fff;display:none;}
-		#mksddn-mc-progress[aria-hidden="false"]{display:block;}
-		#mksddn-mc-progress .mksddn-mc-progress__bar{width:100%;height:12px;background:#f0f0f0;border-radius:999px;overflow:hidden;margin-bottom:0.5rem;}
-		#mksddn-mc-progress .mksddn-mc-progress__bar span{display:block;height:100%;width:0%;background:#2c7be5;transition:width .3s ease;}
-		#mksddn-mc-progress .mksddn-mc-progress__label{margin:0;font-size:13px;color:#444;}
-		.mksddn-mc-section{margin-top:2rem;padding:1.5rem;border:1px solid #e5e7eb;border-radius:12px;background:#fff;}
-		.mksddn-mc-section:first-of-type{margin-top:1rem;}
-		.mksddn-mc-section h2{margin-top:0;margin-bottom:.25rem;}
-		.mksddn-mc-section p{margin-top:0;color:#4b5563;}
-		.mksddn-mc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-top:1.5rem;}
-		.mksddn-mc-card{background:#fdfdfd;border:1px solid #e1e1e1;border-radius:10px;padding:1.25rem;box-shadow:0 1px 2px rgba(15,23,42,0.05);}
-		.mksddn-mc-card h3{margin-top:0;}
-		.mksddn-mc-card--muted{background:#fafafa;opacity:.75;}
-		.mksddn-mc-field,
-		.mksddn-mc-basic-selection{margin-bottom:1.25rem;}
-		.mksddn-mc-field h4,
-		.mksddn-mc-basic-selection h4{margin:0 0 .35rem;font-size:14px;color:#111827;}
-		.mksddn-mc-field label,
-		.mksddn-mc-basic-selection label{display:block;font-weight:500;margin-bottom:.25rem;}
-		.mksddn-mc-basic-selection select,
-		.mksddn-mc-field select,
-		.mksddn-mc-field input[type=\"file\"],
-		.mksddn-mc-format-selector select{width:100%;}
-		.mksddn-mc-selection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;}
-		.mksddn-mc-selection-grid select{min-height:140px;}
-		.mksddn-mc-history table{width:100%;border-collapse:collapse;margin-top:1rem;}
-		.mksddn-mc-history table th,
-		.mksddn-mc-history table td{padding:.5rem .75rem;border-bottom:1px solid #e5e7eb;text-align:left;font-size:13px;}
-		.mksddn-mc-history table th{background:#f9fafb;font-weight:600;color:#111827;}
-		.mksddn-mc-badge{display:inline-flex;align-items:center;padding:0.1rem 0.55rem;border-radius:999px;font-size:12px;line-height:1.4;}
-		.mksddn-mc-badge--success{background:#e6f4ea;color:#1f7a3f;}
-		.mksddn-mc-badge--error{background:#fdecea;color:#b42318;}
-		.mksddn-mc-badge--running{background:#e0ecff;color:#1d4ed8;}
-		.mksddn-mc-history__actions form{display:inline-block;margin-right:.5rem;}
-		.mksddn-mc-history__actions button{margin-top:0;}
-		.mksddn-mc-user-table-wrapper{max-height:320px;overflow:auto;margin-top:1rem;}
-		.mksddn-mc-user-table td select{width:100%;}
-		.mksddn-mc-user-actions{margin-top:1rem;}
-		.mksddn-mc-inline-form{margin-top:0.75rem;}
-		</style>';
-
-		echo '<div id="mksddn-mc-progress" class="mksddn-mc-progress" aria-hidden="true">';
-		echo '<div class="mksddn-mc-progress__bar"><span></span></div>';
-		echo '<p class="mksddn-mc-progress__label"></p>';
-		echo '</div>';
-	}
 
 	private function render_selected_export_card(): void {
 		echo '<div class="mksddn-mc-card">';
@@ -1188,7 +1147,10 @@ class ExportImportAdmin {
 	 */
 	private function show_success( string $message ): void {
 		echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
-		echo '<script>window.mksddnMcProgress && window.mksddnMcProgress.hide && window.mksddnMcProgress.hide();</script>';
+		wp_add_inline_script(
+			'mksddn-mc-admin-scripts',
+			'if(window.mksddnMcProgress && window.mksddnMcProgress.hide){window.mksddnMcProgress.hide();}'
+		);
 	}
 
 	/**
@@ -1198,37 +1160,20 @@ class ExportImportAdmin {
 	 */
 	private function show_error( string $message ): void {
 		echo '<div class="error"><p>' . esc_html( $message ) . '</p></div>';
-		echo '<script>window.mksddnMcProgress && window.mksddnMcProgress.hide && window.mksddnMcProgress.hide();</script>';
+		wp_add_inline_script(
+			'mksddn-mc-admin-scripts',
+			'if(window.mksddnMcProgress && window.mksddnMcProgress.hide){window.mksddnMcProgress.hide();}'
+		);
 	}
 
 	/**
 	 * Render helper script.
+	 *
+	 * @deprecated JavaScript is now enqueued via wp_enqueue_script() in AdminPageController::enqueue_assets().
 	 */
 	private function render_javascript(): void {
-		echo '<script>
-		window.mksddnMcProgress = (function(){
-			const container = document.getElementById("mksddn-mc-progress");
-			if(!container){return null;}
-			const bar = container.querySelector(".mksddn-mc-progress__bar span");
-			const label = container.querySelector(".mksddn-mc-progress__label");
-			return {
-				set(percent, text){
-					if(!bar){return;}
-					container.setAttribute("aria-hidden","false");
-					const clamped = Math.max(0, Math.min(100, percent));
-					bar.style.width = clamped + "%";
-					if(label){ label.textContent = text || ""; }
-				},
-				hide(){
-					if(!bar){return;}
-					container.setAttribute("aria-hidden","true");
-					bar.style.width = "0%";
-					if(label){ label.textContent = ""; }
-				}
-			}
-		})();
-
-        </script>';
+		// JavaScript is now enqueued via wp_enqueue_script() in AdminPageController::enqueue_assets().
+		// This method is kept for backward compatibility but no longer renders scripts.
 	}
 
 	/**
@@ -1238,10 +1183,13 @@ class ExportImportAdmin {
 	 * @param string $message Label.
 	 */
 	private function progress_tick( int $percent, string $message ): void {
-		printf(
-			'<script>window.mksddnMcProgress && window.mksddnMcProgress.set(%1$d, %2$s);</script>',
-			absint( $percent ),
-			wp_json_encode( $message )
+		wp_add_inline_script(
+			'mksddn-mc-admin-scripts',
+			sprintf(
+				'if(window.mksddnMcProgress){window.mksddnMcProgress.set(%1$d, %2$s);}',
+				absint( $percent ),
+				wp_json_encode( $message )
+			)
 		);
 
 		$this->flush_buffers();
@@ -1272,8 +1220,11 @@ class ExportImportAdmin {
 			wp_die( esc_html__( 'Invalid request.', 'mksddn-migrate-content' ) );
 		}
 
+		// Extract only necessary fields from $_POST.
+		$allowed_fields = $this->extract_selection_fields( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- already verified above.
+		
 		$builder    = new SelectionBuilder();
-		$selection  = $builder->from_request( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- already verified above.
+		$selection  = $builder->from_request( $allowed_fields );
 		$format     = sanitize_key( $_POST['export_format'] ?? 'archive' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		$with_media = ( 'archive' === $format );
 
@@ -1960,7 +1911,7 @@ class ExportImportAdmin {
 	private function normalize_plugin_storage(): void {
 		$target = trailingslashit( WP_CONTENT_DIR ) . 'ai1wm-backups';
 		wp_mkdir_p( $target );
-		update_option( 'ai1wm_storage_path', $target );
+		update_option( 'mksddn_mc_storage_path', $target );
 	}
 
 	/**
@@ -2075,5 +2026,34 @@ class ExportImportAdmin {
 		$minutes = abs( $offset - $hours ) * 60;
 
 		return sprintf( 'UTC%+d:%02d', $hours, $minutes );
+	}
+
+	/**
+	 * Extract only necessary fields for selection from POST data.
+	 *
+	 * @param array $post_data POST data.
+	 * @return array Filtered array with only selection-related fields.
+	 */
+	private function extract_selection_fields( array $post_data ): array {
+		$allowed = array();
+
+		// Extract fields matching pattern selected_*_ids.
+		foreach ( $post_data as $key => $value ) {
+			if ( preg_match( '/^selected_(.+)_ids$/', $key ) ) {
+				$allowed[ $key ] = $value;
+			}
+		}
+
+		// Extract options_keys if present.
+		if ( isset( $post_data['options_keys'] ) ) {
+			$allowed['options_keys'] = $post_data['options_keys'];
+		}
+
+		// Extract widget_groups if present.
+		if ( isset( $post_data['widget_groups'] ) ) {
+			$allowed['widget_groups'] = $post_data['widget_groups'];
+		}
+
+		return $allowed;
 	}
 }

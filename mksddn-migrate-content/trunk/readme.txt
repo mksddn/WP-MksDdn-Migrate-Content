@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.4
+Stable tag: 1.2.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,15 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.2.5 =
+* Refactored BatchLoader to enhance database query efficiency by replacing placeholder-based queries with sanitized ID strings, improving security and performance.
+* Implemented dedicated admin styles and scripts with separate CSS and JavaScript files for better code organization and maintainability.
+* Added CSS for progress bars, sections, grids, and cards to enhance the admin interface.
+* Introduced JavaScript for progress bar functionality with dynamic updates during content migration.
+* Refactored code to remove deprecated inline styles and scripts, promoting better separation of concerns.
+* Updated comments for clarity on caching and sanitization practices.
+* Added PHPCS ignore comments for specific cases to address coding standards compliance.
 
 = 1.2.4 =
 * Enhanced ACF field export and import support for groups and repeaters.

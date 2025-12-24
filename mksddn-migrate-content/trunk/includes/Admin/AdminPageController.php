@@ -204,6 +204,23 @@ class AdminPageController {
 			return;
 		}
 
+		// Enqueue admin styles.
+		wp_enqueue_style(
+			'mksddn-mc-admin-styles',
+			PluginConfig::assets_url() . 'css/admin-styles.css',
+			array(),
+			PluginConfig::version()
+		);
+
+		// Enqueue admin scripts.
+		wp_enqueue_script(
+			'mksddn-mc-admin-scripts',
+			PluginConfig::assets_url() . 'js/admin-scripts.js',
+			array(),
+			PluginConfig::version(),
+			true
+		);
+
 		// Enqueue server file selector script.
 		wp_enqueue_script(
 			'mksddn-server-file-selector',
@@ -286,12 +303,21 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	private function maybe_load_user_preview(): ?array {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- preview key arrives via redirect, read-only.
 		if ( empty( $_GET['mksddn_mc_user_review'] ) ) {
 			return null;
 		}
 
-		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// Check nonce.
+		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'mksddn_mc_user_preview' ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
+		}
+
+		// Check permissions.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'mksddn-migrate-content' ) );
+		}
+
+		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_user_review'] ) );
 		$preview    = $this->preview_store->get( $preview_id );
 
 		if ( ! $preview ) {

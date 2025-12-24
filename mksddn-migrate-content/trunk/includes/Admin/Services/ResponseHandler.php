@@ -47,7 +47,14 @@ class ResponseHandler {
 	 */
 	public function redirect_to_user_preview( string $preview_id ): void {
 		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
-		$url  = add_query_arg( array( 'mksddn_mc_user_review' => $preview_id ), $base );
+		$nonce = wp_create_nonce( 'mksddn_mc_user_preview' );
+		$url  = add_query_arg(
+			array(
+				'mksddn_mc_user_review' => $preview_id,
+				'_wpnonce'              => $nonce,
+			),
+			$base
+		);
 		wp_safe_redirect( $url );
 		exit;
 	}

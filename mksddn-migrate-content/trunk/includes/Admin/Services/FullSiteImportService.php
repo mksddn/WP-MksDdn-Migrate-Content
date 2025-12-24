@@ -579,7 +579,7 @@ class FullSiteImportService {
 	private function normalize_plugin_storage(): void {
 		$target = trailingslashit( WP_CONTENT_DIR ) . 'ai1wm-backups';
 		wp_mkdir_p( $target );
-		update_option( 'ai1wm_storage_path', $target );
+		update_option( 'mksddn_mc_storage_path', $target );
 	}
 
 	/**

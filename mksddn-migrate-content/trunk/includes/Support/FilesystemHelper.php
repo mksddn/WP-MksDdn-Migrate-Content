@@ -31,7 +31,10 @@ final class FilesystemHelper {
 	 */
 	public static function instance(): \WP_Filesystem_Direct {
 		if ( null === self::$filesystem ) {
-			$root = defined( 'ABSPATH' ) ? constant( 'ABSPATH' ) : dirname( __DIR__, 5 ) . '/';
+			if ( ! defined( 'ABSPATH' ) ) {
+				wp_die( esc_html__( 'ABSPATH is not defined.', 'mksddn-migrate-content' ) );
+			}
+			$root = function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH;
 			require_once $root . 'wp-admin/includes/file.php';
 			
 			// Ensure FS_CHMOD_FILE is defined before creating filesystem instance.

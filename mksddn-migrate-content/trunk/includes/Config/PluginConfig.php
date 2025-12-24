@@ -168,7 +168,7 @@ class PluginConfig {
 	 */
 	public static function imports_dir(): string {
 		$uploads = wp_upload_dir();
-		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		$base    = $uploads['basedir'];
 		$default = trailingslashit( $base ) . 'mksddn-mc/imports/';
 		return apply_filters( 'mksddn_mc_imports_dir', $default );
 	}
@@ -181,7 +181,7 @@ class PluginConfig {
 	 */
 	public static function uploads_base_dir(): string {
 		$uploads = wp_upload_dir();
-		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		$base    = $uploads['basedir'];
 		return trailingslashit( $base ) . 'mksddn-mc/';
 	}
 

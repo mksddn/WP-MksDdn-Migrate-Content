@@ -81,14 +81,14 @@ class BatchLoader {
 		}
 
 		global $wpdb;
-		$ids_escaped = array_map( 'absint', $to_load );
-		$ids_string  = implode( ',', $ids_escaped );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Batch loading with internal caching, IDs are sanitized via absint().
-		$results = $wpdb->get_results(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- IDs are sanitized via absint() before interpolation.
-			"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($ids_string)",
-			ARRAY_A
+		$placeholders = implode( ',', array_fill( 0, count( $to_load ), '%d' ) );
+		$query        = sprintf(
+			"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN (%s)",
+			$placeholders
 		);
+		$query = $wpdb->prepare( $query, ...$to_load ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Batch loading with internal caching. Query is prepared above.
+		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		foreach ( $to_load as $post_id ) {
 			$this->meta_cache[ $post_id ] = array();
@@ -145,14 +145,14 @@ class BatchLoader {
 		}
 
 		global $wpdb;
-		$ids_escaped = array_map( 'absint', $to_load );
-		$ids_string  = implode( ',', $ids_escaped );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Batch loading with internal caching, IDs are sanitized via absint().
-		$results = $wpdb->get_results(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- IDs are sanitized via absint() before interpolation.
-			"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($ids_string) AND meta_key = '_thumbnail_id'",
-			ARRAY_A
+		$placeholders = implode( ',', array_fill( 0, count( $to_load ), '%d' ) );
+		$query        = sprintf(
+			"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE post_id IN (%s) AND meta_key = '_thumbnail_id'",
+			$placeholders
 		);
+		$query = $wpdb->prepare( $query, ...$to_load ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Batch loading with internal caching. Query is prepared above.
+		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		foreach ( $to_load as $post_id ) {
 			$this->thumbnail_cache[ $post_id ] = false;

@@ -97,10 +97,11 @@ class FullContentExporter {
 	 */
 	private function get_wp_content_paths( string $base_prefix = '' ): array {
 		$prefix = '' === $base_prefix ? '' : trim( $base_prefix, '/' ) . '/';
+		$uploads = wp_upload_dir();
 
 		return array(
-			$prefix . 'wp-content/uploads' => WP_CONTENT_DIR . '/uploads',
-			$prefix . 'wp-content/plugins' => WP_PLUGIN_DIR,
+			$prefix . 'wp-content/uploads' => $uploads['basedir'],
+			$prefix . 'wp-content/plugins' => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
 			$prefix . 'wp-content/themes'  => get_theme_root(),
 		);
 	}
