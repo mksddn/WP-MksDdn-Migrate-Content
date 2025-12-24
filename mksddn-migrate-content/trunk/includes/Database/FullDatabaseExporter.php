@@ -37,9 +37,9 @@ class FullDatabaseExporter {
 			'site_url' => \get_option( 'siteurl' ),
 			'home_url' => \home_url(),
 			'paths'    => array(
-				'root'    => ABSPATH,
+				'root'    => function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH,
 				'content' => WP_CONTENT_DIR,
-				'uploads' => isset( $uploads['basedir'] ) ? $uploads['basedir'] : WP_CONTENT_DIR . '/uploads',
+				'uploads' => $uploads['basedir'],
 			),
 			'tables'   => array(),
 		);

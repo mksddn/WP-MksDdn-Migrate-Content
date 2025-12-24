@@ -81,14 +81,13 @@ class BatchLoader {
 		}
 
 		global $wpdb;
-		$ids_escaped = array_map( 'absint', $to_load );
-		$ids_string  = implode( ',', $ids_escaped );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Batch loading with internal caching, IDs are sanitized via absint().
-		$results = $wpdb->get_results(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- IDs are sanitized via absint() before interpolation.
-			"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($ids_string)",
-			ARRAY_A
+		$placeholders = implode( ',', array_fill( 0, count( $to_load ), '%d' ) );
+		$query = $wpdb->prepare(
+			"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($placeholders)",
+			...$to_load
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Batch loading with internal caching.
+		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		foreach ( $to_load as $post_id ) {
 			$this->meta_cache[ $post_id ] = array();
@@ -145,14 +144,13 @@ class BatchLoader {
 		}
 
 		global $wpdb;
-		$ids_escaped = array_map( 'absint', $to_load );
-		$ids_string  = implode( ',', $ids_escaped );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Batch loading with internal caching, IDs are sanitized via absint().
-		$results = $wpdb->get_results(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- IDs are sanitized via absint() before interpolation.
-			"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($ids_string) AND meta_key = '_thumbnail_id'",
-			ARRAY_A
+		$placeholders = implode( ',', array_fill( 0, count( $to_load ), '%d' ) );
+		$query = $wpdb->prepare(
+			"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ($placeholders) AND meta_key = '_thumbnail_id'",
+			...$to_load
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Batch loading with internal caching.
+		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		foreach ( $to_load as $post_id ) {
 			$this->thumbnail_cache[ $post_id ] = false;

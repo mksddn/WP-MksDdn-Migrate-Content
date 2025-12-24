@@ -208,12 +208,13 @@ class SnapshotManager implements SnapshotManagerInterface {
 	 * @return array<string,string>
 	 */
 	private function map_targets( bool $include_plugins, bool $include_themes ): array {
+		$uploads = wp_upload_dir();
 		$map = array(
-			'files/wp-content/uploads' => WP_CONTENT_DIR . '/uploads',
+			'files/wp-content/uploads' => $uploads['basedir'],
 		);
 
 		if ( $include_plugins ) {
-			$map['files/wp-content/plugins'] = WP_PLUGIN_DIR;
+			$map['files/wp-content/plugins'] = dirname( plugin_dir_path( MKSDDN_MC_FILE ) );
 		}
 
 		if ( $include_themes ) {

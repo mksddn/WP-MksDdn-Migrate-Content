@@ -60,8 +60,11 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 			wp_die( esc_html__( 'Invalid request.', 'mksddn-migrate-content' ) );
 		}
 
+		// Extract only necessary fields from $_POST.
+		$allowed_fields = $this->extract_selection_fields( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- already verified above.
+		
 		$builder    = new SelectionBuilder();
-		$selection  = $builder->from_request( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- already verified above.
+		$selection  = $builder->from_request( $allowed_fields );
 		$format     = sanitize_key( $_POST['export_format'] ?? 'archive' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		$with_media = ( 'archive' === $format );
 
@@ -135,6 +138,36 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 			FilesystemHelper::delete( $path );
 		}
 		exit;
+	}
+
+	/**
+	 * Extract only necessary fields for selection from POST data.
+	 *
+	 * @param array $post_data POST data.
+	 * @return array Filtered array with only selection-related fields.
+	 * @since 1.0.0
+	 */
+	private function extract_selection_fields( array $post_data ): array {
+		$allowed = array();
+
+		// Extract fields matching pattern selected_*_ids.
+		foreach ( $post_data as $key => $value ) {
+			if ( preg_match( '/^selected_(.+)_ids$/', $key ) ) {
+				$allowed[ $key ] = $value;
+			}
+		}
+
+		// Extract options_keys if present.
+		if ( isset( $post_data['options_keys'] ) ) {
+			$allowed['options_keys'] = $post_data['options_keys'];
+		}
+
+		// Extract widget_groups if present.
+		if ( isset( $post_data['widget_groups'] ) ) {
+			$allowed['widget_groups'] = $post_data['widget_groups'];
+		}
+
+		return $allowed;
 	}
 }
 

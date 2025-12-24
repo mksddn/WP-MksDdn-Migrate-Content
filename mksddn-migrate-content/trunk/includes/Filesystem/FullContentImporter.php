@@ -257,9 +257,9 @@ class FullContentImporter {
 		$current_base  = function_exists( 'home_url' ) ? home_url() : (string) get_option( 'home' );
 		$uploads       = wp_upload_dir();
 		$current_paths = array(
-			'root'    => ABSPATH,
+			'root'    => function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH,
 			'content' => WP_CONTENT_DIR,
-			'uploads' => isset( $uploads['basedir'] ) ? $uploads['basedir'] : WP_CONTENT_DIR . '/uploads',
+			'uploads' => $uploads['basedir'],
 		);
 
 		$replacer = new DomainReplacer();
@@ -343,7 +343,8 @@ class FullContentImporter {
 				continue;
 			}
 
-			$target       = trailingslashit( ABSPATH ) . $normalized;
+			$root_path   = function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH;
+			$target       = trailingslashit( $root_path ) . $normalized;
 			$is_directory = '/' === substr( $name, -1 ) || '/' === substr( $normalized, -1 );
 
 			if ( $is_directory ) {

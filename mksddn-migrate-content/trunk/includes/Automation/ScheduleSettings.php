@@ -142,7 +142,7 @@ class ScheduleSettings {
 	 */
 	public function get_storage_dir(): string {
 		$uploads = wp_upload_dir();
-		$base    = $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads';
+		$base    = $uploads['basedir'];
 
 		return trailingslashit( $base ) . 'mksddn-mc/scheduled';
 	}
