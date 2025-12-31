@@ -25,18 +25,25 @@ final class FilesystemHelper {
 	private static $filesystem = null;
 
 	/**
-	 * Default file permissions.
+	 * File permissions (local to this class, not global).
 	 *
 	 * @var int
 	 */
 	private static $file_chmod = 0644;
 
 	/**
-	 * Default directory permissions.
+	 * Directory permissions (local to this class, not global).
 	 *
 	 * @var int
 	 */
 	private static $dir_chmod = 0755;
+
+	/**
+	 * Whether permissions have been initialized.
+	 *
+	 * @var bool
+	 */
+	private static $initialized = false;
 
 	/**
 	 * Get filesystem instance (direct transport).
@@ -50,36 +57,11 @@ final class FilesystemHelper {
 			}
 			$root = function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH;
 			require_once $root . 'wp-admin/includes/file.php';
-			
-			// WordPress core expects FS_CHMOD constants to be defined.
-			// Only define them if not already set to avoid conflicts.
-			if ( ! defined( 'FS_CHMOD_FILE' ) ) {
-				$index_file = $root . 'index.php';
-				$perms      = file_exists( $index_file ) ? fileperms( $index_file ) : false;
-				
-				if ( false !== $perms ) {
-					self::$file_chmod = ( $perms & 0777 ) | 0644;
-				}
-				
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant, only defined if not set
-				define( 'FS_CHMOD_FILE', self::$file_chmod );
-			} else {
-				self::$file_chmod = FS_CHMOD_FILE;
-			}
-			
-			if ( ! defined( 'FS_CHMOD_DIR' ) ) {
-				$perms = file_exists( $root ) ? fileperms( $root ) : false;
-				
-				if ( false !== $perms ) {
-					self::$dir_chmod = ( $perms & 0777 ) | 0755;
-				}
-				
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant, only defined if not set
-				define( 'FS_CHMOD_DIR', self::$dir_chmod );
-			} else {
-				self::$dir_chmod = FS_CHMOD_DIR;
-			}
-			
+
+			// Initialize permissions from existing files or use WordPress constants if defined.
+			// We intentionally do NOT define global FS_CHMOD_* constants to avoid affecting other plugins.
+			self::init_permissions( $root );
+
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-base.php';
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-direct.php';
 
@@ -88,6 +70,45 @@ final class FilesystemHelper {
 		}
 
 		return self::$filesystem;
+	}
+
+	/**
+	 * Initialize file/directory permissions.
+	 *
+	 * Uses existing WordPress constants if defined, otherwise detects from filesystem.
+	 * Does NOT define global constants to avoid changing global behavior.
+	 *
+	 * @param string $root WordPress root path.
+	 * @return void
+	 */
+	private static function init_permissions( string $root ): void {
+		if ( self::$initialized ) {
+			return;
+		}
+
+		// Use WordPress constants if already defined by core or other plugins.
+		if ( defined( 'FS_CHMOD_FILE' ) ) {
+			self::$file_chmod = FS_CHMOD_FILE;
+		} else {
+			// Detect from existing index.php file permissions.
+			$index_file = $root . 'index.php';
+			$perms      = file_exists( $index_file ) ? fileperms( $index_file ) : false;
+			if ( false !== $perms ) {
+				self::$file_chmod = ( $perms & 0777 ) | 0644;
+			}
+		}
+
+		if ( defined( 'FS_CHMOD_DIR' ) ) {
+			self::$dir_chmod = FS_CHMOD_DIR;
+		} else {
+			// Detect from root directory permissions.
+			$perms = file_exists( $root ) ? fileperms( $root ) : false;
+			if ( false !== $perms ) {
+				self::$dir_chmod = ( $perms & 0777 ) | 0755;
+			}
+		}
+
+		self::$initialized = true;
 	}
 
 	/**
