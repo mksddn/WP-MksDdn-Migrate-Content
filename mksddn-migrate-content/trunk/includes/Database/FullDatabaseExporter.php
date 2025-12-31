@@ -34,14 +34,15 @@ class FullDatabaseExporter {
 		$tables = $this->detect_tables( $wpdb );
 		$uploads = wp_upload_dir();
 		$dump   = array(
-			'site_url' => \get_option( 'siteurl' ),
-			'home_url' => \home_url(),
-			'paths'    => array(
+			'site_url'     => \get_option( 'siteurl' ),
+			'home_url'     => \home_url(),
+			'table_prefix' => $wpdb->prefix,
+			'paths'        => array(
 				'root'    => function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH,
 				'content' => WP_CONTENT_DIR,
 				'uploads' => $uploads['basedir'],
 			),
-			'tables'   => array(),
+			'tables'       => array(),
 		);
 
 		foreach ( $tables as $table_name ) {

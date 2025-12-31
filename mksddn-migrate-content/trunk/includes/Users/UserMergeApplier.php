@@ -131,10 +131,38 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 */
 	public function merge( array $remote_users, array $plan, string $remote_prefix ): array|WP_Error {
 		$this->summary = array(
-			'created' => 0,
-			'updated' => 0,
-			'skipped' => 0,
+			'created'  => 0,
+			'updated'  => 0,
+			'skipped'  => 0,
+			'preserved' => 0,
 		);
+
+		// Check if at least one user is selected for import.
+		$has_selected = false;
+		foreach ( $plan as $action ) {
+			if ( ! empty( $action['import'] ) ) {
+				$has_selected = true;
+				break;
+			}
+		}
+
+		// If no users selected, preserve current admin to avoid lockout.
+		if ( ! $has_selected ) {
+			$this->preserve_current_admin();
+			return $this->summary;
+		}
+
+		// Ensure current admin is not accidentally removed.
+		$current_user = wp_get_current_user();
+		if ( $current_user && $current_user->exists() ) {
+			$current_email = strtolower( $current_user->user_email );
+			
+			// If current admin is not in the plan or disabled, auto-preserve them.
+			if ( ! isset( $plan[ $current_email ] ) || empty( $plan[ $current_email ]['import'] ) ) {
+				// Current admin not selected - keep them to avoid lockout.
+				$this->summary['preserved']++;
+			}
+		}
 
 		foreach ( $plan as $email_key => $action ) {
 			$email_key = strtolower( sanitize_email( $email_key ) );
@@ -167,6 +195,24 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 */
 	public function get_summary(): array {
 		return $this->summary;
+	}
+
+	/**
+	 * Preserve current admin user to avoid lockout.
+	 * Called when no users are selected for import.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function preserve_current_admin(): void {
+		$current_user = wp_get_current_user();
+		if ( ! $current_user || ! $current_user->exists() ) {
+			return;
+		}
+
+		// Current admin is preserved automatically by not touching user tables.
+		$this->summary['preserved'] = 1;
+		$this->summary['skipped'] = 0;
 	}
 
 	/**

@@ -179,7 +179,16 @@ class SelectedContentImportService {
 					return;
 				}
 
-				$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated in validator
+				// Verify that the file was actually uploaded via HTTP POST.
+				$tmp_name = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( wp_unslash( $_FILES['import_file']['tmp_name'] ) ) : '';
+				if ( ! $tmp_name || ! is_uploaded_file( $tmp_name ) ) {
+					$this->notifications->show_error( esc_html__( 'File upload security check failed.', 'mksddn-migrate-content' ) );
+					$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				// Pass file data to validator which will sanitize all fields.
+				$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- file validated and sanitized by validator
 				if ( is_wp_error( $file_data ) ) {
 					$this->notifications->show_error( $file_data->get_error_message() );
 					$this->progress->update( 100, __( 'Validation failed', 'mksddn-migrate-content' ) );

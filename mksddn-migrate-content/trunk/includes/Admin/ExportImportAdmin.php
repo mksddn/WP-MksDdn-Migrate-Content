@@ -857,6 +857,21 @@ class ExportImportAdmin {
 
 		echo '<h3>' . esc_html__( 'Review users before import', 'mksddn-migrate-content' ) . '</h3>';
 		echo '<p>' . esc_html__( 'Pick which users from the archive should be added or overwrite existing accounts on this site.', 'mksddn-migrate-content' ) . '</p>';
+		
+		// Warning about deselecting all users.
+		$current_user = wp_get_current_user();
+		echo '<div class="notice notice-warning inline" style="margin: 10px 0;">';
+		echo '<p><strong>' . esc_html__( '⚠️ Important:', 'mksddn-migrate-content' ) . '</strong> ';
+		echo esc_html__( 'If you deselect all users, your current login will be preserved to prevent lockout.', 'mksddn-migrate-content' );
+		if ( $current_user && $current_user->exists() ) {
+			echo ' ' . sprintf(
+				/* translators: %s: current user email. */
+				esc_html__( 'You are logged in as: %s', 'mksddn-migrate-content' ),
+				'<code>' . esc_html( $current_user->user_email ) . '</code>'
+			);
+		}
+		echo '</p></div>';
+		
 		echo '<p><strong>' . esc_html__( 'Archive', 'mksddn-migrate-content' ) . ':</strong> ' . esc_html( $preview['original_name'] ?: __( 'uploaded file', 'mksddn-migrate-content' ) ) . '</p>';
 		echo '<p><strong>' . esc_html__( 'Users detected', 'mksddn-migrate-content' ) . ':</strong> ' . esc_html( $total ) . ' &middot; <strong>' . esc_html__( 'Conflicts', 'mksddn-migrate-content' ) . ':</strong> ' . esc_html( $conflict ) . '</p>';
 
@@ -1617,18 +1632,28 @@ class ExportImportAdmin {
 				$message .= ' ' . __( 'Previous state was restored automatically.', 'mksddn-migrate-content' );
 			}
 		} else {
-			$site_guard->restore();
+			// URL guard already restored by FullContentImporter::import_from().
+			// No need to call $site_guard->restore() again here.
 			$this->normalize_plugin_storage();
 
 			$history_context = array();
 			$merge_summary   = $importer->get_user_merge_summary();
 			if ( ! empty( $merge_summary ) ) {
-				$history_context['user_selection'] = sprintf(
-					'created:%d updated:%d skipped:%d',
-					(int) ( $merge_summary['created'] ?? 0 ),
-					(int) ( $merge_summary['updated'] ?? 0 ),
-					(int) ( $merge_summary['skipped'] ?? 0 )
-				);
+				$parts = array();
+				if ( ! empty( $merge_summary['created'] ) ) {
+					$parts[] = 'created:' . (int) $merge_summary['created'];
+				}
+				if ( ! empty( $merge_summary['updated'] ) ) {
+					$parts[] = 'updated:' . (int) $merge_summary['updated'];
+				}
+				if ( ! empty( $merge_summary['skipped'] ) ) {
+					$parts[] = 'skipped:' . (int) $merge_summary['skipped'];
+				}
+				if ( ! empty( $merge_summary['preserved'] ) ) {
+					$parts[] = 'preserved:' . (int) $merge_summary['preserved'];
+				}
+				
+				$history_context['user_selection'] = implode( ' ', $parts );
 			}
 
 			$this->history->finish( $history_id, 'success', $history_context );
@@ -2032,26 +2057,30 @@ class ExportImportAdmin {
 	 * Extract only necessary fields for selection from POST data.
 	 *
 	 * @param array $post_data POST data.
-	 * @return array Filtered array with only selection-related fields.
+	 * @return array Filtered and sanitized array with only selection-related fields.
 	 */
 	private function extract_selection_fields( array $post_data ): array {
 		$allowed = array();
 
-		// Extract fields matching pattern selected_*_ids.
+		// Extract and sanitize fields matching pattern selected_*_ids.
 		foreach ( $post_data as $key => $value ) {
-			if ( preg_match( '/^selected_(.+)_ids$/', $key ) ) {
-				$allowed[ $key ] = $value;
+			if ( preg_match( '/^selected_(.+)_ids$/', sanitize_key( $key ) ) ) {
+				$allowed[ sanitize_key( $key ) ] = is_array( $value ) ? array_map( 'absint', $value ) : array();
 			}
 		}
 
-		// Extract options_keys if present.
+		// Extract and sanitize options_keys if present.
 		if ( isset( $post_data['options_keys'] ) ) {
-			$allowed['options_keys'] = $post_data['options_keys'];
+			$allowed['options_keys'] = is_array( $post_data['options_keys'] )
+				? array_map( 'sanitize_text_field', $post_data['options_keys'] )
+				: array();
 		}
 
-		// Extract widget_groups if present.
+		// Extract and sanitize widget_groups if present.
 		if ( isset( $post_data['widget_groups'] ) ) {
-			$allowed['widget_groups'] = $post_data['widget_groups'];
+			$allowed['widget_groups'] = is_array( $post_data['widget_groups'] )
+				? array_map( 'sanitize_text_field', $post_data['widget_groups'] )
+				: array();
 		}
 
 		return $allowed;

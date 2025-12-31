@@ -30,6 +30,7 @@ define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );
 define( 'MKSDDN_MC_TEXT_DOMAIN', 'mksddn-migrate-content' );
+define( 'MKSDDN_MC_BASENAME', plugin_basename( __FILE__ ) );
 
 // I18n: For plugins hosted on WordPress.org, translations are auto-loaded since WP 4.6.
 

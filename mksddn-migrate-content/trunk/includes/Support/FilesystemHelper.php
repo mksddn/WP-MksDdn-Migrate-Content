@@ -25,6 +25,20 @@ final class FilesystemHelper {
 	private static $filesystem = null;
 
 	/**
+	 * Default file permissions.
+	 *
+	 * @var int
+	 */
+	private static $file_chmod = 0644;
+
+	/**
+	 * Default directory permissions.
+	 *
+	 * @var int
+	 */
+	private static $dir_chmod = 0755;
+
+	/**
 	 * Get filesystem instance (direct transport).
 	 *
 	 * @return \WP_Filesystem_Direct
@@ -37,28 +51,33 @@ final class FilesystemHelper {
 			$root = function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH;
 			require_once $root . 'wp-admin/includes/file.php';
 			
-			// Ensure FS_CHMOD_FILE is defined before creating filesystem instance.
+			// WordPress core expects FS_CHMOD constants to be defined.
+			// Only define them if not already set to avoid conflicts.
 			if ( ! defined( 'FS_CHMOD_FILE' ) ) {
 				$index_file = $root . 'index.php';
-				$perms = file_exists( $index_file ) ? fileperms( $index_file ) : false;
+				$perms      = file_exists( $index_file ) ? fileperms( $index_file ) : false;
 				
 				if ( false !== $perms ) {
-					// Preserve existing permissions but ensure read/write for owner and read for others.
-					define( 'FS_CHMOD_FILE', ( $perms & 0777 ) | 0644 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
-				} else {
-					define( 'FS_CHMOD_FILE', 0644 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
+					self::$file_chmod = ( $perms & 0777 ) | 0644;
 				}
+				
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant, only defined if not set
+				define( 'FS_CHMOD_FILE', self::$file_chmod );
+			} else {
+				self::$file_chmod = FS_CHMOD_FILE;
 			}
 			
 			if ( ! defined( 'FS_CHMOD_DIR' ) ) {
 				$perms = file_exists( $root ) ? fileperms( $root ) : false;
 				
 				if ( false !== $perms ) {
-					// Preserve existing permissions but ensure read/write/execute for owner and read/execute for others.
-					define( 'FS_CHMOD_DIR', ( $perms & 0777 ) | 0755 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
-				} else {
-					define( 'FS_CHMOD_DIR', 0755 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant
+					self::$dir_chmod = ( $perms & 0777 ) | 0755;
 				}
+				
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WordPress core constant, only defined if not set
+				define( 'FS_CHMOD_DIR', self::$dir_chmod );
+			} else {
+				self::$dir_chmod = FS_CHMOD_DIR;
 			}
 			
 			require_once $root . 'wp-admin/includes/class-wp-filesystem-base.php';
@@ -75,9 +94,9 @@ final class FilesystemHelper {
 	 * Write a string into file.
 	 */
 	public static function put_contents( string $path, string $contents, ?int $mode = null ): bool {
-		// Ensure instance is created (this will define FS_CHMOD_FILE if needed).
+		// Ensure instance is created.
 		self::instance();
-		$chmod = $mode ?? FS_CHMOD_FILE;
+		$chmod = $mode ?? self::$file_chmod;
 
 		return self::$filesystem->put_contents( $path, $contents, $chmod );
 	}
@@ -109,9 +128,9 @@ final class FilesystemHelper {
 
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen for streaming
 
-		// Ensure instance is created (this will define FS_CHMOD_FILE if needed).
+		// Ensure instance is created and apply file permissions.
 		self::instance();
-		@chmod( $path, FS_CHMOD_FILE ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- best effort chmod after streaming
+		@chmod( $path, self::$file_chmod ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- best effort chmod after streaming
 
 		return true;
 	}

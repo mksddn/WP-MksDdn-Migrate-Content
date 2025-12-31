@@ -93,15 +93,20 @@ class ImportProgressPage {
 		$rest_url = rest_url( 'mksddn/v1/import/status' );
 		$nonce    = wp_create_nonce( 'wp_rest' );
 
+		// Inline CSS required for standalone progress page.
+		// This is NOT a WordPress admin page - it bypasses WP template system.
+		// External CSS cannot be used: server is busy with import in same PHP process.
+		// wp_enqueue_style is not applicable here as this is a direct HTTP response.
+		$css = 'body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;padding:40px;max-width:500px;margin:0 auto}';
+		$css .= '.progress-bar{width:100%;height:16px;background:#f0f0f0;border-radius:999px;overflow:hidden;margin:20px 0}';
+		$css .= '.progress-bar span{display:block;height:100%;width:0%;background:#2c7be5;transition:width .3s ease}';
+		$css .= '.progress-label{color:#444;font-size:14px}h2{margin:0 0 10px}';
+
 		$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>';
 		$html .= esc_html__( 'Import in progress', 'mksddn-migrate-content' );
-		$html .= '</title><style>';
-		$html .= 'body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;padding:40px;max-width:500px;margin:0 auto}';
-		$html .= '.progress-bar{width:100%;height:16px;background:#f0f0f0;border-radius:999px;overflow:hidden;margin:20px 0}';
-		$html .= '.progress-bar span{display:block;height:100%;width:0%;background:#2c7be5;transition:width .3s ease}';
-		$html .= '.progress-label{color:#444;font-size:14px}';
-		$html .= 'h2{margin:0 0 10px}';
-		$html .= '</style></head><body>';
+		$html .= '</title>';
+		$html .= '<style>' . $css . '</style>';
+		$html .= '</head><body>';
 		$html .= '<h2>' . esc_html__( 'Import in progress', 'mksddn-migrate-content' ) . '</h2>';
 		$html .= '<div class="progress-bar"><span id="bar"></span></div>';
 		$html .= '<p class="progress-label" id="label">' . esc_html__( 'Starting...', 'mksddn-migrate-content' ) . '</p>';
@@ -111,11 +116,16 @@ class ImportProgressPage {
 		$html .= 'var url=' . wp_json_encode( $rest_url . '?history_id=' . $history_id ) . ';';
 		$html .= 'var redirect=' . wp_json_encode( $redirect_url ) . ';';
 		$html .= 'var nonce=' . wp_json_encode( $nonce ) . ';';
+		$html .= 'var errors=0,maxErrors=30;';
 		$html .= 'function poll(){';
-		$html .= 'fetch(url,{headers:{"X-WP-Nonce":nonce}}).then(function(r){return r.json()}).then(function(d){';
+		$html .= 'fetch(url,{headers:{"X-WP-Nonce":nonce}}).then(function(r){';
+		$html .= 'if(!r.ok){errors++;if(errors>maxErrors){bar.style.width="100%";label.textContent="Redirecting...";setTimeout(function(){location.href=redirect},500);return}setTimeout(poll,2000);return Promise.reject();}';
+		$html .= 'return r.json();';
+		$html .= '}).then(function(d){';
+		$html .= 'if(!d)return;errors=0;';
 		$html .= 'var p=d.progress||{};bar.style.width=(p.percent||0)+"%";label.textContent=p.message||"Processing...";';
-		$html .= 'if(d.status==="running"){setTimeout(poll,1000)}else{bar.style.width="100%";setTimeout(function(){location.href=redirect},1000)}';
-		$html .= '}).catch(function(){setTimeout(poll,2000)});';
+		$html .= 'if(d.status==="running"){setTimeout(poll,1000)}else{bar.style.width="100%";label.textContent="Complete!";setTimeout(function(){location.href=redirect},1000)}';
+		$html .= '}).catch(function(){if(errors<maxErrors){errors++;setTimeout(poll,2000)}else{bar.style.width="100%";label.textContent="Redirecting...";setTimeout(function(){location.href=redirect},500)}});';
 		$html .= '}poll();';
 		$html .= '})();';
 		$html .= '</script>';
