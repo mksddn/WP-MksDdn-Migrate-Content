@@ -144,27 +144,31 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 	 * Extract only necessary fields for selection from POST data.
 	 *
 	 * @param array $post_data POST data.
-	 * @return array Filtered array with only selection-related fields.
+	 * @return array Filtered and sanitized array with only selection-related fields.
 	 * @since 1.0.0
 	 */
 	private function extract_selection_fields( array $post_data ): array {
 		$allowed = array();
 
-		// Extract fields matching pattern selected_*_ids.
+		// Extract and sanitize fields matching pattern selected_*_ids.
 		foreach ( $post_data as $key => $value ) {
-			if ( preg_match( '/^selected_(.+)_ids$/', $key ) ) {
-				$allowed[ $key ] = $value;
+			if ( preg_match( '/^selected_(.+)_ids$/', sanitize_key( $key ) ) ) {
+				$allowed[ sanitize_key( $key ) ] = is_array( $value ) ? array_map( 'absint', $value ) : array();
 			}
 		}
 
-		// Extract options_keys if present.
+		// Extract and sanitize options_keys if present.
 		if ( isset( $post_data['options_keys'] ) ) {
-			$allowed['options_keys'] = $post_data['options_keys'];
+			$allowed['options_keys'] = is_array( $post_data['options_keys'] )
+				? array_map( 'sanitize_text_field', $post_data['options_keys'] )
+				: array();
 		}
 
-		// Extract widget_groups if present.
+		// Extract and sanitize widget_groups if present.
 		if ( isset( $post_data['widget_groups'] ) ) {
-			$allowed['widget_groups'] = $post_data['widget_groups'];
+			$allowed['widget_groups'] = is_array( $post_data['widget_groups'] )
+				? array_map( 'sanitize_text_field', $post_data['widget_groups'] )
+				: array();
 		}
 
 		return $allowed;

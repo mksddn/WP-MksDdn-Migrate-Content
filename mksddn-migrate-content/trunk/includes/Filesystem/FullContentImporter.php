@@ -275,9 +275,27 @@ class FullContentImporter {
 		$remote_snapshot = array();
 
 		if ( $merge_enabled ) {
-			$user_applier    = new UserMergeApplier();
-			$remote_snapshot = $user_applier->extract_remote_users( $data['database'], $user_tables );
-			$user_applier->strip_user_tables( $data['database'], $user_tables );
+			// Check if at least one user is selected for import.
+			$has_selected_users = false;
+			foreach ( $merge_plan as $action ) {
+				if ( ! empty( $action['import'] ) ) {
+					$has_selected_users = true;
+					break;
+				}
+			}
+
+			$user_applier = new UserMergeApplier();
+			
+			if ( $has_selected_users ) {
+				// Extract and strip user tables for selective merge.
+				$remote_snapshot = $user_applier->extract_remote_users( $data['database'], $user_tables );
+				$user_applier->strip_user_tables( $data['database'], $user_tables );
+			} else {
+				// No users selected - remove user tables from dump to preserve current users.
+				$this->log( 'No users selected for import - removing user tables from dump to preserve current users' );
+				$user_applier->strip_user_tables( $data['database'], $user_tables );
+				$merge_enabled = false; // Disable merge since no users to process.
+			}
 		}
 
 		// Import database.
@@ -292,7 +310,8 @@ class FullContentImporter {
 
 		$this->database_imported = true;
 
-		if ( $user_applier ) {
+		// Only merge users if we actually extracted them (has_selected_users was true).
+		if ( $user_applier && $merge_enabled && ! empty( $remote_snapshot['users'] ) ) {
 			$merge_result = $user_applier->merge( $remote_snapshot['users'], $merge_plan, $remote_snapshot['prefix'] ?? '' );
 			unset( $remote_snapshot ); // Free snapshot data.
 			if ( is_wp_error( $merge_result ) ) {

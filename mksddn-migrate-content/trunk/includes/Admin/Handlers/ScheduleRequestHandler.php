@@ -115,8 +115,7 @@ class ScheduleRequestHandler implements ScheduleRequestHandlerInterface {
 			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
 		}
 
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- basename() is sufficient for filename.
-		$filename = isset( $_GET['file'] ) ? basename( wp_unslash( $_GET['file'] ) ) : '';
+		$filename = isset( $_GET['file'] ) ? sanitize_file_name( wp_unslash( $_GET['file'] ) ) : '';
 		if ( '' === $filename ) {
 			$this->notifications->redirect_with_notice( 'error', __( 'Backup file is missing.', 'mksddn-migrate-content' ) );
 		}
@@ -142,8 +141,7 @@ class ScheduleRequestHandler implements ScheduleRequestHandlerInterface {
 			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
 		}
 
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- basename() is sufficient for filename.
-		$filename = isset( $_GET['file'] ) ? basename( wp_unslash( $_GET['file'] ) ) : '';
+		$filename = isset( $_GET['file'] ) ? sanitize_file_name( wp_unslash( $_GET['file'] ) ) : '';
 		if ( '' === $filename ) {
 			$this->notifications->redirect_with_notice( 'error', __( 'Backup file is missing.', 'mksddn-migrate-content' ) );
 		}

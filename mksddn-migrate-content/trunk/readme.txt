@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.2.5
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,18 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.3.0 =
+* Added MKSDDN_MC_BASENAME constant for plugin path management.
+* Introduced dedicated CSS file for import progress styling.
+* Added user warnings to prevent accidental lockouts when deselecting all users.
+* Enhanced user selection handling to preserve current admin user during imports.
+* Improved data sanitization across handlers.
+* Added import completion notices in NotificationService.
+* Implemented backup and restore of critical options during full database imports.
+* Enhanced file verification in FullContentImporter.
+* Refactored FilesystemHelper to initialize permissions dynamically.
+* Enhanced ImportProgressPage with static CSS/JS generation methods.
 
 = 1.2.5 =
 * Refactored BatchLoader to enhance database query efficiency by replacing placeholder-based queries with sanitized ID strings, improving security and performance.
