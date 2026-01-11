@@ -64,7 +64,11 @@ class FullArchivePayload {
 			}
 		}
 
-		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		// Load PclZip class required for archive payload reading when ZipArchive is unavailable.
+		// Class is used immediately after loading to extract payload from archive.
+		if ( ! class_exists( 'PclZip' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		}
 		$archive = new \PclZip( $archive_path );
 		$result  = $archive->extract(
 			PCLZIP_OPT_BY_NAME,

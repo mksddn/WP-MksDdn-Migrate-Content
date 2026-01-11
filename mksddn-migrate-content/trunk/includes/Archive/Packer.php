@@ -119,7 +119,11 @@ class Packer implements ArchiveHandlerInterface {
 	 * @return string|WP_Error
 	 */
 	private function build_with_pclzip( string $manifest_json, string $payload_json, array $assets ): string|WP_Error {
-		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		// Load PclZip class required for archive creation when ZipArchive is unavailable.
+		// Class is used immediately after loading to create archive.
+		if ( ! class_exists( 'PclZip' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		}
 
 		$archive_path = wp_tempnam( 'mksddn-mc-' );
 		if ( ! $archive_path ) {

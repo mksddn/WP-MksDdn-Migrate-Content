@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,6 +128,11 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.3.1 =
+* Fixed: Improved compliance with WordPress.org plugin guidelines - all scripts/styles now properly enqueued, conditional loading for admin files, removed inline code.
+* Enhanced: Real-time import progress tracking via REST API polling without page refresh.
+* Enhanced: Improved background import execution with fastcgi_finish_request() support for uninterrupted processing.
 
 = 1.3.0 =
 * Added MKSDDN_MC_BASENAME constant for plugin path management.

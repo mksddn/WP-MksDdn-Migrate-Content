@@ -185,12 +185,20 @@ class HistoryRepository implements HistoryRepositoryInterface {
 	/**
 	 * Fetch entry by ID.
 	 *
+	 * This method bypasses cache to ensure fresh data, which is critical for
+	 * REST API polling during long-running imports. Progress updates happen
+	 * in one PHP process while REST API requests come from separate processes.
+	 *
 	 * @param string $id Entry ID.
 	 * @return array<string, mixed>|null Entry data or null if not found.
 	 * @since 1.0.0
 	 */
 	public function find( string $id ): ?array {
-		foreach ( $this->load() as $entry ) {
+		// Load fresh data from database, bypassing cache to get latest progress updates.
+		$entries = get_option( self::OPTION, array() );
+		$entries = is_array( $entries ) ? $entries : array();
+
+		foreach ( $entries as $entry ) {
 			if ( $entry['id'] === $id ) {
 				return $entry;
 			}

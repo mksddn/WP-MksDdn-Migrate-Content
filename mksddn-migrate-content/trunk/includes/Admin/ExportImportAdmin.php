@@ -21,7 +21,6 @@ use MksDdn\MigrateContent\Recovery\HistoryRepository;
 use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Support\FilenameBuilder;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
-use MksDdn\MigrateContent\Support\ImportProgressPage;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
@@ -1561,9 +1560,9 @@ class ExportImportAdmin {
 			)
 		);
 
-		// Send response to browser IMMEDIATELY to prevent timeout.
+		// Redirect to admin page with progress indicator IMMEDIATELY to prevent timeout.
 		// This must happen before any long-running operations.
-		ImportProgressPage::send( $history_id );
+		$this->redirect_to_import_progress( $history_id );
 
 		$lock_id = $this->job_lock->acquire( 'full-import' );
 		if ( is_wp_error( $lock_id ) ) {
@@ -2084,5 +2083,49 @@ class ExportImportAdmin {
 		}
 
 		return $allowed;
+	}
+
+	/**
+	 * Redirect to admin page with import progress indicator.
+	 *
+	 * Sends redirect to browser then continues execution in background.
+	 * Uses fastcgi_finish_request() if available to close connection while
+	 * allowing PHP to continue processing the import.
+	 *
+	 * @param string $history_id History entry ID for status polling.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function redirect_to_import_progress( string $history_id ): void {
+		// Clear any existing output buffers.
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+
+		// Send redirect headers.
+		if ( ! headers_sent() ) {
+			nocache_headers();
+			$redirect_url = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
+			$redirect_url = add_query_arg(
+				array(
+					'mksddn_mc_import_status' => $history_id,
+				),
+				$redirect_url
+			);
+
+			wp_safe_redirect( $redirect_url );
+		}
+
+		// Flush output to send redirect immediately.
+		if ( function_exists( 'flush' ) ) {
+			flush();
+		}
+
+		// Close connection to browser while continuing execution.
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			fastcgi_finish_request();
+		}
+
+		// DO NOT call exit() - allow import to continue in background.
 	}
 }

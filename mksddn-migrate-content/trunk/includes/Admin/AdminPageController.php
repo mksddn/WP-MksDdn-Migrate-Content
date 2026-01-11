@@ -221,6 +221,16 @@ class AdminPageController {
 			true
 		);
 
+		// Localize script with REST API settings.
+		wp_localize_script(
+			'mksddn-mc-admin-scripts',
+			'wpApiSettings',
+			array(
+				'root'  => esc_url_raw( rest_url() ),
+				'nonce' => wp_create_nonce( 'wp_rest' ),
+			)
+		);
+
 		// Enqueue server file selector script.
 		wp_enqueue_script(
 			'mksddn-server-file-selector',

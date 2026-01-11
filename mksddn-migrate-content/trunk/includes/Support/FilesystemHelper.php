@@ -56,14 +56,25 @@ final class FilesystemHelper {
 				wp_die( esc_html__( 'ABSPATH is not defined.', 'mksddn-migrate-content' ) );
 			}
 			$root = function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH;
-			require_once $root . 'wp-admin/includes/file.php';
+
+			// Load WordPress filesystem functions if not already available.
+			// Functions are used immediately after loading for filesystem operations.
+			if ( ! function_exists( 'get_filesystem_method' ) ) {
+				require_once $root . 'wp-admin/includes/file.php';
+			}
 
 			// Initialize permissions from existing files or use WordPress constants if defined.
 			// We intentionally do NOT define global FS_CHMOD_* constants to avoid affecting other plugins.
 			self::init_permissions( $root );
 
-			require_once $root . 'wp-admin/includes/class-wp-filesystem-base.php';
-			require_once $root . 'wp-admin/includes/class-wp-filesystem-direct.php';
+			// Load WP_Filesystem classes if not already available.
+			// Classes are used immediately after loading to create filesystem instance.
+			if ( ! class_exists( 'WP_Filesystem_Base' ) ) {
+				require_once $root . 'wp-admin/includes/class-wp-filesystem-base.php';
+			}
+			if ( ! class_exists( 'WP_Filesystem_Direct' ) ) {
+				require_once $root . 'wp-admin/includes/class-wp-filesystem-direct.php';
+			}
 
 			// Always use direct filesystem for reliability.
 			self::$filesystem = new \WP_Filesystem_Direct( null );

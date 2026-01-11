@@ -127,7 +127,11 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @return array|WP_Error
 	 */
 	private function read_with_pclzip( string $file_path ): array|WP_Error {
-		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		// Load PclZip class required for archive reading when ZipArchive is unavailable.
+		// Class is used immediately after loading to extract archive contents.
+		if ( ! class_exists( 'PclZip' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		}
 
 		$archive = new \PclZip( $file_path );
 
@@ -178,7 +182,11 @@ class Extractor implements ArchiveHandlerInterface {
 			}
 		}
 
-		require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		// Load PclZip class required for media file extraction when ZipArchive is unavailable.
+		// Class is used immediately after loading to extract media from archive.
+		if ( ! class_exists( 'PclZip' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		}
 		$archive = new \PclZip( $file_path );
 		$files   = $archive->extract(
 			PCLZIP_OPT_BY_NAME,

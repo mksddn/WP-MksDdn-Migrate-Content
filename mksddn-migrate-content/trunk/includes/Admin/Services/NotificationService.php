@@ -190,9 +190,8 @@ class NotificationService implements NotificationServiceInterface {
 		} elseif ( 'error' === $status ) {
 			$error_msg = $entry['context']['error'] ?? __( 'Import failed. Check logs for details.', 'mksddn-migrate-content' );
 			$this->show_error( $error_msg );
-		} else {
-			$this->show_inline_notice( 'info', __( 'Import is still processing. Refresh to check status.', 'mksddn-migrate-content' ) );
 		}
+		// For 'running' status, don't show static notice - JavaScript will handle progress display via polling.
 	}
 }
 

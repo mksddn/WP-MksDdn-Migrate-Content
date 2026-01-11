@@ -54,9 +54,14 @@ class AttachmentRestorer {
 			);
 		}
 
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/media.php';
-		require_once ABSPATH . 'wp-admin/includes/image.php';
+		// Load WordPress admin functions required for media_handle_sideload() and image processing.
+		// These files are loaded only when needed and functions are used immediately after.
+		// Conditional loading prevents unnecessary file operations.
+		if ( ! function_exists( 'media_handle_sideload' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+		}
 
 		$url_map = array();
 		$id_map  = array();
