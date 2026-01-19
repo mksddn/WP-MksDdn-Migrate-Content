@@ -87,5 +87,6 @@ docs/temp/
 .git/
 .gitignore.bak 
 
-
-tasktracker.md
+# WordPress.org SVN
+.svn
+tags/
