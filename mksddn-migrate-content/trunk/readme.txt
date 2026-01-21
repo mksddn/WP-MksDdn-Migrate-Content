@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,10 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.3.2 =
+* Enhanced: Improved memory management in FullArchivePayload - original memory limit is now stored and restored during JSON decoding for large files, ensuring efficient resource handling.
+* Enhanced: Enhanced domain signature collection in DomainReplacer to include port and scheme information, improving URL replacement accuracy during migrations.
 
 = 1.3.1 =
 * Fixed: Improved compliance with WordPress.org plugin guidelines - all scripts/styles now properly enqueued, conditional loading for admin files, removed inline code.
