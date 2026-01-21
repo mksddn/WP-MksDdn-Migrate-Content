@@ -29,8 +29,9 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
 - File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/themes` with filters to skip VCS/system files.
 - Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
+- Server file import - select backup files directly from `wp-content/uploads/mksddn-mc/imports/` directory without browser uploads.
 - Recovery center showing history, statuses, archive paths, rollback controls, and inline notices when a job lock is active.
-- Scheduler UI to enable cron-based backups, tweak recurrence, and enforce “keep last N archives”.
+- Scheduler UI to enable cron-based backups, tweak recurrence, and enforce "keep last N archives".
 - Custom `.wpbkp` drag-and-drop uploader with checksum guardrails (UI polish deferred to next milestone, functionality already complete).
 
 == Installation ==
@@ -55,6 +56,9 @@ The JS client splits files into 5–10 MB chunks (auto-tuned by server limits)
 
 = Where are scheduled backups stored? =
 Scheduled full-site backups live in `wp-content/uploads/mksddn-mc/schedules/{timestamp}/`. Retention automatically deletes archives beyond the configured limit.
+
+= How do I import a backup file from the server? =
+You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = Can I merge users without overwriting existing accounts? =
 Yes. The user merge dialog shows archive/current rows with conflict indicators. You can keep current roles, replace metadata, or skip entire accounts. Actions are logged in the migration history.
