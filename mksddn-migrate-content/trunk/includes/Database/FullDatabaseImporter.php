@@ -365,17 +365,17 @@ class FullDatabaseImporter {
 		$new_value = maybe_serialize( $imported_plugins );
 
 		// Use INSERT ... ON DUPLICATE KEY UPDATE (UPDATE alone fails after TRUNCATE).
-		$table_name = $wpdb->options;
-		$query      = $wpdb->prepare(
-			"INSERT INTO `" . esc_sql( $table_name ) . "` (`option_name`, `option_value`, `autoload`) 
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$query = $wpdb->prepare(
+			"INSERT INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) 
 			VALUES (%s, %s, %s) 
 			ON DUPLICATE KEY UPDATE `option_value` = VALUES(`option_value`)",
 			'active_plugins',
 			$new_value,
 			'yes'
 		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$wpdb->query( $query );
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$this->log( sprintf( 'Merged active_plugins: %d plugins, our_plugin=%s', count( $imported_plugins ), $our_plugin ) );
 

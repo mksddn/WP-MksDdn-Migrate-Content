@@ -8,7 +8,9 @@
 
 namespace MksDdn\MigrateContent\Database;
 
+use MksDdn\MigrateContent\Config\PluginConfig;
 use wpdb;
+use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -22,6 +24,318 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullDatabaseExporter {
 
 	/**
+	 * Export database directly to JSON file (memory efficient for large databases).
+	 *
+	 * @param string $file_path Path to JSON file.
+	 * @return true|WP_Error True on success, WP_Error on failure.
+	 * @since 1.0.0
+	 */
+	public function export_to_file( string $file_path ) {
+		global $wpdb;
+
+		// Disable time limit for database export.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+		}
+
+		// Try to increase memory limit for large exports.
+		$original_limit = ini_get( 'memory_limit' );
+		$current_limit  = wp_convert_hr_to_bytes( $original_limit );
+		$min_limit      = 512 * 1024 * 1024; // 512MB minimum.
+
+		if ( $current_limit < $min_limit && '-1' !== $original_limit ) {
+			$target_limit_mb = 512;
+			$set_result      = @ini_set( 'memory_limit', $target_limit_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+			if ( false !== $set_result ) {
+				$this->log( sprintf( 'Memory limit increased to %d MB for export', $target_limit_mb ) );
+			}
+		}
+
+		$tables = $this->detect_tables( $wpdb );
+		$uploads = wp_upload_dir();
+		
+		// Open file for writing.
+		$handle = fopen( $file_path, 'wb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming large data requires native handle
+		if ( ! $handle ) {
+			return new WP_Error( 'mksddn_mc_file_open', __( 'Unable to open file for database export.', 'mksddn-migrate-content' ) );
+		}
+
+		// Write opening JSON structure - full payload format expected by importer.
+		$write_result = fwrite( $handle, '{"type":"full-site","database":{' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		if ( false === $write_result ) {
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+			return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+		}
+
+		$header_parts = array(
+			'"site_url":' . wp_json_encode( \get_option( 'siteurl' ) ) . ',',
+			'"home_url":' . wp_json_encode( \home_url() ) . ',',
+			'"table_prefix":' . wp_json_encode( $wpdb->prefix ) . ',',
+			'"paths":{',
+			'"root":' . wp_json_encode( function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH ) . ',',
+			'"content":' . wp_json_encode( WP_CONTENT_DIR ) . ',',
+			'"uploads":' . wp_json_encode( $uploads['basedir'] ),
+			'},"tables":{',
+		);
+
+		foreach ( $header_parts as $part ) {
+			if ( false === fwrite( $handle, $part ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+				return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+			}
+		}
+
+		$table_count = count( $tables );
+		$processed   = 0;
+		$first_table = true;
+
+		foreach ( $tables as $table_name ) {
+			++$processed;
+			$this->log( sprintf( 'Exporting table %d/%d: %s', $processed, $table_count, $table_name ) );
+
+			// Add comma separator between tables.
+			if ( ! $first_table ) {
+				if ( false === fwrite( $handle, ',' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+					fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+					@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+					return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+				}
+			}
+			$first_table = false;
+
+			// Write table name key.
+			$table_header = wp_json_encode( $table_name ) . ':{';
+			if ( false === fwrite( $handle, $table_header ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+				return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+			}
+
+			// Get table schema.
+			$schema_row = $wpdb->get_row( "SHOW CREATE TABLE `{$table_name}`", ARRAY_N ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema export for backup; table name sanitized
+			$schema     = is_array( $schema_row ) && isset( $schema_row[1] ) ? (string) $schema_row[1] : '';
+
+			// Write schema.
+			$schema_header = '"schema":' . wp_json_encode( $schema ) . ',"rows":[';
+			if ( false === fwrite( $handle, $schema_header ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+				return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+			}
+
+			// Get row count.
+			$row_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table_name}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- count query for memory optimization
+			
+			$large_threshold = PluginConfig::large_table_threshold();
+			$base_chunk_size = PluginConfig::db_row_chunk_size();
+
+			// For very large tables, use smaller chunks (check larger tables first).
+			$chunk_size = $base_chunk_size;
+			if ( $row_count > 100000 ) {
+				// For tables with more than 100k rows, use even smaller chunks.
+				$chunk_size = max( 250, intval( $base_chunk_size / 4 ) );
+			} elseif ( $row_count > 50000 ) {
+				// For tables with more than 50k rows, use smaller chunks.
+				$chunk_size = max( 500, intval( $base_chunk_size / 2 ) );
+			}
+
+			// Export table rows directly to file.
+			if ( $row_count > $large_threshold ) {
+				$this->log( sprintf( 'Large table detected (%d rows), exporting in chunks of %d', $row_count, $chunk_size ) );
+				$result = $this->export_table_to_file( $wpdb, $table_name, $chunk_size, $row_count, $handle );
+				if ( is_wp_error( $result ) ) {
+					fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+					@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+					return $result;
+				}
+			} else {
+				// Small table - load and write all at once.
+				$rows = $wpdb->get_results( "SELECT * FROM `{$table_name}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- export requires full table scan; $table_name is sanitized prefix match
+				if ( null !== $rows && ! empty( $rows ) ) {
+					$first_row = true;
+					foreach ( $rows as $row ) {
+						if ( ! $first_row ) {
+							if ( false === fwrite( $handle, ',' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+								fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+								@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+								return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+							}
+						}
+						$row_json = wp_json_encode( $row, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
+						if ( false === $row_json || false === fwrite( $handle, $row_json ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+							fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+							@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+							return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+						}
+						$first_row = false;
+					}
+					unset( $rows );
+				}
+			}
+
+			// Close rows array and table object.
+			if ( false === fwrite( $handle, ']}' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+				return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+			}
+
+			// Force garbage collection after every 5 tables.
+			if ( 0 === $processed % 5 && function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+		}
+
+		// Close JSON structure.
+		if ( false === fwrite( $handle, '}}}' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+			return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( false === fclose( $handle ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			@unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+			return new WP_Error( 'mksddn_mc_file_close', __( 'Failed to close export file.', 'mksddn-migrate-content' ) );
+		}
+
+		// Restore original memory limit.
+		if ( isset( $original_limit ) && '-1' !== $original_limit ) {
+			@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+		}
+
+		return true;
+	}
+
+	/**
+	 * Export table rows directly to file in chunks (memory efficient).
+	 *
+	 * @param wpdb    $wpdb       Database object.
+	 * @param string  $table_name Table name.
+	 * @param int     $chunk_size Chunk size.
+	 * @param int     $row_count  Total row count.
+	 * @param resource $file_handle File handle.
+	 * @return true|WP_Error True on success, WP_Error on failure.
+	 * @since 1.0.0
+	 */
+	private function export_table_to_file( wpdb $wpdb, string $table_name, int $chunk_size, int $row_count, $file_handle ) {
+		$offset = 0;
+		$first_row = true;
+
+		// Handle empty table.
+		if ( 0 === $row_count ) {
+			return true;
+		}
+
+		// Get primary key or first column for ordering.
+		$order_column = $this->get_primary_key_or_first_column( $wpdb, $table_name );
+
+		// Validate column name for security.
+		if ( ! $this->is_valid_column_name( $order_column ) ) {
+			// Fallback: use LIMIT without ORDER BY.
+			$this->log( sprintf( 'Warning: Could not determine order column for table %s, using LIMIT without ORDER BY', $table_name ) );
+			return $this->export_table_to_file_without_order( $wpdb, $table_name, $chunk_size, $row_count, $file_handle );
+		}
+
+		while ( $offset < $row_count ) {
+			// Use LIMIT/OFFSET for chunking.
+			$query = "SELECT * FROM `{$table_name}` ORDER BY `{$order_column}` LIMIT %d OFFSET %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- chunked export; table name and column validated
+			$query = $wpdb->prepare( $query, $chunk_size, $offset ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+			
+			$chunk = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- chunked export; query prepared above
+
+			if ( null === $chunk || empty( $chunk ) ) {
+				break;
+			}
+
+			// Write chunk directly to file.
+			foreach ( $chunk as $row ) {
+				if ( ! $first_row ) {
+					if ( false === fwrite( $file_handle, ',' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+						return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+					}
+				}
+				$row_json = wp_json_encode( $row, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
+				if ( false === $row_json || false === fwrite( $file_handle, $row_json ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+					return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+				}
+				$first_row = false;
+			}
+
+			// Free chunk memory immediately.
+			unset( $chunk );
+
+			$offset += $chunk_size;
+
+			// Force garbage collection after each chunk for large tables.
+			if ( $row_count > 5000 && function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+
+			// Log progress for very large tables.
+			if ( $row_count > 10000 && 0 === $offset % 10000 ) {
+				$this->log( sprintf( 'Exported %d/%d rows from table %s', min( $offset, $row_count ), $row_count, $table_name ) );
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Export table to file without ORDER BY (fallback).
+	 *
+	 * @param wpdb     $wpdb        Database object.
+	 * @param string   $table_name  Table name.
+	 * @param int      $chunk_size  Chunk size.
+	 * @param int      $row_count   Total row count.
+	 * @param resource $file_handle File handle.
+	 * @return true|WP_Error True on success, WP_Error on failure.
+	 * @since 1.0.0
+	 */
+	private function export_table_to_file_without_order( wpdb $wpdb, string $table_name, int $chunk_size, int $row_count, $file_handle ) {
+		$offset = 0;
+		$first_row = true;
+
+		while ( $offset < $row_count ) {
+			$query = "SELECT * FROM `{$table_name}` LIMIT %d OFFSET %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- chunked export fallback; table name validated
+			$query = $wpdb->prepare( $query, $chunk_size, $offset ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+			
+			$chunk = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- chunked export; query prepared above
+
+			if ( null === $chunk || empty( $chunk ) ) {
+				break;
+			}
+
+			// Write chunk directly to file.
+			foreach ( $chunk as $row ) {
+				if ( ! $first_row ) {
+					if ( false === fwrite( $file_handle, ',' ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+						return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+					}
+				}
+				$row_json = wp_json_encode( $row, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
+				if ( false === $row_json || false === fwrite( $file_handle, $row_json ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+					return new WP_Error( 'mksddn_mc_file_write', __( 'Failed to write to export file.', 'mksddn-migrate-content' ) );
+				}
+				$first_row = false;
+			}
+
+			// Free chunk memory immediately.
+			unset( $chunk );
+
+			$offset += $chunk_size;
+
+			// Force garbage collection after each chunk.
+			if ( function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+		}
+
+		return true;
+	}
+
+	/**
 	 * Export all tables using the current blog prefix.
 	 *
 	 * @global wpdb $wpdb WordPress DB abstraction.
@@ -30,6 +344,24 @@ class FullDatabaseExporter {
 	 */
 	public function export(): array {
 		global $wpdb;
+
+		// Disable time limit for database export.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+		}
+
+		// Try to increase memory limit for large exports.
+		$original_limit = ini_get( 'memory_limit' );
+		$current_limit  = wp_convert_hr_to_bytes( $original_limit );
+		$min_limit      = 512 * 1024 * 1024; // 512MB minimum.
+
+		if ( $current_limit < $min_limit && '-1' !== $original_limit ) {
+			$target_limit_mb = 512;
+			$set_result      = @ini_set( 'memory_limit', $target_limit_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+			if ( false !== $set_result ) {
+				$this->log( sprintf( 'Memory limit increased to %d MB for export', $target_limit_mb ) );
+			}
+		}
 
 		$tables = $this->detect_tables( $wpdb );
 		$uploads = wp_upload_dir();
@@ -45,22 +377,228 @@ class FullDatabaseExporter {
 			'tables'       => array(),
 		);
 
-		foreach ( $tables as $table_name ) {
-			$rows = $wpdb->get_results( "SELECT * FROM `{$table_name}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- export requires full table scan; $table_name is sanitized prefix match
-			if ( null === $rows ) {
-				continue;
-			}
+		$table_count = count( $tables );
+		$processed   = 0;
 
+		foreach ( $tables as $table_name ) {
+			++$processed;
+			$this->log( sprintf( 'Exporting table %d/%d: %s', $processed, $table_count, $table_name ) );
+
+			// Get table schema first.
 			$schema_row = $wpdb->get_row( "SHOW CREATE TABLE `{$table_name}`", ARRAY_N ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema export for backup; table name sanitized
 			$schema     = is_array( $schema_row ) && isset( $schema_row[1] ) ? (string) $schema_row[1] : '';
+
+			// Get row count to determine if we need chunking.
+			$row_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table_name}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- count query for memory optimization
+			
+			$large_threshold = PluginConfig::large_table_threshold();
+			$base_chunk_size = PluginConfig::db_row_chunk_size();
+
+			// For very large tables, use smaller chunks to reduce memory usage (check larger tables first).
+			$chunk_size = $base_chunk_size;
+			if ( $row_count > 100000 ) {
+				// For tables with more than 100k rows, use even smaller chunks.
+				$chunk_size = max( 250, intval( $base_chunk_size / 4 ) );
+			} elseif ( $row_count > 50000 ) {
+				// For tables with more than 50k rows, use smaller chunks.
+				$chunk_size = max( 500, intval( $base_chunk_size / 2 ) );
+			}
+
+			// For large tables, export in chunks to save memory.
+			if ( $row_count > $large_threshold ) {
+				$this->log( sprintf( 'Large table detected (%d rows), exporting in chunks of %d', $row_count, $chunk_size ) );
+				$rows = $this->export_table_in_chunks( $wpdb, $table_name, $chunk_size, $row_count );
+			} else {
+				// Small table - load all at once.
+				$rows = $wpdb->get_results( "SELECT * FROM `{$table_name}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- export requires full table scan; $table_name is sanitized prefix match
+			}
+
+			if ( null === $rows ) {
+				$this->log( sprintf( 'Warning: Failed to export table %s', $table_name ) );
+				continue;
+			}
 
 			$dump['tables'][ $table_name ] = array(
 				'schema' => $schema,
 				'rows'   => $rows,
 			);
+
+			// Free memory after each table.
+			unset( $rows, $schema_row );
+
+			// Force garbage collection after every 5 tables to prevent memory buildup.
+			if ( 0 === $processed % 5 && function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+		}
+
+		// Final cleanup.
+		unset( $tables );
+		if ( function_exists( 'gc_collect_cycles' ) ) {
+			gc_collect_cycles();
+		}
+
+		// Restore original memory limit.
+		if ( isset( $original_limit ) && '-1' !== $original_limit ) {
+			@ini_set( 'memory_limit', $original_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 		}
 
 		return $dump;
+	}
+
+	/**
+	 * Export table in chunks to save memory.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @param int    $chunk_size Chunk size.
+	 * @param int    $row_count  Total row count.
+	 * @return array<int, array> All rows from table.
+	 * @since 1.0.0
+	 */
+	private function export_table_in_chunks( wpdb $wpdb, string $table_name, int $chunk_size, int $row_count ): array {
+		$all_rows = array();
+		$offset   = 0;
+
+		// Handle empty table.
+		if ( 0 === $row_count ) {
+			return $all_rows;
+		}
+
+		// Get primary key or first column for ordering (needed for LIMIT/OFFSET).
+		$order_column = $this->get_primary_key_or_first_column( $wpdb, $table_name );
+
+		// Validate column name for security.
+		if ( ! $this->is_valid_column_name( $order_column ) ) {
+			// Fallback: use LIMIT without ORDER BY (less efficient but safe).
+			$this->log( sprintf( 'Warning: Could not determine order column for table %s, using LIMIT without ORDER BY', $table_name ) );
+			return $this->export_table_without_order( $wpdb, $table_name, $chunk_size, $row_count );
+		}
+
+		while ( $offset < $row_count ) {
+			// Use LIMIT/OFFSET for chunking. Order by column for consistency.
+			$query = "SELECT * FROM `{$table_name}` ORDER BY `{$order_column}` LIMIT %d OFFSET %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- chunked export; table name and column validated
+			$query = $wpdb->prepare( $query, $chunk_size, $offset ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+			
+			$chunk = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- chunked export; query prepared above
+
+			if ( null === $chunk || empty( $chunk ) ) {
+				break;
+			}
+
+			// Append chunk to result array efficiently (avoids array_merge memory overhead).
+			foreach ( $chunk as $row ) {
+				$all_rows[] = $row;
+			}
+
+			// Free chunk memory immediately.
+			unset( $chunk );
+
+			$offset += $chunk_size;
+
+			// Force garbage collection after each chunk for large tables.
+			if ( $row_count > 5000 && function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+
+			// Log progress for very large tables.
+			if ( $row_count > 10000 && 0 === $offset % 10000 ) {
+				$this->log( sprintf( 'Exported %d/%d rows from table %s', min( $offset, $row_count ), $row_count, $table_name ) );
+			}
+		}
+
+		return $all_rows;
+	}
+
+	/**
+	 * Export table without ORDER BY (fallback when order column cannot be determined).
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @param int    $chunk_size Chunk size.
+	 * @param int    $row_count  Total row count.
+	 * @return array<int, array> All rows from table.
+	 * @since 1.0.0
+	 */
+	private function export_table_without_order( wpdb $wpdb, string $table_name, int $chunk_size, int $row_count ): array {
+		$all_rows = array();
+		$offset   = 0;
+
+		while ( $offset < $row_count ) {
+			// Use LIMIT/OFFSET without ORDER BY (less efficient but safe).
+			$query = "SELECT * FROM `{$table_name}` LIMIT %d OFFSET %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- chunked export fallback; table name validated
+			$query = $wpdb->prepare( $query, $chunk_size, $offset ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared on this line.
+			
+			$chunk = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- chunked export; query prepared above
+
+			if ( null === $chunk || empty( $chunk ) ) {
+				break;
+			}
+
+			// Append chunk to result array efficiently (avoids array_merge memory overhead).
+			foreach ( $chunk as $row ) {
+				$all_rows[] = $row;
+			}
+
+			// Free chunk memory immediately.
+			unset( $chunk );
+
+			$offset += $chunk_size;
+
+			// Force garbage collection after each chunk.
+			if ( function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+		}
+
+		return $all_rows;
+	}
+
+	/**
+	 * Get primary key column name or first column for ordering.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @return string Column name.
+	 * @since 1.0.0
+	 */
+	private function get_primary_key_or_first_column( wpdb $wpdb, string $table_name ): string {
+		// Try to get primary key first.
+		$primary_key_query = "SHOW KEYS FROM `{$table_name}` WHERE Key_name = 'PRIMARY'"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema query; table name validated
+		$primary_key_result = $wpdb->get_row( $primary_key_query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- schema query
+
+		if ( $primary_key_result && isset( $primary_key_result['Column_name'] ) ) {
+			$column_name = $primary_key_result['Column_name'];
+			if ( $this->is_valid_column_name( $column_name ) ) {
+				return $column_name;
+			}
+		}
+
+		// Fallback to first column.
+		$columns_query = "SHOW COLUMNS FROM `{$table_name}` LIMIT 1"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema query; table name validated
+		$first_column = $wpdb->get_row( $columns_query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- schema query
+
+		if ( $first_column && isset( $first_column['Field'] ) ) {
+			$column_name = $first_column['Field'];
+			if ( $this->is_valid_column_name( $column_name ) ) {
+				return $column_name;
+			}
+		}
+
+		// Ultimate fallback - use ID column (common in WordPress tables).
+		return 'ID';
+	}
+
+	/**
+	 * Validate column name to prevent SQL injection.
+	 *
+	 * @param string $column_name Column name to validate.
+	 * @return bool True if valid, false otherwise.
+	 * @since 1.0.0
+	 */
+	private function is_valid_column_name( string $column_name ): bool {
+		// Column names should only contain alphanumeric characters, underscores, and backticks.
+		return (bool) preg_match( '/^[a-zA-Z0-9_`]+$/', $column_name );
 	}
 
 	/**
@@ -77,6 +615,20 @@ class FullDatabaseExporter {
 		return array_filter(
 			array_map( 'sanitize_text_field', (array) $result )
 		);
+	}
+
+	/**
+	 * Log message if WP_DEBUG is enabled.
+	 *
+	 * @param string $message Message to log.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function log( string $message ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
+			error_log( 'MksDdn Migrate Export: ' . $message );
+		}
 	}
 }
 
