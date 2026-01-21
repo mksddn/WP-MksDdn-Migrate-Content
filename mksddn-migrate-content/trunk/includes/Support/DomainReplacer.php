@@ -62,7 +62,7 @@ class DomainReplacer {
 	 * Gather old domain signatures from dump metadata.
 	 *
 	 * @param array $dump Database dump.
-	 * @return array
+	 * @return array Array of signature data with host, port, and path info.
 	 */
 	private function collect_domain_signatures( array $dump ): array {
 		$candidates = array(
@@ -81,16 +81,23 @@ class DomainReplacer {
 				continue;
 			}
 
-			$signature = $parts['host'];
+			$host = $parts['host'];
+			$port = isset( $parts['port'] ) ? (int) $parts['port'] : null;
+			$scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'http';
+			$path = ! empty( $parts['path'] ) ? '/' . trim( $parts['path'], '/' ) : '';
 
-			if ( ! empty( $parts['path'] ) ) {
-				$signature .= '/' . trim( $parts['path'], '/' );
-			}
+			// Store signature data with port info.
+			$signature_data = array(
+				'host'   => $host,
+				'port'   => $port,
+				'scheme' => $scheme,
+				'path'   => $path,
+			);
 
-			$signatures[] = trim( $signature, '/' );
+			$signatures[] = $signature_data;
 		}
 
-		return array_values( array_unique( array_filter( $signatures ) ) );
+		return $signatures;
 	}
 
 	/**
@@ -107,18 +114,51 @@ class DomainReplacer {
 	/**
 	 * Build search/replace map for domain signatures.
 	 *
-	 * @param array  $signatures Domain signatures.
+	 * @param array  $signatures Array of signature data.
 	 * @param string $target     Target base.
 	 * @return array
 	 */
 	private function build_domain_map( array $signatures, string $target ): array {
 		$map = array();
 
-		foreach ( $signatures as $signature ) {
+		// Normalize target URL - remove standard ports.
+		$target_parts = wp_parse_url( $target );
+		$target_scheme = isset( $target_parts['scheme'] ) ? $target_parts['scheme'] : 'https';
+		$target_host = isset( $target_parts['host'] ) ? $target_parts['host'] : '';
+		$target_port = isset( $target_parts['port'] ) ? (int) $target_parts['port'] : null;
+		$target_path = isset( $target_parts['path'] ) ? $target_parts['path'] : '';
+
+		// Build normalized target without port (if standard).
+		$normalized_target = $target_scheme . '://' . $target_host;
+		if ( null !== $target_port && ! $this->is_standard_port( $target_port, $target_scheme ) ) {
+			$normalized_target .= ':' . $target_port;
+		}
+		$normalized_target .= $target_path;
+		$normalized_target = untrailingslashit( $normalized_target );
+
+		foreach ( $signatures as $sig_data ) {
+			$host = $sig_data['host'];
+			$port = $sig_data['port'];
+			$path = $sig_data['path'];
+
 			foreach ( array( 'http', 'https' ) as $scheme ) {
-				$base = $scheme . '://' . $signature;
-				$map[ $base ]      = $target;
-				$map[ $base . '/' ] = trailingslashit( $target );
+				// Build URL with port if port exists and is non-standard.
+				$host_with_port = $host;
+				if ( null !== $port && ! $this->is_standard_port( $port, $scheme ) ) {
+					$host_with_port .= ':' . $port;
+				}
+
+				// URL with port (if non-standard).
+				$base_with_port = $scheme . '://' . $host_with_port . $path;
+				$map[ $base_with_port ] = $normalized_target;
+				$map[ $base_with_port . '/' ] = trailingslashit( $normalized_target );
+
+				// Also create mapping for URL without port (in case it's stored differently).
+				if ( null !== $port && ! $this->is_standard_port( $port, $scheme ) ) {
+					$base_no_port = $scheme . '://' . $host . $path;
+					$map[ $base_no_port ] = $normalized_target;
+					$map[ $base_no_port . '/' ] = trailingslashit( $normalized_target );
+				}
 			}
 		}
 
@@ -239,6 +279,24 @@ class DomainReplacer {
 		}
 
 		return $data;
+	}
+
+	/**
+	 * Check if port is standard for given scheme.
+	 *
+	 * @param int    $port   Port number.
+	 * @param string $scheme URL scheme (http or https).
+	 * @return bool True if port is standard, false otherwise.
+	 */
+	private function is_standard_port( int $port, string $scheme ): bool {
+		if ( 'https' === $scheme && 443 === $port ) {
+			return true;
+		}
+		if ( 'http' === $scheme && 80 === $port ) {
+			return true;
+		}
+
+		return false;
 	}
 }
 

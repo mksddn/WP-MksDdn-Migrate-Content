@@ -374,6 +374,7 @@ class FullDatabaseImporter {
 			$new_value,
 			'yes'
 		);
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is already prepared via $wpdb->prepare() above.
 		$wpdb->query( $query );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
