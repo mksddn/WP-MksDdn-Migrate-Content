@@ -35,18 +35,6 @@ class FullContentExporter {
 	}
 
 	/**
-	 * Set cancellation check callback for database exporter.
-	 *
-	 * @param callable $callback Callback that returns true if export should be cancelled.
-	 * @return void
-	 */
-	public function set_cancellation_check( callable $callback ): void {
-		if ( method_exists( $this->db_exporter, 'set_cancellation_check' ) ) {
-			$this->db_exporter->set_cancellation_check( $callback );
-		}
-	}
-
-	/**
 	 * Build archive with uploads/plugins/themes and DB dump.
 	 *
 	 * @param string $target_path Absolute temp filepath.
@@ -63,51 +51,10 @@ class FullContentExporter {
 			return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
 		}
 
-		// Create temporary JSON file for streaming large database export.
-		$temp_json_file = wp_tempnam( 'mksddn-db-export-' );
-		if ( ! $temp_json_file ) {
-			$zip->close();
-			return new WP_Error( 'mksddn_mc_temp_file', __( 'Unable to create temporary file for database export.', 'mksddn-migrate-content' ) );
-		}
-
-		// Export database directly to JSON file to avoid memory issues.
-		try {
-			$export_result = $this->db_exporter->export_to_file( $temp_json_file );
-			if ( is_wp_error( $export_result ) ) {
-				$zip->close();
-				@unlink( $temp_json_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-				if ( file_exists( $target_path ) ) {
-					@unlink( $target_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-				}
-				return $export_result;
-			}
-		} catch ( \Throwable $e ) {
-			$zip->close();
-			@unlink( $temp_json_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			// Clean up partial file.
-			if ( file_exists( $target_path ) ) {
-				@unlink( $target_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			}
-			return new WP_Error(
-				'mksddn_mc_db_export_failed',
-				sprintf(
-					/* translators: %s: error message */
-					__( 'Database export failed: %s', 'mksddn-migrate-content' ),
-					$e->getMessage()
-				)
-			);
-		}
-
-		// Validate JSON file exists and is not empty.
-		if ( ! file_exists( $temp_json_file ) || filesize( $temp_json_file ) === 0 ) {
-			$zip->close();
-			@unlink( $temp_json_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			// Clean up partial file.
-			if ( file_exists( $target_path ) ) {
-				@unlink( $target_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			}
-			return new WP_Error( 'mksddn_mc_db_export_empty', __( 'Database export returned empty result.', 'mksddn-migrate-content' ) );
-		}
+		$payload = array(
+			'type'     => 'full-site',
+			'database' => $this->db_exporter->export(),
+		);
 
 		$manifest = array(
 			'format_version' => 1,
@@ -117,36 +64,18 @@ class FullContentExporter {
 		);
 
 		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+		$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
 
-		if ( false === $manifest_json ) {
+		if ( false === $manifest_json || false === $payload_json ) {
 			$zip->close();
-			@unlink( $temp_json_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			// Clean up partial file.
-			if ( file_exists( $target_path ) ) {
-				@unlink( $target_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			}
-			return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode manifest.', 'mksddn-migrate-content' ) );
+			return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
 		}
 
 		$zip->addFromString( 'manifest.json', $manifest_json );
-		
-		// Add database JSON file directly to archive (file already contains full payload structure).
-		// Note: addFile() copies the file, so we can delete temp file after closing archive.
-		if ( ! $zip->addFile( $temp_json_file, 'payload/content.json' ) ) {
-			$zip->close();
-			@unlink( $temp_json_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			if ( file_exists( $target_path ) ) {
-				@unlink( $target_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-			}
-			return new WP_Error( 'mksddn_mc_zip_add_file', __( 'Failed to add database export to archive.', 'mksddn-migrate-content' ) );
-		}
+		$zip->addFromString( 'payload/content.json', $payload_json );
 
 		$this->append_wp_content( $zip, 'files' );
 		$zip->close();
-
-		// Clean up temp file after archive is closed.
-		@unlink( $temp_json_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
-
 		return $target_path;
 	}
 

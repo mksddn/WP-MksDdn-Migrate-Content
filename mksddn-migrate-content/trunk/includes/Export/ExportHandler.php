@@ -251,7 +251,6 @@ class ExportHandler implements ExporterInterface {
 			}
 		}
 
-		$processed_count = 0;
 		foreach ( $selection->get_items() as $type => $ids ) {
 			foreach ( $ids as $id ) {
 				$post = $posts_by_id[ $id ] ?? null;
@@ -265,21 +264,7 @@ class ExportHandler implements ExporterInterface {
 				if ( $media && $media->has_items() ) {
 					$combined_media->absorb( $media );
 				}
-
-				++$processed_count;
-
-				// Clear batch loader cache periodically for large exports to prevent memory buildup.
-				if ( $processed_count > 0 && 0 === $processed_count % 50 && function_exists( 'gc_collect_cycles' ) ) {
-					$this->batch_loader->clear_cache();
-					gc_collect_cycles();
-				}
 			}
-		}
-
-		// Final cache cleanup after processing all items.
-		$this->batch_loader->clear_cache();
-		if ( function_exists( 'gc_collect_cycles' ) ) {
-			gc_collect_cycles();
 		}
 
 		if ( $selection->has_options() ) {
