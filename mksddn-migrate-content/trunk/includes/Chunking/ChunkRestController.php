@@ -178,6 +178,7 @@ class ChunkRestController {
 
 	public function init_download( WP_REST_Request $request ) {
 		$job    = $this->repository->create();
+		$job_id = $job->get_data()['id'];
 		$file   = $job->get_file_path();
 		
 		$dir_result = FilesystemHelper::ensure_directory( $file );
@@ -186,37 +187,149 @@ class ChunkRestController {
 			return new WP_Error( 'mksddn_dir_create', __( 'Unable to create export directory.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
 		}
 
+		// Mark job as in progress.
+		$job->update(
+			array(
+				'mode'         => 'download',
+				'status'       => 'processing',
+			)
+		);
+
+		// Return job_id immediately, then run export after response is sent.
+		// This allows client to track and cancel the export even if page is closed.
+		$response = array(
+			'job_id'       => $job_id,
+			'status'       => 'processing',
+			'total_chunks' => 0,
+		);
+
+		// Run export after response is sent (WordPress REST API will handle response output).
+		register_shutdown_function( function() use ( $job_id, $file ) {
+			$this->process_export_background( $job_id, $file );
+		} );
+
+		return $response;
+	}
+
+	/**
+	 * Process export in background.
+	 *
+	 * @param string $job_id Job ID.
+	 * @param string $file   Export file path.
+	 * @return void
+	 */
+	private function process_export_background( string $job_id, string $file ): void {
+		$json_path = $this->repository->get_storage_dir() . $job_id . '.json';
+		
+		// Check if job was cancelled before starting.
+		if ( ! file_exists( $json_path ) ) {
+			return;
+		}
+
+		// Create exporter with cancellation check callback.
+		$check_cancelled = function() use ( $json_path, $job_id ) {
+			// Clear stat cache to ensure we get fresh file status.
+			clearstatcache( true, $json_path );
+			$exists = file_exists( $json_path );
+			
+			// Always log cancellation check for debugging (not just when cancelled).
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				static $check_count = 0;
+				$check_count++;
+				// Log every 100th check to avoid log spam.
+				if ( 0 === $check_count % 100 || ! $exists ) {
+					error_log( sprintf( 'MksDdn Migrate Export: Cancellation check #%d for job %s - file exists: %s', $check_count, $job_id, $exists ? 'yes' : 'no' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
+			}
+			
+			return ! $exists;
+		};
+
 		$export = new FullContentExporter();
+		
+		// Set cancellation check callback.
+		$export->set_cancellation_check( $check_cancelled );
+		
+		// Log that callback was set.
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( 'MksDdn Migrate Export: Starting background export for job %s', $job_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+		
 		$result = $export->export_to( $file );
 
+		// Check if job was cancelled during export.
+		if ( ! file_exists( $json_path ) ) {
+			// Job was cancelled, clean up export file.
+			if ( file_exists( $file ) ) {
+				FilesystemHelper::delete( $file );
+			}
+			return;
+		}
+
 		if ( is_wp_error( $result ) ) {
-			$job->delete();
-			return $result;
+			// Check if it's a cancellation error.
+			if ( 'mksddn_mc_export_cancelled' === $result->get_error_code() ) {
+				// Job was cancelled, clean up export file.
+				if ( file_exists( $file ) ) {
+					FilesystemHelper::delete( $file );
+				}
+				return;
+			}
+
+			$job = $this->repository->get( $job_id );
+			if ( $job ) {
+				$job->update(
+					array(
+						'status' => 'error',
+						'error'  => $result->get_error_message(),
+					)
+				);
+			}
+			return;
+		}
+
+		// Final check if job was cancelled.
+		if ( ! file_exists( $json_path ) ) {
+			if ( file_exists( $file ) ) {
+				FilesystemHelper::delete( $file );
+			}
+			return;
 		}
 
 		$size = filesize( $file );
 		if ( false === $size || 0 === $size ) {
-			$job->delete();
-			return new WP_Error( 'mksddn_chunk_size', __( 'Export file is empty or cannot be read.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
+			$job = $this->repository->get( $job_id );
+			if ( $job ) {
+				$job->delete();
+			}
+			return;
 		}
 
 		$total_chunks = (int) max( 1, ceil( $size / $this->chunk_size ) );
 
-		$job->update(
-			array(
-				'total_chunks' => $total_chunks,
-				'chunk_size'   => $this->chunk_size,
-				'mode'         => 'download',
-				'size'         => $size,
-			)
-		);
+		$job = $this->repository->get( $job_id );
+		if ( $job ) {
+			$job->update(
+				array(
+					'total_chunks' => $total_chunks,
+					'chunk_size'   => $this->chunk_size,
+					'mode'         => 'download',
+					'status'       => 'ready',
+					'size'         => $size,
+				)
+			);
+		}
+	}
 
-		return array(
-			'job_id'       => $job->get_data()['id'],
-			'total_chunks' => $total_chunks,
-			'chunk_size'   => $this->chunk_size,
-			'size'         => $size,
-		);
+	/**
+	 * Check if job exists (not cancelled).
+	 *
+	 * @param string $job_id Job ID.
+	 * @return bool True if job exists, false if cancelled.
+	 */
+	private function is_job_active( string $job_id ): bool {
+		$json_path = $this->repository->get_storage_dir() . $job_id . '.json';
+		return file_exists( $json_path );
 	}
 
 	public function download_chunk( WP_REST_Request $request ) {
@@ -228,6 +341,13 @@ class ChunkRestController {
 		}
 
 		$job   = $this->repository->get( $job_id );
+		
+		// Check if job still exists (wasn't cancelled).
+		$json_path = $this->repository->get_storage_dir() . $job_id . '.json';
+		if ( ! file_exists( $json_path ) ) {
+			return new WP_Error( 'mksddn_job_cancelled', __( 'Export job was cancelled.', 'mksddn-migrate-content' ), array( 'status' => 410 ) );
+		}
+		
 		$data  = $job->get_data();
 		$file  = $job->get_file_path();
 		$total = (int) ( $data['total_chunks'] ?? 0 );
@@ -266,11 +386,47 @@ class ChunkRestController {
 			return new WP_Error( 'mksddn_missing_job', __( 'Job ID is required.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
 		}
 
-		$job = $this->repository->get( $job_id );
-		$job->delete();
+		$json_path = $this->repository->get_storage_dir() . $job_id . '.json';
+		$file_path = $this->repository->get_storage_dir() . $job_id . '.tmp';
+		
+		// Log cancellation attempt.
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( 'MksDdn Migrate Export: Cancellation requested for job %s', $job_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+		
+		// Delete files directly using native PHP functions for immediate effect.
+		$deleted_json = false;
+		$deleted_file = false;
+		
+		if ( file_exists( $json_path ) ) {
+			// Clear stat cache before deletion.
+			clearstatcache( true, $json_path );
+			$deleted_json = @unlink( $json_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		}
+		
+		if ( file_exists( $file_path ) ) {
+			// Clear stat cache before deletion.
+			clearstatcache( true, $file_path );
+			$deleted_file = @unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		}
+		
+		// Clear stat cache after deletion.
+		clearstatcache( true, $json_path );
+		clearstatcache( true, $file_path );
+		
+		// Verify deletion.
+		$still_exists = file_exists( $json_path );
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			if ( $still_exists ) {
+				error_log( sprintf( 'MksDdn Migrate Export: Warning - Job %s file still exists after delete attempt (deleted_json: %s, deleted_file: %s)', $job_id, $deleted_json ? 'yes' : 'no', $deleted_file ? 'yes' : 'no' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			} else {
+				error_log( sprintf( 'MksDdn Migrate Export: Job %s cancelled and deleted successfully', $job_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+		}
 
 		return array(
-			'deleted' => true,
+			'deleted' => ! $still_exists,
 		);
 	}
 

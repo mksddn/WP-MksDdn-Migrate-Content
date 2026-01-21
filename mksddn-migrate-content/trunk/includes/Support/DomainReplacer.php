@@ -30,7 +30,7 @@ class DomainReplacer {
 
 		$domain_signatures = $this->collect_domain_signatures( $dump );
 		$path_signatures   = $this->collect_path_signatures( $dump );
-		$target            = untrailingslashit( $target_base );
+		$target            = $this->normalize_target_url( untrailingslashit( $target_base ) );
 
 		$domain_map = $this->build_domain_map( $domain_signatures, $target );
 		$path_map   = $this->build_path_map( $path_signatures, $target_paths );
@@ -81,13 +81,26 @@ class DomainReplacer {
 				continue;
 			}
 
+			// Build signature with host and optional port.
 			$signature = $parts['host'];
+			if ( ! empty( $parts['port'] ) ) {
+				$signature .= ':' . $parts['port'];
+			}
 
 			if ( ! empty( $parts['path'] ) ) {
 				$signature .= '/' . trim( $parts['path'], '/' );
 			}
 
 			$signatures[] = trim( $signature, '/' );
+
+			// Also add signature without port for cases where port might not be present.
+			if ( ! empty( $parts['port'] ) ) {
+				$signature_no_port = $parts['host'];
+				if ( ! empty( $parts['path'] ) ) {
+					$signature_no_port .= '/' . trim( $parts['path'], '/' );
+				}
+				$signatures[] = trim( $signature_no_port, '/' );
+			}
 		}
 
 		return array_values( array_unique( array_filter( $signatures ) ) );
@@ -123,6 +136,42 @@ class DomainReplacer {
 		}
 
 		return $map;
+	}
+
+	/**
+	 * Normalize target URL by removing port to ensure clean replacement.
+	 *
+	 * @param string $target_url Target URL.
+	 * @return string Normalized URL without port.
+	 */
+	private function normalize_target_url( string $target_url ): string {
+		$parts = wp_parse_url( $target_url );
+		if ( empty( $parts['host'] ) ) {
+			return $target_url;
+		}
+
+		// Always remove port from target URL to replace old URLs with ports.
+		if ( ! empty( $parts['port'] ) ) {
+			unset( $parts['port'] );
+		}
+
+		// Rebuild URL without port.
+		$normalized = '';
+		if ( ! empty( $parts['scheme'] ) ) {
+			$normalized .= $parts['scheme'] . '://';
+		}
+		$normalized .= $parts['host'];
+		if ( ! empty( $parts['path'] ) ) {
+			$normalized .= $parts['path'];
+		}
+		if ( ! empty( $parts['query'] ) ) {
+			$normalized .= '?' . $parts['query'];
+		}
+		if ( ! empty( $parts['fragment'] ) ) {
+			$normalized .= '#' . $parts['fragment'];
+		}
+
+		return $normalized;
 	}
 
 	/**

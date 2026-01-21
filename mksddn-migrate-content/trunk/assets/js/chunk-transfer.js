@@ -3,6 +3,8 @@
 	const settings = window.mksddnChunk || {};
 	let currentJobId = null;
 	let uploadInProgress = false;
+	let exportInProgress = false;
+	let exportJobId = null;
 	const BYTES_KB = 1024;
 	const BYTES_MB = 1024 * 1024;
 	const BYTES_GB = 1024 * 1024 * 1024;
@@ -148,7 +150,80 @@ function hideProgressLabel( delay = 0 ) {
 			body: JSON.stringify( {} ),
 		} );
 
-		return response.json();
+		const data = await response.json();
+		
+		// Check for WordPress REST API error format.
+		if ( ! response.ok || data.code ) {
+			throw data;
+		}
+		
+		// Set export tracking variables IMMEDIATELY after getting job_id.
+		// This ensures they are set even if page is closed before export completes.
+		if ( data.job_id ) {
+			exportJobId = data.job_id;
+			exportInProgress = true;
+			
+			// Also store in sessionStorage for reliability.
+			try {
+				sessionStorage.setItem( 'mksddn_export_job_id', data.job_id );
+				sessionStorage.setItem( 'mksddn_export_in_progress', 'true' );
+			} catch ( e ) {
+				// Ignore storage errors.
+			}
+			
+			console.log( 'MksDdn Migrate: Export started, jobId:', exportJobId );
+		}
+		
+		return data;
+	}
+
+	async function getJobStatus( jobId ) {
+		const response = await fetch(
+			`${ settings.restUrl }chunk/status?job_id=${ jobId }`,
+			{
+				headers: { 'X-WP-Nonce': settings.nonce },
+			}
+		);
+
+		const data = await response.json();
+		
+		// Check for WordPress REST API error format.
+		if ( ! response.ok || data.code ) {
+			throw data;
+		}
+		
+		return data;
+	}
+
+	async function pollExportStatus( jobId, maxAttempts = 300 ) {
+		let attempts = 0;
+		
+		while ( attempts < maxAttempts ) {
+			// Check if export was cancelled.
+			if ( ! exportInProgress || ! exportJobId ) {
+				throw new Error( 'Export was cancelled' );
+			}
+
+			const status = await getJobStatus( jobId );
+			
+			if ( status.status === 'ready' ) {
+				return status;
+			}
+			
+			if ( status.status === 'error' ) {
+				throw new Error( status.error || 'Export failed' );
+			}
+
+			// Wait before next poll.
+			await yieldThread( 1000 );
+			attempts++;
+			
+			// Update progress.
+			const percent = Math.min( 10, Math.round( ( attempts / maxAttempts ) * 10 ) );
+			setProgressLabel( percent, settings.i18n.exportBusy || 'Exporting...' );
+		}
+		
+		throw new Error( 'Export timeout' );
 	}
 
 	async function fetchDownloadChunk( jobId, index ) {
@@ -159,7 +234,14 @@ function hideProgressLabel( delay = 0 ) {
 			}
 		);
 
-		return response.json();
+		const data = await response.json();
+		
+		// Check for WordPress REST API error format.
+		if ( ! response.ok || data.code ) {
+			throw data;
+		}
+		
+		return data;
 	}
 
 	function base64ToUint8( base64 ) {
@@ -220,18 +302,43 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 5, settings.i18n.exportBusy );
 
 			const init = await initDownloadJob();
-			const totalChunks = init.total_chunks || 0;
+			// Variables are already set in initDownloadJob().
+
+			// If export is still processing, poll for status.
+			if ( init.status === 'processing' ) {
+				await pollExportStatus( init.job_id );
+			}
+
+			const status = await getJobStatus( init.job_id );
+			if ( status.status === 'error' ) {
+				throw new Error( status.error || 'Export failed' );
+			}
+
+			const totalChunks = status.total_chunks || 0;
+			if ( totalChunks === 0 ) {
+				throw new Error( 'Export not ready' );
+			}
+
 			const parts = [];
 
 			for ( let i = 0; i < totalChunks; i++ ) {
-				const { chunk } = await fetchDownloadChunk( init.job_id, i );
-				parts.push( base64ToUint8( chunk ) );
+				try {
+					const response = await fetchDownloadChunk( init.job_id, i );
+					const { chunk } = response;
+					parts.push( base64ToUint8( chunk ) );
+				} catch ( error ) {
+					// Check if job was cancelled.
+					if ( error.code === 'mksddn_job_cancelled' || ( error.data && error.data.status === 410 ) ) {
+						throw new Error( settings.i18n.exportCancelled || 'Export was cancelled' );
+					}
+					throw error;
+				}
 
-					const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
+				const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
 				setProgressLabel(
-						percent,
-						settings.i18n.downloading.replace( '%d', percent )
-					);
+					percent,
+					settings.i18n.downloading.replace( '%d', percent )
+				);
 			}
 
 			const blob = new Blob( parts, { type: 'application/octet-stream' } );
@@ -254,6 +361,17 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 0, settings.i18n.downloadError );
 			hideProgressLabel( 2000 );
 			throw error;
+		} finally {
+			exportInProgress = false;
+			exportJobId = null;
+			
+			// Clear sessionStorage.
+			try {
+				sessionStorage.removeItem( 'mksddn_export_job_id' );
+				sessionStorage.removeItem( 'mksddn_export_in_progress' );
+			} catch ( e ) {
+				// Ignore storage errors.
+			}
 		}
 	}
 	function attachFullImportHandler() {
@@ -326,6 +444,11 @@ function hideProgressLabel( delay = 0 ) {
 				button.disabled = true;
 			}
 
+			// Set exportInProgress IMMEDIATELY when form is submitted.
+			// This ensures it's set even if page is closed before request completes.
+			exportInProgress = true;
+			console.log( 'MksDdn Migrate: Export form submitted, exportInProgress set to true' );
+
 			try {
 				await downloadFullSite();
 			} catch ( error ) {
@@ -343,10 +466,16 @@ function hideProgressLabel( delay = 0 ) {
 
 	function cancelChunkJob( jobId, keepAlive = false ) {
 		if ( ! jobId ) {
+			console.warn( 'MksDdn Migrate: cancelChunkJob called without jobId' );
 			return;
 		}
 
+		console.log( 'MksDdn Migrate: Cancelling job', jobId, 'keepAlive:', keepAlive );
+
 		try {
+			const controller = new AbortController();
+			const timeoutId = setTimeout( () => controller.abort(), 5000 ); // 5 second timeout
+			
 			fetch( settings.restUrl + 'chunk/cancel', {
 				method: 'POST',
 				headers: {
@@ -355,15 +484,75 @@ function hideProgressLabel( delay = 0 ) {
 				},
 				body: JSON.stringify( { job_id: jobId } ),
 				keepalive: keepAlive,
+				signal: controller.signal,
+			} ).then( ( response ) => {
+				clearTimeout( timeoutId );
+				console.log( 'MksDdn Migrate: Job cancellation request sent for', jobId, 'status:', response.status );
+				return response.json();
+			} ).then( ( data ) => {
+				console.log( 'MksDdn Migrate: Job cancellation response for', jobId, data );
+			} ).catch( ( error ) => {
+				clearTimeout( timeoutId );
+				if ( error.name !== 'AbortError' ) {
+					console.error( 'MksDdn Migrate: Failed to cancel job', jobId, error );
+				}
 			} );
 		} catch ( error ) {
-			// Ignore cleanup failures.
+			console.error( 'MksDdn Migrate: Exception cancelling job', jobId, error );
 		}
 	}
 
-	window.addEventListener( 'beforeunload', () => {
+	function handlePageUnload() {
+		console.log( 'MksDdn Migrate: Page unloading, exportInProgress:', exportInProgress, 'exportJobId:', exportJobId );
+		
+		// Try to get job ID from sessionStorage if not set in memory.
+		let jobIdToCancel = exportJobId;
+		let fromStorage = false;
+		
+		if ( ! jobIdToCancel ) {
+			try {
+				jobIdToCancel = sessionStorage.getItem( 'mksddn_export_job_id' );
+				fromStorage = !! jobIdToCancel;
+				if ( jobIdToCancel ) {
+					console.log( 'MksDdn Migrate: Got job ID from sessionStorage:', jobIdToCancel );
+				}
+			} catch ( e ) {
+				console.warn( 'MksDdn Migrate: Failed to read sessionStorage:', e );
+			}
+		}
+		
+		// Check if export is in progress (from memory or storage).
+		let isExportInProgress = exportInProgress;
+		if ( ! isExportInProgress ) {
+			try {
+				isExportInProgress = sessionStorage.getItem( 'mksddn_export_in_progress' ) === 'true';
+				if ( isExportInProgress ) {
+					console.log( 'MksDdn Migrate: Export in progress detected from sessionStorage' );
+				}
+			} catch ( e ) {
+				// Ignore storage errors.
+			}
+		}
+		
+		console.log( 'MksDdn Migrate: Final check - isExportInProgress:', isExportInProgress, 'jobIdToCancel:', jobIdToCancel );
+		
 		if ( uploadInProgress && currentJobId ) {
 			cancelChunkJob( currentJobId, true );
+		}
+		if ( isExportInProgress && jobIdToCancel ) {
+			console.log( 'MksDdn Migrate: Cancelling export job from unload handler:', jobIdToCancel, 'fromStorage:', fromStorage );
+			cancelChunkJob( jobIdToCancel, true );
+		} else if ( isExportInProgress && ! jobIdToCancel ) {
+			console.warn( 'MksDdn Migrate: Export in progress but no job ID found to cancel!' );
+		}
+	}
+
+	// Use multiple events for better reliability.
+	window.addEventListener( 'beforeunload', handlePageUnload );
+	window.addEventListener( 'pagehide', handlePageUnload );
+	document.addEventListener( 'visibilitychange', () => {
+		if ( document.visibilityState === 'hidden' ) {
+			handlePageUnload();
 		}
 	} );
 

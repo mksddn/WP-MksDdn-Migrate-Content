@@ -40,6 +40,15 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 		return new ChunkJob( $job_id, $this->storage_dir );
 	}
 
+	/**
+	 * Get storage directory path.
+	 *
+	 * @return string Storage directory path.
+	 */
+	public function get_storage_dir(): string {
+		return $this->storage_dir;
+	}
+
 	private function cleanup_expired( int $ttl = DAY_IN_SECONDS ): void {
 		if ( ! is_dir( $this->storage_dir ) ) {
 			return;
