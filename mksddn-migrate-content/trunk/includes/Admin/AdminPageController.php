@@ -176,19 +176,7 @@ class AdminPageController {
 		
 		if ( ! current_user_can( 'manage_options' ) ) {
 			if ( $has_import_status ) {
-				// For import progress page, show minimal page with just progress bar.
-				// This allows users to monitor import even if session expired.
-				echo '<!DOCTYPE html><html><head><title>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</title>';
-				wp_head();
-				echo '</head><body class="wp-admin wp-core-ui">';
-				echo '<div class="wrap" style="max-width: 800px; margin: 50px auto;">';
-				echo '<h1>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</h1>';
-				echo '<p>' . esc_html__( 'Your import is running in the background. This page will update automatically.', 'mksddn-migrate-content' ) . '</p>';
-				$this->progress->render_container();
-				$this->progress->render_javascript();
-				echo '</div>';
-				wp_footer();
-				echo '</body></html>';
+				$this->render_import_progress_page();
 				return;
 			}
 			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
@@ -211,6 +199,26 @@ class AdminPageController {
 
 		echo '</div>';
 		$this->progress->render_javascript();
+	}
+
+	/**
+	 * Render minimal import progress page for expired sessions.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function render_import_progress_page(): void {
+		echo '<!DOCTYPE html><html><head><title>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</title>';
+		wp_head();
+		echo '</head><body class="wp-admin wp-core-ui">';
+		echo '<div class="wrap" style="max-width: 800px; margin: 50px auto;">';
+		echo '<h1>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</h1>';
+		echo '<p>' . esc_html__( 'Your import is running in the background. This page will update automatically.', 'mksddn-migrate-content' ) . '</p>';
+		$this->progress->render_container();
+		$this->progress->render_javascript();
+		echo '</div>';
+		wp_footer();
+		echo '</body></html>';
 	}
 
 	/**

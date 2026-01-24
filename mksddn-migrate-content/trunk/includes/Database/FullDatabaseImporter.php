@@ -40,55 +40,70 @@ class FullDatabaseImporter {
 			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 		}
 
-		global $wpdb;
-		$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 0' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// Reduce cache pressure during large imports to avoid memory spikes.
+		if ( function_exists( 'wp_suspend_cache_addition' ) ) {
+			wp_suspend_cache_addition( true );
+		}
+		if ( function_exists( 'wp_suspend_cache_invalidation' ) ) {
+			wp_suspend_cache_invalidation( true );
+		}
+		if ( function_exists( 'wp_defer_term_counting' ) ) {
+			wp_defer_term_counting( true );
+		}
+		if ( function_exists( 'wp_defer_comment_counting' ) ) {
+			wp_defer_comment_counting( true );
+		}
 
-		// Backup critical options before import (to preserve user access if user tables not imported).
-		$preserved_options = $this->backup_critical_options( $wpdb );
+		try {
+			global $wpdb;
+			$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 0' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		// Replace table prefix if source differs from target.
-		$source_prefix = isset( $dump['table_prefix'] ) ? (string) $dump['table_prefix'] : '';
-		
-		// Auto-detect prefix from table names if not provided (backward compatibility).
-		if ( ! $source_prefix && ! empty( $dump['tables'] ) ) {
-			$source_prefix = $this->detect_prefix_from_tables( array_keys( $dump['tables'] ) );
-			if ( $source_prefix ) {
-				$this->log( sprintf( 'Auto-detected source prefix: "%s"', $source_prefix ) );
+			// Backup critical options before import (to preserve user access if user tables not imported).
+			$preserved_options = $this->backup_critical_options( $wpdb );
+
+			// Replace table prefix if source differs from target.
+			$source_prefix = isset( $dump['table_prefix'] ) ? (string) $dump['table_prefix'] : '';
+
+			// Auto-detect prefix from table names if not provided (backward compatibility).
+			if ( ! $source_prefix && ! empty( $dump['tables'] ) ) {
+				$source_prefix = $this->detect_prefix_from_tables( array_keys( $dump['tables'] ) );
+				if ( $source_prefix ) {
+					$this->log( sprintf( 'Auto-detected source prefix: "%s"', $source_prefix ) );
+				}
 			}
-		}
-		
-		$target_prefix = $wpdb->prefix;
-		$replace_prefix = $source_prefix && $target_prefix && $source_prefix !== $target_prefix;
 
-		if ( $replace_prefix ) {
-			$this->log( sprintf( 'Replacing table prefix from "%s" to "%s"', $source_prefix, $target_prefix ) );
-		}
+			$target_prefix  = $wpdb->prefix;
+			$replace_prefix = $source_prefix && $target_prefix && $source_prefix !== $target_prefix;
 
-		$table_count = count( $dump['tables'] );
-		$processed   = 0;
+			if ( $replace_prefix ) {
+				$this->log( sprintf( 'Replacing table prefix from "%s" to "%s"', $source_prefix, $target_prefix ) );
+			}
 
-		$this->log( sprintf( 'FullDatabaseImporter::import() - Processing %d tables', $table_count ) );
+			$table_count = count( $dump['tables'] );
+			$processed   = 0;
 
-		// Identify user tables in dump to protect existing ones from truncation if not present.
-		$protected_tables = array();
-		$users_table      = $this->detect_table_by_suffix( array_keys( $dump['tables'] ), 'users' );
-		$usermeta_table   = $this->detect_table_by_suffix( array_keys( $dump['tables'] ), 'usermeta' );
-		
-		// If user tables are not in dump, protect existing ones from truncation.
-		// This ensures current users and their capabilities are preserved when not importing users.
-		if ( ! $users_table && $this->table_exists( $wpdb, $wpdb->users ) ) {
-			$protected_tables[] = $wpdb->users;
-			$this->log( sprintf( 'Protecting existing users table: %s (not in dump)', $wpdb->users ) );
-		}
-		if ( ! $usermeta_table && $this->table_exists( $wpdb, $wpdb->usermeta ) ) {
-			$protected_tables[] = $wpdb->usermeta;
-			$this->log( sprintf( 'Protecting existing usermeta table: %s (not in dump)', $wpdb->usermeta ) );
-		}
+			$this->log( sprintf( 'FullDatabaseImporter::import() - Processing %d tables', $table_count ) );
 
-		// Get table names to iterate (will remove from dump as we process to save memory).
-		$table_names = array_keys( $dump['tables'] );
+			// Identify user tables in dump to protect existing ones from truncation if not present.
+			$protected_tables = array();
+			$users_table      = $this->detect_table_by_suffix( array_keys( $dump['tables'] ), 'users' );
+			$usermeta_table   = $this->detect_table_by_suffix( array_keys( $dump['tables'] ), 'usermeta' );
 
-		foreach ( $table_names as $original_table_name ) {
+			// If user tables are not in dump, protect existing ones from truncation.
+			// This ensures current users and their capabilities are preserved when not importing users.
+			if ( ! $users_table && $this->table_exists( $wpdb, $wpdb->users ) ) {
+				$protected_tables[] = $wpdb->users;
+				$this->log( sprintf( 'Protecting existing users table: %s (not in dump)', $wpdb->users ) );
+			}
+			if ( ! $usermeta_table && $this->table_exists( $wpdb, $wpdb->usermeta ) ) {
+				$protected_tables[] = $wpdb->usermeta;
+				$this->log( sprintf( 'Protecting existing usermeta table: %s (not in dump)', $wpdb->usermeta ) );
+			}
+
+			// Get table names to iterate (will remove from dump as we process to save memory).
+			$table_names = array_keys( $dump['tables'] );
+
+			foreach ( $table_names as $original_table_name ) {
 			// Get table data and immediately remove from dump to free memory.
 			if ( ! isset( $dump['tables'][ $original_table_name ] ) ) {
 				continue;
@@ -242,18 +257,9 @@ class FullDatabaseImporter {
 		unset( $rows, $table_data );
 		++$processed;
 
-		// Aggressively clear WordPress caches to free memory (especially after large tables).
-		if ( $row_count > 50000 ) {
-			// Clear all WordPress transient caches.
-			if ( function_exists( 'wp_cache_flush' ) ) {
-				wp_cache_flush();
-			}
-			// Clear object caches for common objects.
-			if ( function_exists( 'wp_cache_delete' ) ) {
-				wp_cache_delete( 'alloptions', 'options' );
-				wp_cache_delete( 'notoptions', 'options' );
-				wp_cache_delete( 'post_format_strings', 'post_format_strings' );
-			}
+		// Clear wpdb result cache to release memory.
+		if ( method_exists( $wpdb, 'flush' ) ) {
+			$wpdb->flush();
 		}
 
 		// Force garbage collection more aggressively for very large tables.
@@ -310,9 +316,33 @@ class FullDatabaseImporter {
 		// Restore critical options after import to preserve user access.
 		$this->restore_critical_options( $wpdb, $preserved_options );
 
-		$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		return true;
+			return true;
+		} finally {
+			$this->restore_cache_behavior();
+		}
+	}
+
+	/**
+	 * Restore cache behavior after import.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function restore_cache_behavior(): void {
+		if ( function_exists( 'wp_suspend_cache_addition' ) ) {
+			wp_suspend_cache_addition( false );
+		}
+		if ( function_exists( 'wp_suspend_cache_invalidation' ) ) {
+			wp_suspend_cache_invalidation( false );
+		}
+		if ( function_exists( 'wp_defer_term_counting' ) ) {
+			wp_defer_term_counting( false );
+		}
+		if ( function_exists( 'wp_defer_comment_counting' ) ) {
+			wp_defer_comment_counting( false );
+		}
 	}
 
 	/**
