@@ -190,6 +190,7 @@ class FullDatabaseImporter {
 						if ( false === $result ) {
 							unset( $rows, $table_data, $row_keys, $batch_rows );
 							$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+							/* translators: %s: Table name. */
 							return new WP_Error( 'mksddn_db_insert_failed', sprintf( __( 'Failed to insert rows into %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
 						}
 					}
@@ -312,7 +313,7 @@ class FullDatabaseImporter {
 	}
 
 	/**
-	 * Batch insert multiple rows for better performance.
+	 * Insert rows in batches using safe inserts.
 	 *
 	 * @param wpdb   $wpdb       Database object.
 	 * @param string $table_name Table name.
@@ -325,64 +326,16 @@ class FullDatabaseImporter {
 			return 0;
 		}
 
-		// For options table, insert row-by-row to handle special logic.
-		if ( $wpdb->options === $table_name ) {
-			$total_inserted = 0;
-			foreach ( $rows as $row ) {
-				$result = $this->insert_option_safe( $wpdb, $row );
-				if ( false === $result ) {
-					return false;
-				}
-				$total_inserted += (int) $result;
-			}
-			return $total_inserted;
-		}
-
-		// Build multi-row INSERT query for other tables.
-		$first_row = reset( $rows );
-		if ( ! is_array( $first_row ) || empty( $first_row ) ) {
-			return 0;
-		}
-
-		$columns = array_keys( $first_row );
-		$column_names = '`' . implode( '`, `', array_map( 'sanitize_key', $columns ) ) . '`';
-		
-		// Build VALUES clause with placeholders.
-		$values_clauses = array();
-		$query_values = array();
-		
+		$total_inserted = 0;
 		foreach ( $rows as $row ) {
-			$row_placeholders = array();
-			foreach ( $columns as $col ) {
-				$row_placeholders[] = '%s';
-				$query_values[] = isset( $row[ $col ] ) ? $row[ $col ] : null;
+			$result = $this->insert_row_safe( $wpdb, $table_name, $row );
+			if ( false === $result ) {
+				return false;
 			}
-			$values_clauses[] = '(' . implode( ', ', $row_placeholders ) . ')';
+			$total_inserted += (int) $result;
 		}
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$query = $wpdb->prepare(
-			"INSERT INTO `{$table_name}` ({$column_names}) VALUES " . implode( ', ', $values_clauses ),
-			$query_values
-		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		$result = $wpdb->query( $query ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		// Check for errors.
-		if ( false === $result ) {
-			$error_code = $wpdb->last_error ? $wpdb->last_error : '';
-			$error_num = isset( $wpdb->last_error_no ) ? $wpdb->last_error_no : 0;
-
-			// MySQL error 1062 is "Duplicate entry" - acceptable, rows may exist.
-			if ( 1062 === $error_num || false !== strpos( strtolower( $error_code ), 'duplicate entry' ) ) {
-				$wpdb->last_error = '';
-				return count( $rows ); // Assume all inserted despite dupes.
-			}
-			return false;
-		}
-
-		return $result;
+		return $total_inserted;
 	}
 
 	/**
