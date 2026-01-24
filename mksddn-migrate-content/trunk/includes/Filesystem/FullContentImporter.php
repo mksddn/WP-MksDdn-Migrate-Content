@@ -102,6 +102,7 @@ class FullContentImporter {
 		
 		// Disable search indexing and cron during import.
 		if ( ! defined( 'DOING_AUTOSAVE' ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- DOING_AUTOSAVE is a WordPress core constant.
 			define( 'DOING_AUTOSAVE', true );
 		}
 		

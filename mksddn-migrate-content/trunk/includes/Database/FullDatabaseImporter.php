@@ -229,6 +229,7 @@ class FullDatabaseImporter {
 					if ( false === $result ) {
 						unset( $rows, $table_data, $row_keys, $batch_rows );
 						$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+						/* translators: %s: database table name. */
 						return new WP_Error( 'mksddn_db_insert_failed', sprintf( __( 'Failed to insert rows into %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
 					}
 				}
@@ -440,29 +441,52 @@ class FullDatabaseImporter {
 		}
 
 		$columns = array_keys( $first_row );
-		$column_names = '`' . implode( '`, `', array_map( 'sanitize_key', $columns ) ) . '`';
+		// Sanitize and escape column names for safe SQL usage.
+		$sanitized_columns = array_map( 'sanitize_key', $columns );
+		$escaped_columns = array_map( 'esc_sql', $sanitized_columns );
+		$column_names = '`' . implode( '`, `', $escaped_columns ) . '`';
 		
-		// Build VALUES clause with placeholders.
+		// Build VALUES clause with placeholders and collect all values for batch insert.
 		$values_clauses = array();
 		$query_values = array();
+		$column_count = count( $columns );
 		
 		foreach ( $rows as $row ) {
-			$row_placeholders = array();
+			// Create placeholders for this row: (%s, %s, ...).
+			$row_placeholders = array_fill( 0, $column_count, '%s' );
+			$values_clauses[] = '(' . implode( ', ', $row_placeholders ) . ')';
+			
+			// Collect values in the same order as columns for $wpdb->prepare().
 			foreach ( $columns as $col ) {
-				$row_placeholders[] = '%s';
 				$query_values[] = isset( $row[ $col ] ) ? $row[ $col ] : null;
 			}
-			$values_clauses[] = '(' . implode( ', ', $row_placeholders ) . ')';
 		}
 
+		// Escape table name for safe SQL usage.
+		// Table name is validated via is_valid_table_name() before calling this method.
+		$escaped_table_name = esc_sql( $table_name );
+		
+		// Build query template with escaped identifiers and placeholders for values.
+		// All values will be properly escaped by $wpdb->prepare().
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$query = $wpdb->prepare(
-			"INSERT INTO `{$table_name}` ({$column_names}) VALUES " . implode( ', ', $values_clauses ),
-			$query_values
+		$values_placeholder_string = implode( ', ', $values_clauses );
+		$query_template = sprintf(
+			"INSERT INTO `%s` (%s) VALUES %s",
+			$escaped_table_name,
+			$column_names,
+			$values_placeholder_string
 		);
+		
+		// Prepare query with all values - $wpdb->prepare() will escape all values safely.
+		// Use call_user_func_array to pass array of values as separate arguments.
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query template contains placeholders, all values are passed to prepare() for escaping
+		$prepare_args = array_merge( array( $query_template ), $query_values );
+		$query = call_user_func_array( array( $wpdb, 'prepare' ), $prepare_args );
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		$result = $wpdb->query( $query ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// Execute prepared query - all identifiers and values are properly escaped.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Query is prepared via $wpdb->prepare() above with all values escaped, table name and column names are validated and escaped via esc_sql()
+		$result = $wpdb->query( $query );
 
 		// Check for errors.
 		if ( false === $result ) {
