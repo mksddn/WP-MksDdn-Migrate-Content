@@ -101,13 +101,16 @@ class FullContentImporter {
 		wp_suspend_cache_addition( true );
 		
 		// Disable search indexing and cron during import.
-		if ( defined( 'DOING_AUTOSAVE' ) ) {
+		if ( ! defined( 'DOING_AUTOSAVE' ) ) {
 			define( 'DOING_AUTOSAVE', true );
 		}
 		
 		// Stop WP-Cron from running.
 		add_filter( 'pre_cron_timeout', '__return_zero' );
 		
+		// Prevent Action Scheduler async runner from competing with database import.
+		add_filter( 'action_scheduler_allow_async_request_runner', '__return_false' );
+
 		// Prevent transients from being set.
 		add_filter( 'transient_timeout_limit', '__return_zero' );
 	}
@@ -121,6 +124,7 @@ class FullContentImporter {
 	private function enable_hooks(): void {
 		wp_suspend_cache_addition( false );
 		remove_filter( 'pre_cron_timeout', '__return_zero' );
+		remove_filter( 'action_scheduler_allow_async_request_runner', '__return_false' );
 		remove_filter( 'transient_timeout_limit', '__return_zero' );
 	}
 

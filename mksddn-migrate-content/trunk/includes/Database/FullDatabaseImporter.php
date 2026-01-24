@@ -116,6 +116,7 @@ class FullDatabaseImporter {
 				? $this->replace_table_prefix( $original_table_name, $source_prefix, $target_prefix )
 				: $original_table_name;
 			if ( ! $this->is_valid_table_name( $table_name ) ) {
+				$this->log( sprintf( 'Skipping table with invalid name: %s', $table_name ) );
 				continue;
 			}
 
@@ -126,10 +127,16 @@ class FullDatabaseImporter {
 			if ( $replace_prefix && $schema ) {
 				$schema = str_replace( "`{$source_prefix}", "`{$target_prefix}", $schema );
 			}
+			if ( empty( $schema ) ) {
+				$this->log( sprintf( 'Warning: Missing schema for table %s; table will not be created if absent.', $table_name ) );
+			} elseif ( false === stripos( $schema, 'CREATE TABLE' ) ) {
+				$this->log( sprintf( 'Warning: Schema for table %s does not contain CREATE TABLE.', $table_name ) );
+			}
 
 			$this->ensure_table_exists( $wpdb, $table_name, $schema );
 
 			if ( ! $this->table_exists( $wpdb, $table_name ) ) {
+				$this->log( sprintf( 'Error: Table %s still missing after creation attempt; skipping import for this table.', $table_name ) );
 				continue;
 			}
 
@@ -371,10 +378,16 @@ class FullDatabaseImporter {
 		}
 
 		if ( empty( $schema_sql ) ) {
+			$this->log( sprintf( 'Warning: Empty schema for table %s; cannot create table.', $table_name ) );
 			return;
 		}
 
-		$wpdb->query( $schema_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema originates from trusted export manifest
+		$create_result = $wpdb->query( $schema_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema originates from trusted export manifest
+		if ( false === $create_result ) {
+			$this->log( sprintf( 'Error: Failed to create table %s. MySQL error: %s', $table_name, $wpdb->last_error ) );
+		} elseif ( ! $this->table_exists( $wpdb, $table_name ) ) {
+			$this->log( sprintf( 'Error: Table %s not found after CREATE TABLE statement.', $table_name ) );
+		}
 	}
 
 	/**

@@ -386,6 +386,7 @@ class FullSiteImportService {
 			} else {
 				$site_guard->restore();
 				$this->normalize_plugin_storage();
+				$this->run_post_import_maintenance();
 
 				$history_context = array();
 				$merge_summary   = $importer->get_user_merge_summary();
@@ -751,6 +752,78 @@ class FullSiteImportService {
 		$target = trailingslashit( WP_CONTENT_DIR ) . 'ai1wm-backups';
 		wp_mkdir_p( $target );
 		update_option( 'mksddn_mc_storage_path', $target );
+	}
+
+	/**
+	 * Run post-import maintenance tasks.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function run_post_import_maintenance(): void {
+		$this->log( 'Running post-import maintenance.' );
+
+		// Flush cache to avoid stale data after database replacement.
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
+
+		// WooCommerce-specific maintenance (safe-guarded).
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients();
+		}
+		if ( class_exists( '\WC_Install' ) ) {
+			\WC_Install::check_version();
+			\WC_Install::update_db_version();
+		}
+		if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
+			wc_update_product_lookup_tables();
+		}
+
+		$this->maybe_reactivate_plugins();
+
+		/**
+		 * Fires after a successful full import completes.
+		 *
+		 * @since 1.0.0
+		 */
+		do_action( 'mksddn_mc_full_import_completed' );
+	}
+
+	/**
+	 * Reactivate selected plugins after full import.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function maybe_reactivate_plugins(): void {
+		$plugins = apply_filters( 'mksddn_mc_post_import_plugin_reactivate', array() );
+		if ( empty( $plugins ) || ! is_array( $plugins ) ) {
+			return;
+		}
+
+		if ( ! function_exists( 'deactivate_plugins' ) || ! function_exists( 'activate_plugin' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$plugins = array_map( 'sanitize_text_field', $plugins );
+		$plugins = array_values( array_unique( array_filter( $plugins ) ) );
+
+		$our_plugin = defined( 'MKSDDN_MC_BASENAME' )
+			? MKSDDN_MC_BASENAME
+			: 'mksddn-migrate-content/mksddn-migrate-content.php';
+		$plugins = array_diff( $plugins, array( $our_plugin ) );
+
+		foreach ( $plugins as $plugin ) {
+			if ( function_exists( 'is_plugin_active' ) && is_plugin_active( $plugin ) ) {
+				deactivate_plugins( $plugin, true );
+			}
+
+			$result = activate_plugin( $plugin, '', false, true );
+			if ( is_wp_error( $result ) ) {
+				$this->log( sprintf( 'Post-import plugin activation failed for %s: %s', $plugin, $result->get_error_message() ) );
+			}
+		}
 	}
 
 	/**
