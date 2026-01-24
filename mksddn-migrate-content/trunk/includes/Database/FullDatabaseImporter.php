@@ -104,224 +104,129 @@ class FullDatabaseImporter {
 			$table_names = array_keys( $dump['tables'] );
 
 			foreach ( $table_names as $original_table_name ) {
-			// Get table data and immediately remove from dump to free memory.
-			if ( ! isset( $dump['tables'][ $original_table_name ] ) ) {
-				continue;
-			}
-			$table_data = $dump['tables'][ $original_table_name ];
-			unset( $dump['tables'][ $original_table_name ] ); // Free memory immediately.
-			
-			// Replace prefix in table name if needed.
-			$table_name = $replace_prefix
-				? $this->replace_table_prefix( $original_table_name, $source_prefix, $target_prefix )
-				: $original_table_name;
-			if ( ! $this->is_valid_table_name( $table_name ) ) {
-				$this->log( sprintf( 'Skipping table with invalid name: %s', $table_name ) );
-				continue;
-			}
-
-			$this->log( sprintf( 'Importing table %d/%d: %s', $processed + 1, $table_count, $table_name ) );
-
-			// Replace prefix in schema if needed.
-			$schema = $table_data['schema'] ?? '';
-			if ( $replace_prefix && $schema ) {
-				$schema = str_replace( "`{$source_prefix}", "`{$target_prefix}", $schema );
-			}
-			if ( empty( $schema ) ) {
-				$this->log( sprintf( 'Warning: Missing schema for table %s; table will not be created if absent.', $table_name ) );
-			} elseif ( false === stripos( $schema, 'CREATE TABLE' ) ) {
-				$this->log( sprintf( 'Warning: Schema for table %s does not contain CREATE TABLE.', $table_name ) );
-			}
-
-			$this->ensure_table_exists( $wpdb, $table_name, $schema );
-
-			if ( ! $this->table_exists( $wpdb, $table_name ) ) {
-				$this->log( sprintf( 'Error: Table %s still missing after creation attempt; skipping import for this table.', $table_name ) );
-				continue;
-			}
-
-			// Skip truncation for protected tables (user tables not in dump).
-			if ( ! in_array( $table_name, $protected_tables, true ) ) {
-				$truncate = $wpdb->query( "TRUNCATE TABLE `{$table_name}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
-				if ( false === $truncate ) {
-					$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-					/* translators: %s: database table name. */
-					return new WP_Error( 'mksddn_db_truncate_failed', sprintf( __( 'Unable to truncate table %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
+				// Get table data and immediately remove from dump to free memory.
+				if ( ! isset( $dump['tables'][ $original_table_name ] ) ) {
+					continue;
 				}
-			} else {
-				$this->log( sprintf( 'Skipping truncation of protected table: %s (preserving current users)', $table_name ) );
-			}
+				$table_data = $dump['tables'][ $original_table_name ];
+				unset( $dump['tables'][ $original_table_name ] ); // Free memory immediately.
 
-			$rows      = isset( $table_data['rows'] ) && is_array( $table_data['rows'] ) ? $table_data['rows'] : array();
-			$row_count = count( $rows );
-			$row_index = 0;
-
-			// Thresholds for memory-safe chunk sizes with ultra-conservative defaults for huge files.
-			$large_threshold = PluginConfig::large_table_threshold();
-			$very_large_threshold = 50000;   // Tables with >50k rows: smaller chunks
-			$extremely_large_threshold = 150000; // Tables with >150k rows: tiny chunks
-			$massive_threshold = 500000;     // Tables with >500k rows: micro chunks
-			
-			// Check current memory before deciding chunk size (adaptive memory management).
-			$current_memory_percent = 0;
-			if ( function_exists( 'memory_get_usage' ) && function_exists( 'ini_get' ) ) {
-				$memory_used = memory_get_usage( true );
-				$memory_limit = wp_convert_hr_to_bytes( ini_get( 'memory_limit' ) );
-				$current_memory_percent = ( $memory_limit > 0 ) ? ( $memory_used / $memory_limit ) * 100 : 0;
-			}
-			
-			// Adjust chunk size based on table size AND current memory usage.
-			if ( $current_memory_percent > 80 ) {
-				// If already at 80%+, use ultra-small chunks to prevent exhaustion.
-				$chunk_size = min( 500, max( 100, (int) ( $row_count / 100 ) ) );
-			} elseif ( $row_count > $massive_threshold ) {
-				$chunk_size = 500;
-			} elseif ( $row_count > $extremely_large_threshold ) {
-				$chunk_size = 1000;
-			} elseif ( $row_count > $very_large_threshold ) {
-				$chunk_size = 2000;
-			} elseif ( $row_count > $large_threshold ) {
-				$chunk_size = PluginConfig::db_row_chunk_size();
-			} else {
-				$chunk_size = $row_count;
-			}
-
-			// Process rows in batches using multi-row INSERT for better performance.
-			$offset = 0;
-			$row_keys = array_keys( $rows );
-			
-			// Adaptive batch size based on table, memory usage, and row count.
-			$base_batch_size = min( 500, max( 50, (int) $chunk_size / 2 ) );
-			
-			// Reduce batch size if memory usage is high.
-			if ( $current_memory_percent > 75 ) {
-				$base_batch_size = max( 50, (int) ( $base_batch_size / 4 ) );
-			} elseif ( $current_memory_percent > 60 ) {
-				$base_batch_size = max( 50, (int) ( $base_batch_size / 2 ) );
-			}
-			
-			$batch_size = $base_batch_size;
-			if ( $wpdb->options === $table_name ) {
-				$batch_size = min( 100, $batch_size );
-			}
-
-			while ( $offset < $row_count ) {
-				$batch_end = min( $offset + $batch_size, $row_count );
-				$batch_rows = array();
-				
-				// Collect rows for batch insert.
-				for ( $i = $offset; $i < $batch_end; ++$i ) {
-					if ( ! isset( $row_keys[ $i ] ) ) {
-						continue;
-					}
-					
-					$row_key = $row_keys[ $i ];
-					if ( isset( $rows[ $row_key ] ) && is_array( $rows[ $row_key ] ) ) {
-						$batch_rows[] = $rows[ $row_key ];
-						unset( $rows[ $row_key ] ); // Free immediately.
-						++$row_index;
-					}
+				// Replace prefix in table name if needed.
+				$table_name = $replace_prefix
+					? $this->replace_table_prefix( $original_table_name, $source_prefix, $target_prefix )
+					: $original_table_name;
+				if ( ! $this->is_valid_table_name( $table_name ) ) {
+					$this->log( sprintf( 'Skipping table with invalid name: %s', $table_name ) );
+					continue;
 				}
-				
-				// Batch insert all rows at once (much faster than individual inserts).
-				if ( ! empty( $batch_rows ) ) {
-					$result = $this->batch_insert_rows( $wpdb, $table_name, $batch_rows );
-					if ( false === $result ) {
-						unset( $rows, $table_data, $row_keys, $batch_rows );
+
+				$this->log( sprintf( 'Importing table %d/%d: %s', $processed + 1, $table_count, $table_name ) );
+
+				// Replace prefix in schema if needed.
+				$schema = $table_data['schema'] ?? '';
+				if ( $replace_prefix && $schema ) {
+					$schema = str_replace( "`{$source_prefix}", "`{$target_prefix}", $schema );
+				}
+				if ( empty( $schema ) ) {
+					$this->log( sprintf( 'Warning: Missing schema for table %s; table will not be created if absent.', $table_name ) );
+				} elseif ( false === stripos( $schema, 'CREATE TABLE' ) ) {
+					$this->log( sprintf( 'Warning: Schema for table %s does not contain CREATE TABLE.', $table_name ) );
+				}
+
+				$this->ensure_table_exists( $wpdb, $table_name, $schema );
+
+				if ( ! $this->table_exists( $wpdb, $table_name ) ) {
+					$this->log( sprintf( 'Error: Table %s still missing after creation attempt; skipping import for this table.', $table_name ) );
+					continue;
+				}
+
+				// Skip truncation for protected tables (user tables not in dump).
+				if ( ! in_array( $table_name, $protected_tables, true ) ) {
+					$truncate = $wpdb->query( "TRUNCATE TABLE `{$table_name}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
+					if ( false === $truncate ) {
 						$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-						return new WP_Error( 'mksddn_db_insert_failed', sprintf( __( 'Failed to insert rows into %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
+						/* translators: %s: database table name. */
+						return new WP_Error( 'mksddn_db_truncate_failed', sprintf( __( 'Unable to truncate table %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
 					}
+				} else {
+					$this->log( sprintf( 'Skipping truncation of protected table: %s (preserving current users)', $table_name ) );
 				}
-				unset( $batch_rows );
 
-				$offset = $batch_end;
+				$rows      = isset( $table_data['rows'] ) && is_array( $table_data['rows'] ) ? $table_data['rows'] : array();
+				$row_count = count( $rows );
 
-				// Force garbage collection aggressively for large tables.
-				if ( $row_count > $large_threshold && function_exists( 'gc_collect_cycles' ) ) {
-					if ( $row_count > $massive_threshold ) {
-						gc_collect_cycles();
-					} elseif ( $row_count > $extremely_large_threshold ) {
-						gc_collect_cycles();
-					} elseif ( $row_count > $very_large_threshold && 0 === $offset % $chunk_size ) {
-						gc_collect_cycles();
-					} elseif ( 0 === $offset % ( $chunk_size * 5 ) ) {
-						gc_collect_cycles();
+				$large_threshold = PluginConfig::large_table_threshold();
+				$chunk_size      = $row_count > $large_threshold ? PluginConfig::db_row_chunk_size() : $row_count;
+
+				// Process rows in batches using multi-row INSERT for better performance.
+				$offset   = 0;
+				$row_keys = array_keys( $rows );
+
+				$batch_size = min( 500, max( 50, (int) ( $chunk_size / 2 ) ) );
+				if ( $wpdb->options === $table_name ) {
+					$batch_size = min( 100, $batch_size );
+				}
+
+				while ( $offset < $row_count ) {
+					$batch_end  = min( $offset + $batch_size, $row_count );
+					$batch_rows = array();
+
+					// Collect rows for batch insert.
+					for ( $i = $offset; $i < $batch_end; ++$i ) {
+						if ( ! isset( $row_keys[ $i ] ) ) {
+							continue;
+						}
+
+						$row_key = $row_keys[ $i ];
+						if ( isset( $rows[ $row_key ] ) && is_array( $rows[ $row_key ] ) ) {
+							$batch_rows[] = $rows[ $row_key ];
+							unset( $rows[ $row_key ] ); // Free immediately.
+						}
 					}
-				}
 
-				// Log progress for very large tables (less frequently for massive tables).
-				if ( $row_count > 100000 && 0 === $offset % 20000 ) {
-					$this->log( sprintf( 'Processed %d/%d rows in table %s', min( $offset, $row_count ), $row_count, $table_name ) );
-				} elseif ( $row_count > 50000 && 0 === $offset % 10000 ) {
-					$this->log( sprintf( 'Processed %d/%d rows in table %s', min( $offset, $row_count ), $row_count, $table_name ) );
-				}
-			}
+					// Batch insert all rows at once (much faster than individual inserts).
+					if ( ! empty( $batch_rows ) ) {
+						$result = $this->batch_insert_rows( $wpdb, $table_name, $batch_rows );
+						if ( false === $result ) {
+							unset( $rows, $table_data, $row_keys, $batch_rows );
+							$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+							return new WP_Error( 'mksddn_db_insert_failed', sprintf( __( 'Failed to insert rows into %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
+						}
+					}
+					unset( $batch_rows );
 
-		// Free keys array and remaining rows.
-		unset( $row_keys, $rows );
+					$offset = $batch_end;
 
-		// Free memory after processing each table.
-		unset( $rows, $table_data );
-		++$processed;
-
-		// Clear wpdb result cache to release memory.
-		if ( method_exists( $wpdb, 'flush' ) ) {
-			$wpdb->flush();
-		}
-
-		// Force garbage collection more aggressively for very large tables.
-		if ( function_exists( 'gc_collect_cycles' ) ) {
-			if ( $row_count > $massive_threshold ) {
-				// For massive tables, multiple GC passes.
-				gc_collect_cycles();
-				gc_collect_cycles();
-			} elseif ( $row_count > $extremely_large_threshold ) {
-				// For extremely large tables, collect garbage multiple times.
-				gc_collect_cycles();
-				gc_collect_cycles();
-			} elseif ( $row_count > $very_large_threshold ) {
-				// For very large tables, collect garbage after every table.
-				gc_collect_cycles();
-			} elseif ( 0 === $processed % 5 ) {
-				// For regular tables, collect garbage after every 5 tables.
-				gc_collect_cycles();
-			}
-		}
-			
-			// Check memory usage and log warning if approaching limit.
-			if ( function_exists( 'memory_get_usage' ) && function_exists( 'ini_get' ) ) {
-				$memory_used = memory_get_usage( true );
-				$memory_limit = wp_convert_hr_to_bytes( ini_get( 'memory_limit' ) );
-				$memory_percent = ( $memory_limit > 0 ) ? ( $memory_used / $memory_limit ) * 100 : 0;
-				
-				// Log warning if memory usage exceeds 70% for large tables (more aggressive).
-				if ( $memory_percent > 70 && $row_count > $large_threshold ) {
-					$this->log( sprintf( 'Warning: Memory usage is high (%d%% used, %s / %s) after processing table %s', 
-						round( $memory_percent ), 
-						size_format( $memory_used, 2 ),
-						size_format( $memory_limit, 2 ),
-						$table_name
-					) );
-				}
-				
-				// Emergency cleanup if memory exceeds 85%.
-				if ( $memory_percent > 85 ) {
-					$this->log( sprintf( 'Critical: Memory usage critical (%d%% used). Forcing garbage collection.', round( $memory_percent ) ) );
-					if ( function_exists( 'gc_collect_cycles' ) ) {
+					if ( $row_count > $large_threshold && function_exists( 'gc_collect_cycles' ) && 0 === $offset % ( $chunk_size * 5 ) ) {
 						gc_collect_cycles();
 					}
 				}
+
+				// Free keys array and remaining rows.
+				unset( $row_keys, $rows );
+
+				// Free memory after processing each table.
+				unset( $rows, $table_data );
+				++$processed;
+
+				// Clear wpdb result cache to release memory.
+				if ( method_exists( $wpdb, 'flush' ) ) {
+					$wpdb->flush();
+				}
+
+				if ( function_exists( 'gc_collect_cycles' ) && ( $row_count > $large_threshold || 0 === $processed % 5 ) ) {
+					gc_collect_cycles();
+				}
 			}
-		}
 
-		// Final cleanup after all tables processed.
-		unset( $dump );
-		if ( function_exists( 'gc_collect_cycles' ) ) {
-			gc_collect_cycles();
-		}
+			// Final cleanup after all tables processed.
+			unset( $dump );
+			if ( function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
 
-		// Restore critical options after import to preserve user access.
-		$this->restore_critical_options( $wpdb, $preserved_options );
+			// Restore critical options after import to preserve user access.
+			$this->restore_critical_options( $wpdb, $preserved_options );
 
 			$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
