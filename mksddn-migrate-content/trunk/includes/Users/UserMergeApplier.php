@@ -104,20 +104,42 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 * Remove user tables from database dump prior to import.
 	 *
 	 * @param array $database Database dump reference.
-	 * @param array $tables   Table hints.
+	 * @param array $tables   Table hints (optional - will auto-detect if empty).
 	 * @return void
 	 */
-	public function strip_user_tables( array &$database, array $tables ): void {
+	public function strip_user_tables( array &$database, array $tables = array() ): void {
 		if ( empty( $database['tables'] ) || ! is_array( $database['tables'] ) ) {
 			return;
 		}
 
-		foreach ( array( 'users', 'usermeta' ) as $key ) {
-			if ( empty( $tables[ $key ] ) ) {
-				continue;
-			}
+		$tables_to_remove = array();
 
-			unset( $database['tables'][ $tables[ $key ] ] );
+		// Use provided table hints if available.
+		if ( ! empty( $tables['users'] ) ) {
+			$tables_to_remove[] = $tables['users'];
+		}
+		if ( ! empty( $tables['usermeta'] ) ) {
+			$tables_to_remove[] = $tables['usermeta'];
+		}
+
+		// Auto-detect user tables if hints are missing.
+		if ( empty( $tables_to_remove ) ) {
+			$users_table    = $this->find_table_name( $database['tables'], 'users' );
+			$usermeta_table = $this->find_table_name( $database['tables'], 'usermeta' );
+
+			if ( $users_table ) {
+				$tables_to_remove[] = $users_table;
+			}
+			if ( $usermeta_table ) {
+				$tables_to_remove[] = $usermeta_table;
+			}
+		}
+
+		// Remove detected user tables from dump.
+		foreach ( $tables_to_remove as $table_name ) {
+			if ( isset( $database['tables'][ $table_name ] ) ) {
+				unset( $database['tables'][ $table_name ] );
+			}
 		}
 	}
 

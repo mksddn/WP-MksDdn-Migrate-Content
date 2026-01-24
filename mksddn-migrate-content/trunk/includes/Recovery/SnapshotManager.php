@@ -85,9 +85,12 @@ class SnapshotManager implements SnapshotManagerInterface {
 			return new WP_Error( 'mksddn_snapshot_zip', __( 'Unable to create snapshot archive.', 'mksddn-migrate-content' ) );
 		}
 
+		// Export database (this can be memory-intensive).
+		$database_export = $this->db_exporter->export();
+
 		$payload = array(
 			'type'     => 'snapshot',
-			'database' => $this->db_exporter->export(),
+			'database' => $database_export,
 		);
 
 		$manifest = array(
@@ -102,6 +105,9 @@ class SnapshotManager implements SnapshotManagerInterface {
 		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 		$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
 
+		// Free database export memory immediately after encoding.
+		unset( $database_export, $payload );
+
 		if ( false === $manifest_json || false === $payload_json ) {
 			$zip->close();
 			return new WP_Error( 'mksddn_snapshot_payload', __( 'Failed to encode snapshot metadata.', 'mksddn-migrate-content' ) );
@@ -109,8 +115,23 @@ class SnapshotManager implements SnapshotManagerInterface {
 
 		$zip->addFromString( 'manifest.json', $manifest_json );
 		$zip->addFromString( 'payload/content.json', $payload_json );
+
+		// Free JSON strings after adding to archive.
+		unset( $manifest_json, $payload_json );
+
+		// Force garbage collection before appending directories.
+		if ( function_exists( 'gc_collect_cycles' ) ) {
+			gc_collect_cycles();
+		}
+
 		$this->collector->append_directories( $zip, $include_map );
 		$zip->close();
+
+		// Final cleanup after archive is closed.
+		unset( $zip, $include_map );
+		if ( function_exists( 'gc_collect_cycles' ) ) {
+			gc_collect_cycles();
+		}
 
 		$details = array(
 			'id'          => $id,

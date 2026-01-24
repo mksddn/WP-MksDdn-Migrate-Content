@@ -2097,35 +2097,93 @@ class ExportImportAdmin {
 	 * @since 1.0.0
 	 */
 	private function redirect_to_import_progress( string $history_id ): void {
-		// Clear any existing output buffers.
+		// Ensure all output buffers are cleared.
 		while ( ob_get_level() > 0 ) {
 			ob_end_clean();
 		}
 
-		// Send redirect headers.
-		if ( ! headers_sent() ) {
-			nocache_headers();
-			$redirect_url = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
-			$redirect_url = add_query_arg(
-				array(
-					'mksddn_mc_import_status' => $history_id,
-				),
-				$redirect_url
-			);
+		// Build redirect URL.
+		$redirect_url = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
+		$redirect_url = add_query_arg(
+			array(
+				'mksddn_mc_import_status' => $history_id,
+			),
+			$redirect_url
+		);
 
-			wp_safe_redirect( $redirect_url );
+		// Set HTTP 302 Redirect headers.
+		if ( ! headers_sent() ) {
+			// Send standard HTTP 302 Found redirect.
+			http_response_code( 302 );
+			
+			// Disable caching.
+			nocache_headers();
+			
+			// Send redirect location.
+			header( 'Location: ' . esc_url_raw( $redirect_url ) );
+			
+			// Explicitly set content length to 0 since we have no body.
+			header( 'Content-Length: 0' );
+			
+			// Suggest browser to close connection.
+			header( 'Connection: close' );
 		}
 
-		// Flush output to send redirect immediately.
+		error_log( 'MksDdn Migrate: Sending HTTP 302 redirect to: ' . esc_url_raw( $redirect_url ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// Flush output to send headers immediately.
 		if ( function_exists( 'flush' ) ) {
 			flush();
 		}
 
-		// Close connection to browser while continuing execution.
-		if ( function_exists( 'fastcgi_finish_request' ) ) {
-			fastcgi_finish_request();
+		error_log( 'MksDdn Migrate: Redirect headers flushed, now closing connection' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// Close connection to browser for different server types.
+		$this->close_client_connection();
+
+		error_log( 'MksDdn Migrate: Connection closed, import process continuing in background' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// DO NOT call exit() - import must continue after response sent to browser.
+		// fastcgi_finish_request() already closed the browser connection.
+	}
+
+	/**
+	 * Close client connection gracefully across different server types.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function close_client_connection(): void {
+		// Disable output buffering and compression.
+		if ( function_exists( 'apache_setenv' ) ) {
+			@apache_setenv( 'no-gzip', 1 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 
-		// DO NOT call exit() - allow import to continue in background.
+		// Set content length to prevent chunked transfer encoding.
+		if ( ! headers_sent() && ob_get_length() === false ) {
+			header( 'Content-Length: 0' );
+		}
+
+		// Try FastCGI first (PHP-FPM, Nginx).
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			error_log( 'MksDdn Migrate: Closing client connection via fastcgi_finish_request()' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			fastcgi_finish_request();
+			return;
+		}
+
+		// For Apache + mod_php: use connection_aborted() check.
+		if ( function_exists( 'connection_aborted' ) ) {
+			// Send Connection: close header to signal client to close.
+			if ( ! headers_sent() ) {
+				header( 'Connection: close' );
+			}
+			// Wait a moment for output to flush.
+			error_log( 'MksDdn Migrate: Closing client connection via Connection: close header' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			usleep( 100000 ); // 0.1 seconds.
+		}
+
+		// Last resort: ignore user abort to allow background execution.
+		@ignore_user_abort( true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		error_log( 'MksDdn Migrate: Client connection handling complete - import continues in background' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 }

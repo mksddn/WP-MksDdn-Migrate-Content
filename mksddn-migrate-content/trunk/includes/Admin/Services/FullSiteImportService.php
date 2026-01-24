@@ -227,6 +227,10 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	public function execute( array $upload, array $options = array() ): void {
+		// Always log to help debug import issues.
+		error_log( 'MksDdn Migrate: FullSiteImportService::execute() called' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( 'MksDdn Migrate: Options: ' . wp_json_encode( $options ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
 		// Disable time limit for long-running import operations.
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
@@ -240,12 +244,15 @@ class FullSiteImportService {
 
 		$temp = $upload['temp'] ?? '';
 		if ( '' === $temp || ! file_exists( $temp ) ) {
+			error_log( 'MksDdn Migrate: Import file missing: ' . $temp ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			$this->response_handler->redirect_with_status( 'error', __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
 		}
 
 		$cleanup       = ! empty( $upload['cleanup'] );
 		$job           = $upload['job'] ?? null;
 		$original_name = $upload['original_name'] ?? '';
+
+		error_log( sprintf( 'MksDdn Migrate: Starting import of file: %s', $original_name ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 
 		// Create history entry early to get ID for response.
 		$history_id = $this->history->start(
@@ -256,100 +263,194 @@ class FullSiteImportService {
 			)
 		);
 
+		error_log( sprintf( 'MksDdn Migrate: History ID created: %s', $history_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
 		// Redirect to admin page with progress indicator IMMEDIATELY to prevent timeout.
 		// This must happen before any long-running operations.
 		$this->redirect_to_import_progress( $history_id );
 
 		$lock_id = $this->job_lock->acquire( 'full-import' );
 		if ( is_wp_error( $lock_id ) ) {
+			error_log( 'MksDdn Migrate: Failed to acquire lock: ' . $lock_id->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			$this->history->finish( $history_id, 'error', array( 'message' => $lock_id->get_error_message() ) );
 			$this->cleanup( $temp, $cleanup, $job );
 			return;
 		}
 
-		$snapshot = $this->snapshot_manager->create(
-			array(
-				'label'           => 'pre-import-full',
-				'include_plugins' => true,
-				'include_themes'  => true,
-				'meta'            => array( 'file' => $original_name ),
-			)
+		error_log( 'MksDdn Migrate: Lock acquired successfully' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// Register shutdown function to release lock on fatal errors.
+		// This ensures lock is released even if script dies with fatal error.
+		register_shutdown_function(
+			function () use ( $lock_id, $temp, $cleanup, $job ) {
+				$error = error_get_last();
+				if ( null !== $error && in_array( $error['type'], array( E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE, E_RECOVERABLE_ERROR ), true ) ) {
+					error_log( sprintf( 'MksDdn Migrate: Fatal error detected, releasing lock: %s', $error['message'] ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					$this->job_lock->release( $lock_id );
+					$this->cleanup( $temp, $cleanup, $job );
+				}
+			}
 		);
 
-		if ( is_wp_error( $snapshot ) ) {
-			$this->history->finish( $history_id, 'error', array( 'message' => $snapshot->get_error_message() ) );
-			$this->job_lock->release( $lock_id );
-			$this->cleanup( $temp, $cleanup, $job );
-			return;
+		// Check file size to determine if snapshot creation should be skipped.
+		$file_size = file_exists( $temp ) ? filesize( $temp ) : 0;
+		$file_size_mb = round( $file_size / ( 1024 * 1024 ), 2 );
+		$file_size_gb = round( $file_size / ( 1024 * 1024 * 1024 ), 2 );
+		$large_file_threshold = 1024 * 1024 * 1024; // 1GB threshold.
+		$very_large_file_threshold = 10 * 1024 * 1024 * 1024; // 10GB threshold.
+
+		error_log( sprintf( 'MksDdn Migrate: Import file size: %s MB (%s GB)', $file_size_mb, $file_size_gb ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		$snapshot = null;
+		$skip_snapshot = false;
+
+		// For very large files (>1GB), skip snapshot creation to save memory.
+		// Snapshot creation exports entire database which can exhaust memory for large sites.
+		// For extremely large files (>10GB), this is critical to prevent memory exhaustion.
+		if ( $file_size > $large_file_threshold ) {
+			$reason = $file_size > $very_large_file_threshold 
+				? sprintf( 'extremely large (%s GB)', $file_size_gb )
+				: sprintf( 'very large (%s MB)', $file_size_mb );
+			error_log( sprintf( 'MksDdn Migrate: File is %s. Skipping snapshot creation to save memory.', $reason ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			$skip_snapshot = true;
+			$snapshot = array(
+				'id'    => 'skipped-large-file',
+				'label' => 'pre-import-full (skipped)',
+				'path'  => '',
+			);
+		} else {
+			// Increase memory limit before creating snapshot (snapshot export can be memory-intensive).
+			$original_memory_limit = ini_get( 'memory_limit' );
+			$current_memory_bytes = wp_convert_hr_to_bytes( $original_memory_limit );
+			// For files up to 1GB, use 2GB memory limit for snapshot creation.
+			$target_memory_mb = 2048; // 2GB for snapshot creation.
+			$target_memory_bytes = $target_memory_mb * 1024 * 1024;
+
+			if ( $current_memory_bytes < $target_memory_bytes && '-1' !== $original_memory_limit ) {
+				@ini_set( 'memory_limit', $target_memory_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+				error_log( sprintf( 'MksDdn Migrate: Increased memory limit to %d MB for snapshot creation', $target_memory_mb ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+
+			error_log( 'MksDdn Migrate: Creating snapshot...' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+			$snapshot = $this->snapshot_manager->create(
+				array(
+					'label'           => 'pre-import-full',
+					'include_plugins' => true,
+					'include_themes'  => true,
+					'meta'            => array( 'file' => $original_name ),
+				)
+			);
+
+			// Free memory immediately after snapshot creation.
+			if ( function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+
+			// Restore original memory limit.
+			if ( '-1' !== $original_memory_limit && '' !== $original_memory_limit ) {
+				@ini_set( 'memory_limit', $original_memory_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+			}
+
+			if ( is_wp_error( $snapshot ) ) {
+				error_log( 'MksDdn Migrate: Failed to create snapshot: ' . $snapshot->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				// Don't fail import if snapshot creation fails - log warning but continue.
+				error_log( 'MksDdn Migrate: Warning - Continuing import without snapshot due to snapshot creation failure' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				$snapshot = array(
+					'id'    => 'failed',
+					'label' => 'pre-import-full (failed)',
+					'path'  => '',
+				);
+			} else {
+				error_log( 'MksDdn Migrate: Snapshot created successfully' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 		}
 
-		// Update history with snapshot info.
+		// Update history with snapshot info (even if skipped).
 		$this->history->update_context(
 			$history_id,
 			array(
-				'snapshot_id'    => $snapshot['id'],
-				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
+				'snapshot_id'    => $snapshot['id'] ?? 'none',
+				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'] ?? 'none',
+				'snapshot_skipped' => $skip_snapshot,
 			)
 		);
 
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
 
-		// Set progress callback to update history.
+		error_log( 'MksDdn Migrate: Calling importer->import_from()...' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// Set progress callback to update history and touch lock.
 		$importer->set_progress_callback(
-			function ( int $percent, string $message ) use ( $history_id ) {
+			function ( int $percent, string $message ) use ( $history_id, $lock_id ) {
 				$this->history->update_progress( $history_id, $percent, $message );
+				// Touch lock every 10% to prevent expiration during long imports.
+				if ( $percent % 10 === 0 ) {
+					$this->job_lock->touch( $lock_id, 600 ); // Extend by 10 minutes.
+				}
 			}
 		);
 
-		$result = $importer->import_from( $temp, $site_guard, $options );
+		try {
+			$result = $importer->import_from( $temp, $site_guard, $options );
 
-		$status  = 'success';
-		$message = null;
+			error_log( sprintf( 'MksDdn Migrate: importer->import_from() returned: %s', is_wp_error( $result ) ? 'WP_Error: ' . $result->get_error_message() : 'success' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 
-		if ( is_wp_error( $result ) ) {
-			$status  = 'error';
-			$message = $result->get_error_message();
-			$this->history->finish(
-				$history_id,
-				'error',
-				array( 'message' => $message )
-			);
+			$status  = 'success';
+			$message = null;
 
-			$rollback = $this->restore_snapshot( $snapshot, 'auto' );
-			if ( is_wp_error( $rollback ) ) {
-				$message .= ' ' . sprintf(
-					/* translators: %s error message */
-					__( 'Automatic rollback failed: %s', 'mksddn-migrate-content' ),
-					$rollback->get_error_message()
+			if ( is_wp_error( $result ) ) {
+				$status  = 'error';
+				$message = $result->get_error_message();
+				$this->history->finish(
+					$history_id,
+					'error',
+					array( 'message' => $message )
 				);
+
+				// Only attempt rollback if snapshot was actually created.
+				if ( ! $skip_snapshot && isset( $snapshot['path'] ) && ! empty( $snapshot['path'] ) && file_exists( $snapshot['path'] ) ) {
+					$rollback = $this->restore_snapshot( $snapshot, 'auto' );
+					if ( is_wp_error( $rollback ) ) {
+						$message .= ' ' . sprintf(
+							/* translators: %s error message */
+							__( 'Automatic rollback failed: %s', 'mksddn-migrate-content' ),
+							$rollback->get_error_message()
+						);
+					} else {
+						$message .= ' ' . __( 'Previous state was restored automatically.', 'mksddn-migrate-content' );
+					}
+				} else {
+					$message .= ' ' . __( 'Note: Snapshot was not created due to large file size, so automatic rollback is not available.', 'mksddn-migrate-content' );
+				}
 			} else {
-				$message .= ' ' . __( 'Previous state was restored automatically.', 'mksddn-migrate-content' );
+				$site_guard->restore();
+				$this->normalize_plugin_storage();
+
+				$history_context = array();
+				$merge_summary   = $importer->get_user_merge_summary();
+				if ( ! empty( $merge_summary ) ) {
+					$history_context['user_selection'] = sprintf(
+						'created:%d updated:%d skipped:%d',
+						(int) ( $merge_summary['created'] ?? 0 ),
+						(int) ( $merge_summary['updated'] ?? 0 ),
+						(int) ( $merge_summary['skipped'] ?? 0 )
+					);
+				}
+
+				$this->history->finish( $history_id, 'success', $history_context );
 			}
-		} else {
-			$site_guard->restore();
-			$this->normalize_plugin_storage();
 
-			$history_context = array();
-			$merge_summary   = $importer->get_user_merge_summary();
-			if ( ! empty( $merge_summary ) ) {
-				$history_context['user_selection'] = sprintf(
-					'created:%d updated:%d skipped:%d',
-					(int) ( $merge_summary['created'] ?? 0 ),
-					(int) ( $merge_summary['updated'] ?? 0 ),
-					(int) ( $merge_summary['skipped'] ?? 0 )
-				);
+			// Update history context with final status.
+			if ( $message ) {
+				$this->history->update_context( $history_id, array( 'message' => $message ) );
 			}
-
-			$this->history->finish( $history_id, 'success', $history_context );
-		}
-
-		$this->job_lock->release( $lock_id );
-		$this->cleanup( $temp, $cleanup, $job );
-
-		// Update history context with final status.
-		if ( $message ) {
-			$this->history->update_context( $history_id, array( 'message' => $message ) );
+		} finally {
+			// Always release lock, even if import failed or was interrupted.
+			error_log( sprintf( 'MksDdn Migrate: Releasing lock: %s', $lock_id ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			$this->job_lock->release( $lock_id );
+			$this->cleanup( $temp, $cleanup, $job );
 		}
 	}
 
@@ -612,36 +713,94 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	private function redirect_to_import_progress( string $history_id ): void {
-		// Clear any existing output buffers.
+		// Ensure all output buffers are cleared.
 		while ( ob_get_level() > 0 ) {
 			ob_end_clean();
 		}
 
-		// Send redirect headers.
-		if ( ! headers_sent() ) {
-			nocache_headers();
-			$redirect_url = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
-			$redirect_url = add_query_arg(
-				array(
-					'mksddn_mc_import_status' => $history_id,
-				),
-				$redirect_url
-			);
+		// Build redirect URL.
+		$redirect_url = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
+		$redirect_url = add_query_arg(
+			array(
+				'mksddn_mc_import_status' => $history_id,
+			),
+			$redirect_url
+		);
 
-			wp_safe_redirect( $redirect_url );
+		// Set HTTP 302 Redirect headers.
+		if ( ! headers_sent() ) {
+			// Send standard HTTP 302 Found redirect.
+			http_response_code( 302 );
+			
+			// Disable caching.
+			nocache_headers();
+			
+			// Send redirect location.
+			header( 'Location: ' . esc_url_raw( $redirect_url ) );
+			
+			// Explicitly set content length to 0 since we have no body.
+			header( 'Content-Length: 0' );
+			
+			// Suggest browser to close connection.
+			header( 'Connection: close' );
 		}
 
-		// Flush output to send redirect immediately.
+		error_log( 'MksDdn Migrate: Sending HTTP 302 redirect to: ' . esc_url_raw( $redirect_url ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// Flush output to send headers immediately.
 		if ( function_exists( 'flush' ) ) {
 			flush();
 		}
 
-		// Close connection to browser while continuing execution.
-		if ( function_exists( 'fastcgi_finish_request' ) ) {
-			fastcgi_finish_request();
+		error_log( 'MksDdn Migrate: Redirect headers flushed, now closing connection' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// Close connection to browser for different server types.
+		$this->close_client_connection();
+
+		error_log( 'MksDdn Migrate: Connection closed, import process continuing in background' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		// DO NOT call exit() - import must continue after response sent to browser.
+		// fastcgi_finish_request() already closed the browser connection.
+	}
+
+	/**
+	 * Close client connection gracefully across different server types.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function close_client_connection(): void {
+		// Disable output buffering and compression.
+		if ( function_exists( 'apache_setenv' ) ) {
+			@apache_setenv( 'no-gzip', 1 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 
-		// DO NOT call exit() - allow import to continue in background.
+		// Set content length to prevent chunked transfer encoding.
+		if ( ! headers_sent() && ob_get_length() === false ) {
+			header( 'Content-Length: 0' );
+		}
+
+		// Try FastCGI first (PHP-FPM, Nginx).
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			error_log( 'MksDdn Migrate: Closing client connection via fastcgi_finish_request()' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			fastcgi_finish_request();
+			return;
+		}
+
+		// For Apache + mod_php: use connection_aborted() check.
+		if ( function_exists( 'connection_aborted' ) ) {
+			// Send Connection: close header to signal client to close.
+			if ( ! headers_sent() ) {
+				header( 'Connection: close' );
+			}
+			// Wait a moment for output to flush.
+			error_log( 'MksDdn Migrate: Closing client connection via Connection: close header' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			usleep( 100000 ); // 0.1 seconds.
+		}
+
+		// Last resort: ignore user abort to allow background execution.
+		@ignore_user_abort( true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		error_log( 'MksDdn Migrate: Client connection handling complete - import continues in background' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 }
 
