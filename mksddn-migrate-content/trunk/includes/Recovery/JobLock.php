@@ -42,10 +42,7 @@ class JobLock {
 			
 			// If lock is older than 5 minutes and no updates in last 2 minutes, force release it.
 			if ( $lock_age > 300 && $time_since_update > 120 ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
-					error_log( sprintf( 'MksDdn Migrate: Detected stuck lock (age: %d sec, last update: %d sec ago). Force releasing...', $lock_age, $time_since_update ) );
-				}
+				error_log( sprintf( 'MksDdn Migrate: Detected stuck lock (age: %d sec, last update: %d sec ago). Force releasing...', $lock_age, $time_since_update ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				delete_option( self::OPTION );
 				$current = false; // Reset to allow acquisition.
 			} else {
@@ -145,10 +142,7 @@ class JobLock {
 		}
 
 		if ( $should_release ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
-				error_log( sprintf( 'MksDdn Migrate: Releasing lock - %s', $reason ) );
-			}
+			error_log( sprintf( 'MksDdn Migrate: Releasing lock - %s', $reason ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			delete_option( self::OPTION );
 		}
 	}
