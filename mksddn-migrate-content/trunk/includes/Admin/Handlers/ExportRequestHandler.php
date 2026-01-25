@@ -152,8 +152,33 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 
 		// Extract and sanitize fields matching pattern selected_*_ids.
 		foreach ( $post_data as $key => $value ) {
-			if ( preg_match( '/^selected_(.+)_ids$/', sanitize_key( $key ) ) ) {
-				$allowed[ sanitize_key( $key ) ] = is_array( $value ) ? array_map( 'absint', $value ) : array();
+			if ( preg_match( '/^selected_(.+)_ids/', sanitize_key( $key ) ) ) {
+				$sanitized_key = sanitize_key( $key );
+				
+				$ids = array();
+				
+				// Handle array (from select or hidden input with []).
+				if ( is_array( $value ) ) {
+					foreach ( $value as $item ) {
+						if ( is_numeric( $item ) ) {
+							$ids[] = absint( $item );
+						} elseif ( is_string( $item ) && ! empty( trim( $item ) ) ) {
+							// Split comma-separated string and convert to integers.
+							$split_ids = array_filter( array_map( 'absint', explode( ',', $item ) ) );
+							$ids = array_merge( $ids, $split_ids );
+						}
+					}
+				} elseif ( is_string( $value ) && ! empty( trim( $value ) ) ) {
+					// Handle comma-separated string from hidden input.
+					$ids = array_filter( array_map( 'absint', explode( ',', $value ) ) );
+				}
+				
+				// Merge with existing IDs if field already exists.
+				if ( isset( $allowed[ $sanitized_key ] ) ) {
+					$allowed[ $sanitized_key ] = array_unique( array_merge( $allowed[ $sanitized_key ], $ids ) );
+				} else {
+					$allowed[ $sanitized_key ] = array_unique( $ids );
+				}
 			}
 		}
 

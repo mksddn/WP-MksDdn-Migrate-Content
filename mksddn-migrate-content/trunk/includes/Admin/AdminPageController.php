@@ -120,6 +120,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
+		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
 	}
 
 	/**
@@ -259,6 +260,22 @@ class AdminPageController {
 			array(),
 			PluginConfig::version(),
 			true
+		);
+
+		// Localize script for AJAX search.
+		wp_localize_script(
+			'mksddn-mc-admin-scripts',
+			'mksddnMcSearch',
+			array(
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'    => array(
+					'loading'  => __( 'Loading...', 'mksddn-migrate-content' ),
+					'noResults' => __( 'No entries found', 'mksddn-migrate-content' ),
+					'error'    => __( 'Error loading entries', 'mksddn-migrate-content' ),
+					'typeMore' => __( 'Type at least 2 characters to search', 'mksddn-migrate-content' ),
+				),
+			)
 		);
 
 		// Enqueue server file selector script.
@@ -432,6 +449,91 @@ class AdminPageController {
 		} else {
 			$this->notifications->redirect_with_notice( 'error', __( 'No active import lock found.', 'mksddn-migrate-content' ) );
 		}
+	}
+
+	/**
+	 * Handle AJAX request to search posts by type and search term.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function handle_ajax_search_posts(): void {
+		// Verify nonce.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// Get and sanitize parameters.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$post_type = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$search_term = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$page = isset( $_POST['page'] ) ? absint( $_POST['page'] ) : 1;
+		$per_page = 50;
+
+		if ( empty( $post_type ) ) {
+			wp_send_json_error( array( 'message' => __( 'Post type is required.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// Validate post type exists.
+		if ( ! post_type_exists( $post_type ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post type.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// Build query args.
+		$query_args = array(
+			'post_type'      => $post_type,
+			'posts_per_page' => $per_page,
+			'post_status'    => 'publish',
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+			'paged'          => $page,
+		);
+
+		// Add search if provided.
+		if ( ! empty( $search_term ) ) {
+			$query_args['s'] = $search_term;
+		}
+
+		// Execute query.
+		$query = new \WP_Query( $query_args );
+
+		// Format results.
+		$results = array();
+		if ( $query->have_posts() ) {
+			while ( $query->have_posts() ) {
+				$query->the_post();
+				$post = get_post();
+				if ( ! $post ) {
+					continue;
+				}
+
+				$label_text = $post->post_title ?: ( '#' . $post->ID );
+				$results[] = array(
+					'id'    => $post->ID,
+					'label' => $label_text,
+				);
+			}
+			wp_reset_postdata();
+		}
+
+		wp_send_json_success(
+			array(
+				'posts'      => $results,
+				'total'      => $query->found_posts,
+				'page'       => $page,
+				'per_page'   => $per_page,
+				'total_pages' => (int) ceil( $query->found_posts / $per_page ),
+			)
+		);
 	}
 
 	/**

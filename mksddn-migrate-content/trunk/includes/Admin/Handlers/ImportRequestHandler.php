@@ -161,7 +161,7 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 			return;
 		}
 
-		if ( $server_file ) {
+		if ( ! empty( $server_file ) ) {
 			// Server file selected.
 			$scanner = new \MksDdn\MigrateContent\Admin\Services\ServerBackupScanner();
 			$file_info = $scanner->get_file( $server_file );

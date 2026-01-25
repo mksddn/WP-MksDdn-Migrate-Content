@@ -149,26 +149,32 @@ class SelectedContentImportService {
 					'extension' => $extension,
 					'mime'      => MimeTypeHelper::detect( $real_path, $extension ),
 				);
-			} elseif ( isset( $_POST['server_file'] ) ) {
+			} elseif ( isset( $_POST['server_file'] ) && ! empty( $_POST['server_file'] ) ) {
 				// Check if server file is provided.
 				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 				$server_file = sanitize_text_field( wp_unslash( $_POST['server_file'] ) );
 
-				$file_info = $this->server_scanner->get_file( $server_file );
+				// Only process if server_file is not empty after sanitization.
+				if ( ! empty( $server_file ) ) {
+					$file_info = $this->server_scanner->get_file( $server_file );
 
-				if ( is_wp_error( $file_info ) ) {
-					$this->notifications->redirect_with_notice( 'error', $file_info->get_error_message() );
-					return;
+					if ( is_wp_error( $file_info ) ) {
+						$this->notifications->redirect_with_notice( 'error', $file_info->get_error_message() );
+						return;
+					}
+
+					$file_data = array(
+						'name'      => $file_info['name'],
+						'path'      => $file_info['path'],
+						'size'      => $file_info['size'],
+						'extension' => $file_info['extension'],
+						'mime'      => MimeTypeHelper::detect( $file_info['path'], $file_info['extension'] ),
+					);
 				}
+			}
 
-				$file_data = array(
-					'name'      => $file_info['name'],
-					'path'      => $file_info['path'],
-					'size'      => $file_info['size'],
-					'extension' => $file_info['extension'],
-					'mime'      => MimeTypeHelper::detect( $file_info['path'], $file_info['extension'] ),
-				);
-			} else {
+			// If no file data was set (from chunk or server file), check for uploaded file.
+			if ( ! isset( $file_data ) ) {
 				if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
 					$this->notifications->redirect_with_notice( 'error', __( 'Failed to upload file.', 'mksddn-migrate-content' ) );
 					return;

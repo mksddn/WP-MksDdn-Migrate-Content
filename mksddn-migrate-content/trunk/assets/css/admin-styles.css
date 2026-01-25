@@ -117,6 +117,22 @@
 	width: 100%;
 }
 
+.mksddn-mc-search-input {
+	width: 100%;
+	margin-bottom: 0.5rem;
+	padding: 6px 8px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.mksddn-mc-search-input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: 2px solid transparent;
+}
+
 /* Selection grid */
 .mksddn-mc-selection-grid {
 	display: grid;
