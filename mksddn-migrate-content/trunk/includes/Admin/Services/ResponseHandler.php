@@ -46,7 +46,7 @@ class ResponseHandler {
 	 * @since 1.0.0
 	 */
 	public function redirect_to_user_preview( string $preview_id ): void {
-		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
+		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
 		$nonce = wp_create_nonce( 'mksddn_mc_user_preview' );
 		$url  = add_query_arg(
 			array(

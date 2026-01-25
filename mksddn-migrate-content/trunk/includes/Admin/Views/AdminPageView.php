@@ -52,11 +52,49 @@ class AdminPageView {
 	}
 
 	/**
+	 * Render export sections (Full Site and Selected Content export).
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function render_export_sections(): void {
+		$this->renderer->render( 'admin/full-site-export-section.php' );
+		
+		$exportable_types = $this->get_exportable_post_types();
+		$items_by_type    = array();
+
+		foreach ( $exportable_types as $type => $label ) {
+			$items_by_type[ $type ] = $this->get_items_for_type( $type );
+		}
+
+		$this->renderer->render(
+			'admin/selected-content-export-section.php',
+			array(
+				'exportable_types' => $exportable_types,
+				'items_by_type'    => $items_by_type,
+			)
+		);
+	}
+
+	/**
+	 * Render import sections (Full Site and Selected Content import).
+	 *
+	 * @param array|null $pending_user_preview Pending user preview data.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function render_import_sections( ?array $pending_user_preview = null ): void {
+		$this->renderer->render( 'admin/full-site-import-section.php', array( 'pending_user_preview' => $pending_user_preview ) );
+		$this->renderer->render( 'admin/selected-content-import-section.php' );
+	}
+
+	/**
 	 * Render full site section.
 	 *
 	 * @param array|null $pending_user_preview Pending user preview data.
 	 * @return void
 	 * @since 1.0.0
+	 * @deprecated Use render_export_sections() or render_import_sections() instead.
 	 */
 	public function render_full_site_section( ?array $pending_user_preview = null ): void {
 		$this->renderer->render( 'admin/full-site-section.php', array( 'pending_user_preview' => $pending_user_preview ) );
@@ -67,6 +105,7 @@ class AdminPageView {
 	 *
 	 * @return void
 	 * @since 1.0.0
+	 * @deprecated Use render_export_sections() or render_import_sections() instead.
 	 */
 	public function render_selected_content_section(): void {
 		$exportable_types = $this->get_exportable_post_types();

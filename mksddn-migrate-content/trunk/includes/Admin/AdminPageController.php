@@ -127,38 +127,90 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function add_admin_menu(): void {
+		$menu_slug = PluginConfig::text_domain();
+		
+		// Main menu page (redirects to Export).
 		add_menu_page(
 			__( 'Migrate Content', 'mksddn-migrate-content' ),
 			__( 'Migrate Content', 'mksddn-migrate-content' ),
 			'manage_options',
-			PluginConfig::text_domain(),
-			array( $this, 'render_admin_page' ),
+			$menu_slug,
+			array( $this, 'render_export_page' ),
 			'dashicons-migrate',
 			20
 		);
+
+		// Export submenu.
+		add_submenu_page(
+			$menu_slug,
+			__( 'Export', 'mksddn-migrate-content' ),
+			__( 'Export', 'mksddn-migrate-content' ),
+			'manage_options',
+			$menu_slug . '-export',
+			array( $this, 'render_export_page' )
+		);
+
+		// Import submenu.
+		add_submenu_page(
+			$menu_slug,
+			__( 'Import', 'mksddn-migrate-content' ),
+			__( 'Import', 'mksddn-migrate-content' ),
+			'manage_options',
+			$menu_slug . '-import',
+			array( $this, 'render_import_page' )
+		);
+
+		// Remove duplicate first submenu item.
+		global $submenu;
+		if ( isset( $submenu[ $menu_slug ] ) ) {
+			unset( $submenu[ $menu_slug ][0] );
+		}
 	}
 
 	/**
-	 * Render admin page.
+	 * Render export page.
 	 *
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function render_admin_page(): void {
+	public function render_export_page(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
 		}
 
 		echo '<div class="wrap">';
-		echo '<h1>' . esc_html__( 'Migrate Content', 'mksddn-migrate-content' ) . '</h1>';
+		echo '<h1>' . esc_html__( 'Export', 'mksddn-migrate-content' ) . '</h1>';
+
+		$this->notifications->render_status_notices();
+		$this->progress->render_container();
+
+		$this->view->render_styles();
+		$this->view->render_export_sections();
+
+		echo '</div>';
+		$this->progress->render_javascript();
+	}
+
+	/**
+	 * Render import page.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function render_import_page(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
+		}
+
+		echo '<div class="wrap">';
+		echo '<h1>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h1>';
 
 		$pending_user_preview = $this->maybe_load_user_preview();
 		$this->notifications->render_status_notices();
 		$this->progress->render_container();
 
 		$this->view->render_styles();
-		$this->view->render_full_site_section( $pending_user_preview );
-		$this->view->render_selected_content_section();
+		$this->view->render_import_sections( $pending_user_preview );
 
 		$this->import_handler->handle_selected_import();
 
@@ -174,7 +226,20 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function enqueue_assets( string $hook ): void {
-		if ( 'toplevel_page_' . PluginConfig::text_domain() !== $hook ) {
+		$menu_slug = PluginConfig::text_domain();
+		
+		// Check if we're on any of our plugin pages.
+		// Check by page parameter (most reliable method).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only check.
+		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
+		
+		$plugin_pages = array(
+			$menu_slug,
+			$menu_slug . '-export',
+			$menu_slug . '-import',
+		);
+		
+		if ( ! in_array( $page, $plugin_pages, true ) ) {
 			return;
 		}
 

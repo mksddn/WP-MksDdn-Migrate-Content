@@ -81,7 +81,7 @@ class NotificationService implements NotificationServiceInterface {
 	 * @since 1.0.0
 	 */
 	public function redirect_with_notice( string $status, ?string $message = null ): void {
-		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
+		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
 		$args = array(
 			'mksddn_mc_notice' => $status,
 		);
@@ -103,7 +103,7 @@ class NotificationService implements NotificationServiceInterface {
 	 * @since 1.0.0
 	 */
 	public function redirect_full_status( string $status, ?string $message = null ): void {
-		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
+		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
 		$url  = add_query_arg(
 			array(
 				'mksddn_mc_full_status' => $status,
