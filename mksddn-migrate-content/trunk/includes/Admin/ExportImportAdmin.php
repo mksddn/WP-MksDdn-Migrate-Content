@@ -22,6 +22,7 @@ use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Support\FilenameBuilder;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Support\RedirectTrait;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 use WP_Error;
@@ -34,6 +35,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Admin controller and renderer.
  */
 class ExportImportAdmin {
+
+	use RedirectTrait;
 
 	/**
 	 * Archive extractor.
@@ -2096,36 +2099,4 @@ class ExportImportAdmin {
 	 * @return void
 	 * @since 1.0.0
 	 */
-	private function redirect_to_import_progress( string $history_id ): void {
-		// Clear any existing output buffers.
-		while ( ob_get_level() > 0 ) {
-			ob_end_clean();
-		}
-
-		// Send redirect headers.
-		if ( ! headers_sent() ) {
-			nocache_headers();
-			$redirect_url = admin_url( 'admin.php?page=' . MKSDDN_MC_TEXT_DOMAIN );
-			$redirect_url = add_query_arg(
-				array(
-					'mksddn_mc_import_status' => $history_id,
-				),
-				$redirect_url
-			);
-
-			wp_safe_redirect( $redirect_url );
-		}
-
-		// Flush output to send redirect immediately.
-		if ( function_exists( 'flush' ) ) {
-			flush();
-		}
-
-		// Close connection to browser while continuing execution.
-		if ( function_exists( 'fastcgi_finish_request' ) ) {
-			fastcgi_finish_request();
-		}
-
-		// DO NOT call exit() - allow import to continue in background.
-	}
 }

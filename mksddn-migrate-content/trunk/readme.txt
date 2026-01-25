@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.2
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,14 @@ All key components implement interfaces:
 * File upload validation with MIME type checking
 
 == Changelog ==
+
+= 1.4.0 =
+* Added: Post-import maintenance tasks (cache flushing, WooCommerce maintenance, plugin reactivation hooks).
+* Enhanced: SQL safety with improved sanitization and escaping for database operations.
+* Enhanced: Memory management with adaptive strategies to prevent exhaustion during large imports.
+* Enhanced: Error handling and logging throughout import processes.
+* Added: RedirectTrait for streamlined HTTP redirect handling during background imports.
+* Refactored: Database row insertion logic for improved performance.
 
 = 1.3.2 =
 * Enhanced: Improved memory management in FullArchivePayload - original memory limit is now stored and restored during JSON decoding for large files, ensuring efficient resource handling.

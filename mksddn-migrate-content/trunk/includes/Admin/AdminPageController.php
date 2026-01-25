@@ -169,8 +169,17 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function render_admin_page(): void {
+		// WordPress already checks 'manage_options' capability when registering the menu page.
+		// However, if user is viewing import progress page (has mksddn_mc_import_status parameter),
+		// we allow access even if session expired, as import continues in background.
+		$has_import_status = ! empty( $_GET['mksddn_mc_import_status'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return;
+			if ( $has_import_status ) {
+				$this->render_import_progress_page();
+				return;
+			}
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
 		}
 
 		echo '<div class="wrap">';
@@ -190,6 +199,26 @@ class AdminPageController {
 
 		echo '</div>';
 		$this->progress->render_javascript();
+	}
+
+	/**
+	 * Render minimal import progress page for expired sessions.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function render_import_progress_page(): void {
+		echo '<!DOCTYPE html><html><head><title>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</title>';
+		wp_head();
+		echo '</head><body class="wp-admin wp-core-ui">';
+		echo '<div class="wrap" style="max-width: 800px; margin: 50px auto;">';
+		echo '<h1>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</h1>';
+		echo '<p>' . esc_html__( 'Your import is running in the background. This page will update automatically.', 'mksddn-migrate-content' ) . '</p>';
+		$this->progress->render_container();
+		$this->progress->render_javascript();
+		echo '</div>';
+		wp_footer();
+		echo '</body></html>';
 	}
 
 	/**

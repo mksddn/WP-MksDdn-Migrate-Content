@@ -41,6 +41,9 @@ class DomainReplacer {
 			return;
 		}
 
+		$table_count = count( $dump['tables'] );
+		$processed   = 0;
+
 		foreach ( $dump['tables'] as &$table ) {
 			if ( empty( $table['rows'] ) || ! is_array( $table['rows'] ) ) {
 				continue;
@@ -55,6 +58,18 @@ class DomainReplacer {
 					$row[ $column ] = $this->replace_value( $value, $combined_map );
 				}
 			}
+
+			++$processed;
+
+			// Force garbage collection after every 10 tables to prevent memory buildup.
+			if ( $processed % 10 === 0 && function_exists( 'gc_collect_cycles' ) ) {
+				gc_collect_cycles();
+			}
+		}
+
+		// Final cleanup after all tables processed.
+		if ( function_exists( 'gc_collect_cycles' ) ) {
+			gc_collect_cycles();
 		}
 	}
 
@@ -240,7 +255,12 @@ class DomainReplacer {
 			}
 
 			$updated = $this->replace_recursive( $data, $map );
-			return serialize( $updated );
+			$result  = serialize( $updated );
+			
+			// Free memory immediately after serialization.
+			unset( $data, $updated );
+			
+			return $result;
 		}
 
 		return str_replace( array_keys( $map ), array_values( $map ), $value );

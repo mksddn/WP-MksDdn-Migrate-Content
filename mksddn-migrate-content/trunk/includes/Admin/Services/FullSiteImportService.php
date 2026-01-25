@@ -17,6 +17,7 @@ use MksDdn\MigrateContent\Recovery\JobLock;
 use MksDdn\MigrateContent\Recovery\SnapshotManager;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Support\RedirectTrait;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 use WP_Error;
@@ -31,6 +32,43 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since 1.0.0
  */
 class FullSiteImportService {
+
+	use RedirectTrait;
+
+	/**
+	 * Large file threshold (1GB).
+	 *
+	 * @var int
+	 */
+	private const LARGE_FILE_THRESHOLD = 1024 * 1024 * 1024;
+
+	/**
+	 * Very large file threshold (10GB).
+	 *
+	 * @var int
+	 */
+	private const VERY_LARGE_FILE_THRESHOLD = 10 * 1024 * 1024 * 1024;
+
+	/**
+	 * Target memory limit for snapshot creation (2GB).
+	 *
+	 * @var int
+	 */
+	private const SNAPSHOT_MEMORY_LIMIT_MB = 2048;
+
+	/**
+	 * Lock extension time in seconds (10 minutes).
+	 *
+	 * @var int
+	 */
+	private const LOCK_EXTENSION_TIME = 600;
+
+	/**
+	 * Progress percentage step for lock extension.
+	 *
+	 * @var int
+	 */
+	private const LOCK_EXTENSION_STEP = 10;
 
 	/**
 	 * Snapshot manager.
@@ -227,6 +265,9 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	public function execute( array $upload, array $options = array() ): void {
+		$this->log( 'FullSiteImportService::execute() called' );
+		$this->log( 'Options: ' . wp_json_encode( $options ) );
+
 		// Disable time limit for long-running import operations.
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
@@ -240,12 +281,16 @@ class FullSiteImportService {
 
 		$temp = $upload['temp'] ?? '';
 		if ( '' === $temp || ! file_exists( $temp ) ) {
+			$this->log( 'Import file missing: ' . $temp );
 			$this->response_handler->redirect_with_status( 'error', __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
+			return;
 		}
 
 		$cleanup       = ! empty( $upload['cleanup'] );
 		$job           = $upload['job'] ?? null;
 		$original_name = $upload['original_name'] ?? '';
+
+		$this->log( sprintf( 'Starting import of file: %s', $original_name ) );
 
 		// Create history entry early to get ID for response.
 		$history_id = $this->history->start(
@@ -256,16 +301,197 @@ class FullSiteImportService {
 			)
 		);
 
+		$this->log( sprintf( 'History ID created: %s', $history_id ) );
+
 		// Redirect to admin page with progress indicator IMMEDIATELY to prevent timeout.
 		// This must happen before any long-running operations.
 		$this->redirect_to_import_progress( $history_id );
 
 		$lock_id = $this->job_lock->acquire( 'full-import' );
 		if ( is_wp_error( $lock_id ) ) {
+			$this->log( 'Failed to acquire lock: ' . $lock_id->get_error_message() );
 			$this->history->finish( $history_id, 'error', array( 'message' => $lock_id->get_error_message() ) );
 			$this->cleanup( $temp, $cleanup, $job );
 			return;
 		}
+
+		$this->log( 'Lock acquired successfully' );
+
+		// Register shutdown function to release lock on fatal errors.
+		$this->register_shutdown_handler( $lock_id, $temp, $cleanup, $job );
+
+		// Create or skip snapshot based on file size.
+		$snapshot_result = $this->create_snapshot_if_needed( $temp, $original_name );
+		$snapshot        = $snapshot_result['snapshot'];
+		$skip_snapshot   = $snapshot_result['skip'];
+
+		// Update history with snapshot info (even if skipped).
+		$this->history->update_context(
+			$history_id,
+			array(
+				'snapshot_id'    => $snapshot['id'] ?? 'none',
+				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'] ?? 'none',
+				'snapshot_skipped' => $skip_snapshot,
+			)
+		);
+
+		$site_guard = new SiteUrlGuard();
+		$importer   = new FullContentImporter();
+
+		$this->log( 'Calling importer->import_from()...' );
+
+		// Set progress callback to update history and touch lock.
+		$importer->set_progress_callback(
+			function ( int $percent, string $message ) use ( $history_id, $lock_id ) {
+				$this->history->update_progress( $history_id, $percent, $message );
+				// Touch lock every N% to prevent expiration during long imports.
+				if ( $percent % self::LOCK_EXTENSION_STEP === 0 ) {
+					$this->job_lock->touch( $lock_id, self::LOCK_EXTENSION_TIME );
+				}
+			}
+		);
+
+		try {
+			$result = $importer->import_from( $temp, $site_guard, $options );
+
+			$this->log( sprintf( 'importer->import_from() returned: %s', is_wp_error( $result ) ? 'WP_Error: ' . $result->get_error_message() : 'success' ) );
+
+			$status  = 'success';
+			$message = null;
+
+			if ( is_wp_error( $result ) ) {
+				$status  = 'error';
+				$message = $result->get_error_message();
+				$this->history->finish(
+					$history_id,
+					'error',
+					array( 'message' => $message )
+				);
+
+				// Only attempt rollback if snapshot was actually created.
+				if ( ! $skip_snapshot && isset( $snapshot['path'] ) && ! empty( $snapshot['path'] ) && file_exists( $snapshot['path'] ) ) {
+					$rollback = $this->restore_snapshot( $snapshot, 'auto' );
+					if ( is_wp_error( $rollback ) ) {
+						$message .= ' ' . sprintf(
+							/* translators: %s error message */
+							__( 'Automatic rollback failed: %s', 'mksddn-migrate-content' ),
+							$rollback->get_error_message()
+						);
+					} else {
+						$message .= ' ' . __( 'Previous state was restored automatically.', 'mksddn-migrate-content' );
+					}
+				} else {
+					$message .= ' ' . __( 'Note: Snapshot was not created due to large file size, so automatic rollback is not available.', 'mksddn-migrate-content' );
+				}
+			} else {
+				$site_guard->restore();
+				$this->normalize_plugin_storage();
+				$this->run_post_import_maintenance();
+
+				$history_context = array();
+				$merge_summary   = $importer->get_user_merge_summary();
+				if ( ! empty( $merge_summary ) ) {
+					$history_context['user_selection'] = sprintf(
+						'created:%d updated:%d skipped:%d',
+						(int) ( $merge_summary['created'] ?? 0 ),
+						(int) ( $merge_summary['updated'] ?? 0 ),
+						(int) ( $merge_summary['skipped'] ?? 0 )
+					);
+				}
+
+				$this->history->finish( $history_id, 'success', $history_context );
+			}
+
+			// Update history context with final status.
+			if ( $message ) {
+				$this->history->update_context( $history_id, array( 'message' => $message ) );
+			}
+		} finally {
+			// Always release lock, even if import failed or was interrupted.
+			$this->log( sprintf( 'Releasing lock: %s', $lock_id ) );
+			$this->job_lock->release( $lock_id );
+			$this->cleanup( $temp, $cleanup, $job );
+		}
+	}
+
+	/**
+	 * Register shutdown handler to release lock on fatal errors.
+	 *
+	 * @param string     $lock_id Lock identifier.
+	 * @param string     $temp    Temp file path.
+	 * @param bool       $cleanup Whether temp should be removed.
+	 * @param object|null $job    Chunk job instance.
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function register_shutdown_handler( string $lock_id, string $temp, bool $cleanup, $job ): void {
+		register_shutdown_function(
+			function () use ( $lock_id, $temp, $cleanup, $job ) {
+				$error = error_get_last();
+				if ( null !== $error && in_array( $error['type'], array( E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE, E_RECOVERABLE_ERROR ), true ) ) {
+					$this->log( sprintf( 'Fatal error detected, releasing lock: %s', $error['message'] ) );
+					$this->job_lock->release( $lock_id );
+					$this->cleanup( $temp, $cleanup, $job );
+				}
+			}
+		);
+	}
+
+	/**
+	 * Create snapshot if file size allows, otherwise skip.
+	 *
+	 * @param string $temp         Temp file path.
+	 * @param string $original_name Original file name.
+	 * @return array{snapshot: array, skip: bool}
+	 * @since 1.0.0
+	 */
+	private function create_snapshot_if_needed( string $temp, string $original_name ): array {
+		$file_size    = file_exists( $temp ) ? filesize( $temp ) : 0;
+		$file_size_mb = round( $file_size / ( 1024 * 1024 ), 2 );
+		$file_size_gb = round( $file_size / ( 1024 * 1024 * 1024 ), 2 );
+
+		$this->log( sprintf( 'Import file size: %s MB (%s GB)', $file_size_mb, $file_size_gb ) );
+
+		// For very large files (>1GB), skip snapshot creation to save memory.
+		if ( $file_size > self::LARGE_FILE_THRESHOLD ) {
+			$reason = $file_size > self::VERY_LARGE_FILE_THRESHOLD
+				? sprintf( 'extremely large (%s GB)', $file_size_gb )
+				: sprintf( 'very large (%s MB)', $file_size_mb );
+			$this->log( sprintf( 'File is %s. Skipping snapshot creation to save memory.', $reason ) );
+			return array(
+				'snapshot' => array(
+					'id'    => 'skipped-large-file',
+					'label' => 'pre-import-full (skipped)',
+					'path'  => '',
+				),
+				'skip'    => true,
+			);
+		}
+
+		return array(
+			'snapshot' => $this->create_snapshot( $original_name ),
+			'skip'     => false,
+		);
+	}
+
+	/**
+	 * Create snapshot with increased memory limit.
+	 *
+	 * @param string $original_name Original file name.
+	 * @return array Snapshot metadata or error placeholder.
+	 * @since 1.0.0
+	 */
+	private function create_snapshot( string $original_name ): array {
+		$original_memory_limit = ini_get( 'memory_limit' );
+		$current_memory_bytes = wp_convert_hr_to_bytes( $original_memory_limit );
+		$target_memory_bytes  = self::SNAPSHOT_MEMORY_LIMIT_MB * 1024 * 1024;
+
+		if ( $current_memory_bytes < $target_memory_bytes && '-1' !== $original_memory_limit ) {
+			@ini_set( 'memory_limit', self::SNAPSHOT_MEMORY_LIMIT_MB . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+			$this->log( sprintf( 'Increased memory limit to %d MB for snapshot creation', self::SNAPSHOT_MEMORY_LIMIT_MB ) );
+		}
+
+		$this->log( 'Creating snapshot...' );
 
 		$snapshot = $this->snapshot_manager->create(
 			array(
@@ -276,81 +502,28 @@ class FullSiteImportService {
 			)
 		);
 
+		// Free memory immediately after snapshot creation.
+		if ( function_exists( 'gc_collect_cycles' ) ) {
+			gc_collect_cycles();
+		}
+
+		// Restore original memory limit.
+		if ( '-1' !== $original_memory_limit && '' !== $original_memory_limit ) {
+			@ini_set( 'memory_limit', $original_memory_limit ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+		}
+
 		if ( is_wp_error( $snapshot ) ) {
-			$this->history->finish( $history_id, 'error', array( 'message' => $snapshot->get_error_message() ) );
-			$this->job_lock->release( $lock_id );
-			$this->cleanup( $temp, $cleanup, $job );
-			return;
-		}
-
-		// Update history with snapshot info.
-		$this->history->update_context(
-			$history_id,
-			array(
-				'snapshot_id'    => $snapshot['id'],
-				'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
-			)
-		);
-
-		$site_guard = new SiteUrlGuard();
-		$importer   = new FullContentImporter();
-
-		// Set progress callback to update history.
-		$importer->set_progress_callback(
-			function ( int $percent, string $message ) use ( $history_id ) {
-				$this->history->update_progress( $history_id, $percent, $message );
-			}
-		);
-
-		$result = $importer->import_from( $temp, $site_guard, $options );
-
-		$status  = 'success';
-		$message = null;
-
-		if ( is_wp_error( $result ) ) {
-			$status  = 'error';
-			$message = $result->get_error_message();
-			$this->history->finish(
-				$history_id,
-				'error',
-				array( 'message' => $message )
+			$this->log( 'Failed to create snapshot: ' . $snapshot->get_error_message() );
+			$this->log( 'Warning - Continuing import without snapshot due to snapshot creation failure' );
+			return array(
+				'id'    => 'failed',
+				'label' => 'pre-import-full (failed)',
+				'path'  => '',
 			);
-
-			$rollback = $this->restore_snapshot( $snapshot, 'auto' );
-			if ( is_wp_error( $rollback ) ) {
-				$message .= ' ' . sprintf(
-					/* translators: %s error message */
-					__( 'Automatic rollback failed: %s', 'mksddn-migrate-content' ),
-					$rollback->get_error_message()
-				);
-			} else {
-				$message .= ' ' . __( 'Previous state was restored automatically.', 'mksddn-migrate-content' );
-			}
-		} else {
-			$site_guard->restore();
-			$this->normalize_plugin_storage();
-
-			$history_context = array();
-			$merge_summary   = $importer->get_user_merge_summary();
-			if ( ! empty( $merge_summary ) ) {
-				$history_context['user_selection'] = sprintf(
-					'created:%d updated:%d skipped:%d',
-					(int) ( $merge_summary['created'] ?? 0 ),
-					(int) ( $merge_summary['updated'] ?? 0 ),
-					(int) ( $merge_summary['skipped'] ?? 0 )
-				);
-			}
-
-			$this->history->finish( $history_id, 'success', $history_context );
 		}
 
-		$this->job_lock->release( $lock_id );
-		$this->cleanup( $temp, $cleanup, $job );
-
-		// Update history context with final status.
-		if ( $message ) {
-			$this->history->update_context( $history_id, array( 'message' => $message ) );
-		}
+		$this->log( 'Snapshot created successfully' );
+		return $snapshot;
 	}
 
 	/**
@@ -582,6 +755,78 @@ class FullSiteImportService {
 	}
 
 	/**
+	 * Run post-import maintenance tasks.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function run_post_import_maintenance(): void {
+		$this->log( 'Running post-import maintenance.' );
+
+		// Flush cache to avoid stale data after database replacement.
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
+
+		// WooCommerce-specific maintenance (safe-guarded).
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients();
+		}
+		if ( class_exists( '\WC_Install' ) ) {
+			\WC_Install::check_version();
+			\WC_Install::update_db_version();
+		}
+		if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
+			wc_update_product_lookup_tables();
+		}
+
+		$this->maybe_reactivate_plugins();
+
+		/**
+		 * Fires after a successful full import completes.
+		 *
+		 * @since 1.0.0
+		 */
+		do_action( 'mksddn_mc_full_import_completed' );
+	}
+
+	/**
+	 * Reactivate selected plugins after full import.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function maybe_reactivate_plugins(): void {
+		$plugins = apply_filters( 'mksddn_mc_post_import_plugin_reactivate', array() );
+		if ( empty( $plugins ) || ! is_array( $plugins ) ) {
+			return;
+		}
+
+		if ( ! function_exists( 'deactivate_plugins' ) || ! function_exists( 'activate_plugin' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$plugins = array_map( 'sanitize_text_field', $plugins );
+		$plugins = array_values( array_unique( array_filter( $plugins ) ) );
+
+		$our_plugin = defined( 'MKSDDN_MC_BASENAME' )
+			? MKSDDN_MC_BASENAME
+			: 'mksddn-migrate-content/mksddn-migrate-content.php';
+		$plugins = array_diff( $plugins, array( $our_plugin ) );
+
+		foreach ( $plugins as $plugin ) {
+			if ( function_exists( 'is_plugin_active' ) && is_plugin_active( $plugin ) ) {
+				deactivate_plugins( $plugin, true );
+			}
+
+			$result = activate_plugin( $plugin, '', false, true );
+			if ( is_wp_error( $result ) ) {
+				$this->log( sprintf( 'Post-import plugin activation failed for %s: %s', $plugin, $result->get_error_message() ) );
+			}
+		}
+	}
+
+	/**
 	 * Cleanup temp files and chunk jobs.
 	 *
 	 * @param string     $temp    Temp file path.
@@ -611,37 +856,5 @@ class FullSiteImportService {
 	 * @return void
 	 * @since 1.0.0
 	 */
-	private function redirect_to_import_progress( string $history_id ): void {
-		// Clear any existing output buffers.
-		while ( ob_get_level() > 0 ) {
-			ob_end_clean();
-		}
-
-		// Send redirect headers.
-		if ( ! headers_sent() ) {
-			nocache_headers();
-			$redirect_url = admin_url( 'admin.php?page=' . PluginConfig::text_domain() );
-			$redirect_url = add_query_arg(
-				array(
-					'mksddn_mc_import_status' => $history_id,
-				),
-				$redirect_url
-			);
-
-			wp_safe_redirect( $redirect_url );
-		}
-
-		// Flush output to send redirect immediately.
-		if ( function_exists( 'flush' ) ) {
-			flush();
-		}
-
-		// Close connection to browser while continuing execution.
-		if ( function_exists( 'fastcgi_finish_request' ) ) {
-			fastcgi_finish_request();
-		}
-
-		// DO NOT call exit() - allow import to continue in background.
-	}
 }
 

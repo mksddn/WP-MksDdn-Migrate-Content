@@ -192,11 +192,11 @@ class PluginConfig {
 	/**
 	 * Maximum JSON payload size for import (bytes).
 	 *
-	 * @return int Size in bytes (default 1GB).
+	 * @return int Size in bytes (default 5GB to support very large databases).
 	 * @since 1.0.0
 	 */
 	public static function max_import_json_size(): int {
-		return apply_filters( 'mksddn_mc_max_import_json_size', 1024 * 1024 * 1024 );
+		return apply_filters( 'mksddn_mc_max_import_json_size', 5 * 1024 * 1024 * 1024 );
 	}
 
 	/**
@@ -212,11 +212,11 @@ class PluginConfig {
 	/**
 	 * Maximum memory limit for imports (bytes).
 	 *
-	 * @return int Size in bytes (default 3GB).
+	 * @return int Size in bytes (default 8GB to support very large databases).
 	 * @since 1.0.0
 	 */
 	public static function max_import_memory_limit(): int {
-		return apply_filters( 'mksddn_mc_max_import_memory_limit', 3072 * 1024 * 1024 );
+		return apply_filters( 'mksddn_mc_max_import_memory_limit', 8 * 1024 * 1024 * 1024 );
 	}
 
 	/**
