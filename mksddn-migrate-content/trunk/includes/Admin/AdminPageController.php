@@ -15,8 +15,6 @@ use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
-use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
-use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
@@ -53,20 +51,6 @@ class AdminPageController {
 	 * @var ImportRequestHandlerInterface
 	 */
 	private ImportRequestHandlerInterface $import_handler;
-
-	/**
-	 * Schedule handler.
-	 *
-	 * @var ScheduleRequestHandlerInterface
-	 */
-	private ScheduleRequestHandlerInterface $schedule_handler;
-
-	/**
-	 * Recovery handler.
-	 *
-	 * @var RecoveryRequestHandlerInterface
-	 */
-	private RecoveryRequestHandlerInterface $recovery_handler;
 
 	/**
 	 * User merge handler.
@@ -113,8 +97,6 @@ class AdminPageController {
 		$this->view              = $container->get( AdminPageView::class );
 		$this->export_handler    = $container->get( ExportRequestHandlerInterface::class );
 		$this->import_handler    = $container->get( ImportRequestHandlerInterface::class );
-		$this->schedule_handler  = $container->get( ScheduleRequestHandlerInterface::class );
-		$this->recovery_handler  = $container->get( RecoveryRequestHandlerInterface::class );
 		$this->user_merge_handler = $container->get( UserMergeRequestHandlerInterface::class );
 		$this->notifications     = $container->get( NotificationServiceInterface::class );
 		$this->progress          = $container->get( ProgressServiceInterface::class );
@@ -134,14 +116,11 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_export_selected', array( $this->export_handler, 'handle_selected_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this->export_handler, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
-		add_action( 'admin_post_mksddn_mc_rollback_snapshot', array( $this->recovery_handler, 'handle_rollback' ) );
-		add_action( 'admin_post_mksddn_mc_delete_snapshot', array( $this->recovery_handler, 'handle_delete' ) );
+		add_action( 'admin_post_mksddn_mc_unified_import', array( $this->import_handler, 'handle_unified_import' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
-		add_action( 'admin_post_mksddn_mc_schedule_save', array( $this->schedule_handler, 'handle_save' ) );
-		add_action( 'admin_post_mksddn_mc_schedule_run', array( $this->schedule_handler, 'handle_run_now' ) );
-		add_action( 'admin_post_mksddn_mc_download_scheduled', array( $this->schedule_handler, 'handle_download' ) );
-		add_action( 'admin_post_mksddn_mc_delete_scheduled', array( $this->schedule_handler, 'handle_delete' ) );
+		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
+		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
 	}
 
 	/**
@@ -151,74 +130,94 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function add_admin_menu(): void {
+		$menu_slug = PluginConfig::text_domain();
+		
+		// Main menu page (redirects to Export).
 		add_menu_page(
 			__( 'Migrate Content', 'mksddn-migrate-content' ),
 			__( 'Migrate Content', 'mksddn-migrate-content' ),
 			'manage_options',
-			PluginConfig::text_domain(),
-			array( $this, 'render_admin_page' ),
+			$menu_slug,
+			array( $this, 'render_export_page' ),
 			'dashicons-migrate',
 			20
 		);
+
+		// Export submenu.
+		add_submenu_page(
+			$menu_slug,
+			__( 'Export', 'mksddn-migrate-content' ),
+			__( 'Export', 'mksddn-migrate-content' ),
+			'manage_options',
+			$menu_slug . '-export',
+			array( $this, 'render_export_page' )
+		);
+
+		// Import submenu.
+		add_submenu_page(
+			$menu_slug,
+			__( 'Import', 'mksddn-migrate-content' ),
+			__( 'Import', 'mksddn-migrate-content' ),
+			'manage_options',
+			$menu_slug . '-import',
+			array( $this, 'render_import_page' )
+		);
+
+		// Remove duplicate first submenu item.
+		global $submenu;
+		if ( isset( $submenu[ $menu_slug ] ) ) {
+			unset( $submenu[ $menu_slug ][0] );
+		}
 	}
 
 	/**
-	 * Render admin page.
+	 * Render export page.
 	 *
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function render_admin_page(): void {
-		// WordPress already checks 'manage_options' capability when registering the menu page.
-		// However, if user is viewing import progress page (has mksddn_mc_import_status parameter),
-		// we allow access even if session expired, as import continues in background.
-		$has_import_status = ! empty( $_GET['mksddn_mc_import_status'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		
+	public function render_export_page(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			if ( $has_import_status ) {
-				$this->render_import_progress_page();
-				return;
-			}
 			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
 		}
 
 		echo '<div class="wrap">';
-		echo '<h1>' . esc_html__( 'Migrate Content', 'mksddn-migrate-content' ) . '</h1>';
+		echo '<h1>' . esc_html__( 'Export', 'mksddn-migrate-content' ) . '</h1>';
 
-		$pending_user_preview = $this->maybe_load_user_preview();
 		$this->notifications->render_status_notices();
 		$this->progress->render_container();
 
 		$this->view->render_styles();
-		$this->view->render_full_site_section( $pending_user_preview );
-		$this->view->render_selected_content_section();
-		$this->view->render_history_section();
-		$this->view->render_automation_section();
-
-		$this->import_handler->handle_selected_import();
+		$this->view->render_export_sections();
 
 		echo '</div>';
 		$this->progress->render_javascript();
 	}
 
 	/**
-	 * Render minimal import progress page for expired sessions.
+	 * Render import page.
 	 *
 	 * @return void
 	 * @since 1.0.0
 	 */
-	private function render_import_progress_page(): void {
-		echo '<!DOCTYPE html><html><head><title>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</title>';
-		wp_head();
-		echo '</head><body class="wp-admin wp-core-ui">';
-		echo '<div class="wrap" style="max-width: 800px; margin: 50px auto;">';
-		echo '<h1>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</h1>';
-		echo '<p>' . esc_html__( 'Your import is running in the background. This page will update automatically.', 'mksddn-migrate-content' ) . '</p>';
+	public function render_import_page(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
+		}
+
+		echo '<div class="wrap">';
+		echo '<h1>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h1>';
+
+		$pending_user_preview = $this->maybe_load_user_preview();
+		$this->render_lock_warning();
+		$this->notifications->render_status_notices();
 		$this->progress->render_container();
-		$this->progress->render_javascript();
+
+		$this->view->render_styles();
+		$this->view->render_import_sections( $pending_user_preview );
+
 		echo '</div>';
-		wp_footer();
-		echo '</body></html>';
+		$this->progress->render_javascript();
 	}
 
 	/**
@@ -229,7 +228,20 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function enqueue_assets( string $hook ): void {
-		if ( 'toplevel_page_' . PluginConfig::text_domain() !== $hook ) {
+		$menu_slug = PluginConfig::text_domain();
+		
+		// Check if we're on any of our plugin pages.
+		// Check by page parameter (most reliable method).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only check.
+		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
+		
+		$plugin_pages = array(
+			$menu_slug,
+			$menu_slug . '-export',
+			$menu_slug . '-import',
+		);
+		
+		if ( ! in_array( $page, $plugin_pages, true ) ) {
 			return;
 		}
 
@@ -250,13 +262,19 @@ class AdminPageController {
 			true
 		);
 
-		// Localize script with REST API settings.
+		// Localize script for AJAX search.
 		wp_localize_script(
 			'mksddn-mc-admin-scripts',
-			'wpApiSettings',
+			'mksddnMcSearch',
 			array(
-				'root'  => esc_url_raw( rest_url() ),
-				'nonce' => wp_create_nonce( 'wp_rest' ),
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'    => array(
+					'loading'  => __( 'Loading...', 'mksddn-migrate-content' ),
+					'noResults' => __( 'No entries found', 'mksddn-migrate-content' ),
+					'error'    => __( 'Error loading entries', 'mksddn-migrate-content' ),
+					'typeMore' => __( 'Type at least 2 characters to search', 'mksddn-migrate-content' ),
+				),
 			)
 		);
 
@@ -408,6 +426,151 @@ class AdminPageController {
 		}
 
 		wp_send_json_success( array( 'files' => $files ) );
+	}
+
+	/**
+	 * Handle release import lock request.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function handle_release_import_lock(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_release_lock' );
+
+		$lock = new \MksDdn\MigrateContent\Support\ImportLock();
+		$released = $lock->force_release();
+
+		if ( $released ) {
+			$this->notifications->redirect_with_notice( 'success', __( 'Import lock released successfully.', 'mksddn-migrate-content' ) );
+		} else {
+			$this->notifications->redirect_with_notice( 'error', __( 'No active import lock found.', 'mksddn-migrate-content' ) );
+		}
+	}
+
+	/**
+	 * Handle AJAX request to search posts by type and search term.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function handle_ajax_search_posts(): void {
+		// Verify nonce.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// Get and sanitize parameters.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$post_type = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$search_term = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$page = isset( $_POST['page'] ) ? absint( $_POST['page'] ) : 1;
+		$per_page = 50;
+
+		if ( empty( $post_type ) ) {
+			wp_send_json_error( array( 'message' => __( 'Post type is required.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// Validate post type exists.
+		if ( ! post_type_exists( $post_type ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post type.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// Build query args.
+		$query_args = array(
+			'post_type'      => $post_type,
+			'posts_per_page' => $per_page,
+			'post_status'    => 'publish',
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+			'paged'          => $page,
+		);
+
+		// Add search if provided.
+		if ( ! empty( $search_term ) ) {
+			$query_args['s'] = $search_term;
+		}
+
+		// Execute query.
+		$query = new \WP_Query( $query_args );
+
+		// Format results.
+		$results = array();
+		if ( $query->have_posts() ) {
+			while ( $query->have_posts() ) {
+				$query->the_post();
+				$post = get_post();
+				if ( ! $post ) {
+					continue;
+				}
+
+				$label_text = $post->post_title ?: ( '#' . $post->ID );
+				$results[] = array(
+					'id'    => $post->ID,
+					'label' => $label_text,
+				);
+			}
+			wp_reset_postdata();
+		}
+
+		wp_send_json_success(
+			array(
+				'posts'      => $results,
+				'total'      => $query->found_posts,
+				'page'       => $page,
+				'per_page'   => $per_page,
+				'total_pages' => (int) ceil( $query->found_posts / $per_page ),
+			)
+		);
+	}
+
+	/**
+	 * Render lock warning if import is locked.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function render_lock_warning(): void {
+		$lock = new \MksDdn\MigrateContent\Support\ImportLock();
+		
+		if ( ! $lock->is_locked() ) {
+			return;
+		}
+
+		$lock_info = $lock->get_info();
+		if ( ! $lock_info ) {
+			return;
+		}
+
+		$age_minutes = round( $lock_info['age'] / 60, 1 );
+		$release_url = wp_nonce_url(
+			admin_url( 'admin-post.php?action=mksddn_mc_release_import_lock' ),
+			'mksddn_mc_release_lock'
+		);
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-small">%s</a></p></div>',
+			esc_html__( 'Import is currently locked', 'mksddn-migrate-content' ),
+			sprintf(
+				// translators: %s is the age of the lock in minutes.
+				esc_html__( 'An import operation appears to be running or was interrupted. Lock age: %s minutes.', 'mksddn-migrate-content' ),
+				esc_html( (string) $age_minutes )
+			),
+			esc_url( $release_url ),
+			esc_html__( 'Release Lock', 'mksddn-migrate-content' )
+		);
 	}
 }
 

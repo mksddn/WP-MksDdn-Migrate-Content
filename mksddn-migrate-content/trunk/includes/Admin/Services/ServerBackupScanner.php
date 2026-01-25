@@ -175,6 +175,11 @@ class ServerBackupScanner {
 	public function get_file( string $filename ): array|WP_Error {
 		$imports_dir = PluginConfig::imports_dir();
 
+		// Debug logging for troubleshooting.
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( 'MksDdn Migrate Content: get_file() called with filename: %s', $filename ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+
 		// Ensure directory exists, create if needed.
 		$ensure_error = $this->ensure_imports_dir();
 		if ( $ensure_error ) {
@@ -190,6 +195,11 @@ class ServerBackupScanner {
 		$safe_filename = basename( $filename );
 		$file_path = trailingslashit( $imports_dir ) . $safe_filename;
 
+		// Debug logging for troubleshooting.
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( 'MksDdn Migrate Content: get_file() checking path: %s (exists: %s)', $file_path, file_exists( $file_path ) ? 'yes' : 'no' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+
 		// Check if file exists before path validation.
 		if ( ! file_exists( $file_path ) ) {
 			return new WP_Error(
@@ -204,14 +214,16 @@ class ServerBackupScanner {
 		$real_path = realpath( $file_path );
 		$real_imports_dir = realpath( $imports_dir );
 
-		// Fallback: If realpath fails (e.g., on some Windows systems or permission issues),
+		// Fallback: If realpath fails (e.g., on macOS, Windows systems or permission issues),
 		// use normalized path. This is less secure but necessary for cross-platform compatibility.
 		// Note: This fallback should only be used when realpath fails but the path is known to be valid.
 		if ( ! $real_imports_dir && is_dir( $imports_dir ) ) {
 			$real_imports_dir = rtrim( str_replace( '\\', '/', $imports_dir ), '/' );
 		}
 
-		if ( ! $real_path && file_exists( $file_path ) ) {
+		// If realpath failed but file exists, use normalized path as fallback.
+		// This handles cases where realpath() returns false on macOS for valid files.
+		if ( ! $real_path && file_exists( $file_path ) && is_readable( $file_path ) ) {
 			$real_path = str_replace( '\\', '/', $file_path );
 		}
 
@@ -230,11 +242,18 @@ class ServerBackupScanner {
 		}
 
 		// Normalize paths for cross-platform compatibility.
-		$real_imports_dir_normalized = trailingslashit( str_replace( '\\', '/', $real_imports_dir ) );
+		// Ensure both paths use the same normalization method for reliable comparison.
+		$real_imports_dir_normalized = rtrim( str_replace( '\\', '/', $real_imports_dir ), '/' ) . '/';
 		$real_path_normalized = str_replace( '\\', '/', $real_path );
 
 		// Ensure the file path is within the imports directory.
+		// When using fallback paths, verify by checking if normalized path starts with imports dir.
+		// Use case-sensitive comparison as macOS file system is case-sensitive by default.
 		if ( strpos( $real_path_normalized, $real_imports_dir_normalized ) !== 0 ) {
+			// Debug logging for troubleshooting.
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( 'MksDdn Migrate Content: Path validation failed. File path: %s, Imports dir: %s', $real_path_normalized, $real_imports_dir_normalized ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )

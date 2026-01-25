@@ -188,7 +188,7 @@
 	 * @param {Object} config Global configuration.
 	 */
 	function autoInit(config) {
-		var forms = document.querySelectorAll('form[data-mksddn-full-import="true"], .mksddn-mc-card form');
+		var forms = document.querySelectorAll('form[data-mksddn-full-import="true"], form[data-mksddn-unified-import="true"]');
 		var defaultConfig = {
 			ajaxAction: config && config.ajaxAction ? config.ajaxAction : 'mksddn_mc_get_server_backups',
 			nonce: config && config.nonce ? config.nonce : '',

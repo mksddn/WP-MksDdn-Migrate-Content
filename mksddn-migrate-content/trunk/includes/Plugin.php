@@ -8,7 +8,6 @@
 namespace MksDdn\MigrateContent;
 
 use MksDdn\MigrateContent\Admin\AdminPageController;
-use MksDdn\MigrateContent\Automation\ScheduleManager;
 use MksDdn\MigrateContent\Chunking\ChunkRestController;
 use MksDdn\MigrateContent\Core\ServiceContainerFactory;
 
@@ -55,10 +54,6 @@ class Plugin {
 	 * @since 1.0.0
 	 */
 	public function boot(): void {
-		// Always load schedule manager (needed for cron).
-		$schedule_manager = $this->container->get( ScheduleManager::class );
-		$schedule_manager->register();
-
 		// Initialize chunk REST controller (needed for REST API routes).
 		$this->container->get( ChunkRestController::class );
 

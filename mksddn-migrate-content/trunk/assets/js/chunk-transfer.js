@@ -3,6 +3,7 @@
 	const settings = window.mksddnChunk || {};
 	let currentJobId = null;
 	let uploadInProgress = false;
+	let downloadInProgress = false;
 	const BYTES_KB = 1024;
 	const BYTES_MB = 1024 * 1024;
 	const BYTES_GB = 1024 * 1024 * 1024;
@@ -220,11 +221,14 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 5, settings.i18n.exportBusy );
 
 			const init = await initDownloadJob();
+			const jobId = init.job_id;
+			currentJobId = jobId;
+			downloadInProgress = true;
 			const totalChunks = init.total_chunks || 0;
 			const parts = [];
 
 			for ( let i = 0; i < totalChunks; i++ ) {
-				const { chunk } = await fetchDownloadChunk( init.job_id, i );
+				const { chunk } = await fetchDownloadChunk( jobId, i );
 				parts.push( base64ToUint8( chunk ) );
 
 					const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
@@ -253,11 +257,17 @@ function hideProgressLabel( delay = 0 ) {
 			alert( settings.i18n.downloadError );
 			setProgressLabel( 0, settings.i18n.downloadError );
 			hideProgressLabel( 2000 );
+			if ( currentJobId ) {
+				cancelChunkJob( currentJobId );
+			}
 			throw error;
+		} finally {
+			downloadInProgress = false;
+			currentJobId = null;
 		}
 	}
 	function attachFullImportHandler() {
-		const form = document.querySelector( '[data-mksddn-full-import]' );
+		const form = document.querySelector( '[data-mksddn-full-import], [data-mksddn-unified-import]' );
 		if ( ! form ) {
 			return;
 		}
@@ -266,13 +276,25 @@ function hideProgressLabel( delay = 0 ) {
 		const submitButton = form.querySelector( 'button[type="submit"]' );
 
 		form.addEventListener( 'submit', async ( event ) => {
+			// Skip chunked upload if server file is selected.
+			const serverRadio = form.querySelector( 'input[name="import_source"][value="server"]' );
+			if ( serverRadio && serverRadio.checked ) {
+				return;
+			}
+
 			if ( ! fileInput || ! fileInput.files || ! fileInput.files.length ) {
+				return;
+			}
+
+			const file = fileInput.files[ 0 ];
+			// Only use chunked upload for .wpbkp files (full site imports).
+			// JSON files are typically smaller and don't need chunking.
+			if ( ! file.name.toLowerCase().endsWith( '.wpbkp' ) ) {
 				return;
 			}
 
 			event.preventDefault();
 
-			const file = fileInput.files[ 0 ];
 			if ( submitButton ) {
 				submitButton.disabled = true;
 			}
@@ -362,7 +384,7 @@ function hideProgressLabel( delay = 0 ) {
 	}
 
 	window.addEventListener( 'beforeunload', () => {
-		if ( uploadInProgress && currentJobId ) {
+		if ( currentJobId && ( uploadInProgress || downloadInProgress ) ) {
 			cancelChunkJob( currentJobId, true );
 		}
 	} );

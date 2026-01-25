@@ -117,6 +117,22 @@
 	width: 100%;
 }
 
+.mksddn-mc-search-input {
+	width: 100%;
+	margin-bottom: 0.5rem;
+	padding: 6px 8px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.mksddn-mc-search-input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: 2px solid transparent;
+}
+
 /* Selection grid */
 .mksddn-mc-selection-grid {
 	display: grid;
@@ -126,62 +142,6 @@
 
 .mksddn-mc-selection-grid select {
 	min-height: 140px;
-}
-
-/* History table */
-.mksddn-mc-history table {
-	width: 100%;
-	border-collapse: collapse;
-	margin-top: 1rem;
-}
-
-.mksddn-mc-history table th,
-.mksddn-mc-history table td {
-	padding: .5rem .75rem;
-	border-bottom: 1px solid #e5e7eb;
-	text-align: left;
-	font-size: 13px;
-}
-
-.mksddn-mc-history table th {
-	background: #f9fafb;
-	font-weight: 600;
-	color: #111827;
-}
-
-/* Badge styles */
-.mksddn-mc-badge {
-	display: inline-flex;
-	align-items: center;
-	padding: 0.1rem 0.55rem;
-	border-radius: 999px;
-	font-size: 12px;
-	line-height: 1.4;
-}
-
-.mksddn-mc-badge--success {
-	background: #e6f4ea;
-	color: #1f7a3f;
-}
-
-.mksddn-mc-badge--error {
-	background: #fdecea;
-	color: #b42318;
-}
-
-.mksddn-mc-badge--running {
-	background: #e0ecff;
-	color: #1d4ed8;
-}
-
-/* History actions */
-.mksddn-mc-history__actions form {
-	display: inline-block;
-	margin-right: .5rem;
-}
-
-.mksddn-mc-history__actions button {
-	margin-top: 0;
 }
 
 /* User table */

@@ -25,34 +25,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 				foreach ( $exportable_types as $type => $label ) : ?>
 					<?php
 					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
-					$items = $items_by_type[ $type ] ?? array();
-					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
-					$size = max( 4, min( count( $items ), 12 ) );
-					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					$name = 'selected_' . $type . '_ids[]';
 					?>
 					<div class="mksddn-mc-basic-selection">
 						<label for="selected_<?php echo esc_attr( $type ); ?>_ids">
-							<?php
-							/* translators: %s type label */
-							echo esc_html( sprintf( __( '%s entries', 'mksddn-migrate-content' ), $label ) );
-							?>
+							<?php echo esc_html( $label ); ?>
 						</label>
-						<select id="selected_<?php echo esc_attr( $type ); ?>_ids" name="<?php echo esc_attr( $name ); ?>" multiple size="<?php echo esc_attr( $size ); ?>">
-							<?php if ( empty( $items ) ) : ?>
-								<option value="" disabled><?php esc_html_e( 'No entries found', 'mksddn-migrate-content' ); ?></option>
-							<?php else : ?>
-								<?php
-								// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variable.
-								foreach ( $items as $item ) : ?>
-									<?php
-									// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
-									$label_text = $item->post_title ?: ( '#' . $item->ID );
-									?>
-									<option value="<?php echo esc_attr( $item->ID ); ?>"><?php echo esc_html( $label_text ); ?></option>
-								<?php endforeach; ?>
-							<?php endif; ?>
+						<input 
+							type="search" 
+							class="mksddn-mc-search-input" 
+							data-post-type="<?php echo esc_attr( $type ); ?>"
+							data-target="selected_<?php echo esc_attr( $type ); ?>_ids"
+							placeholder="<?php esc_attr_e( 'Search...', 'mksddn-migrate-content' ); ?>"
+							aria-label="<?php esc_attr_e( 'Search entries', 'mksddn-migrate-content' ); ?>"
+						>
+						<select id="selected_<?php echo esc_attr( $type ); ?>_ids" multiple size="12" data-post-type="<?php echo esc_attr( $type ); ?>">
+							<option value="" disabled><?php esc_html_e( 'Start typing to search...', 'mksddn-migrate-content' ); ?></option>
 						</select>
+						<input 
+							type="hidden" 
+							name="<?php echo esc_attr( $name ); ?>" 
+							class="mksddn-mc-selected-ids" 
+							data-post-type="<?php echo esc_attr( $type ); ?>"
+							value=""
+						>
 					</div>
 				<?php endforeach; ?>
 			</div>
