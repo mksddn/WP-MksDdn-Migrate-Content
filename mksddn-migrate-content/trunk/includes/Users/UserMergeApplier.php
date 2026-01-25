@@ -395,6 +395,13 @@ class UserMergeApplier implements UserMergeApplierInterface {
 			$normalized = $this->normalize_meta_key( $key, $remote_prefix, $local_prefix );
 			$value      = maybe_unserialize( $row['meta_value'] ?? '' );
 
+			// Skip incomplete objects (classes not loaded) to avoid fatal errors.
+			// WordPress plugins may serialize objects that aren't available on target site.
+			// Check recursively for incomplete objects in arrays/objects.
+			if ( $this->contains_incomplete_object( $value ) ) {
+				continue;
+			}
+
 			update_user_meta( $user_id, $normalized, $value );
 		}
 	}
@@ -413,6 +420,45 @@ class UserMergeApplier implements UserMergeApplierInterface {
 		}
 
 		return $key;
+	}
+
+	/**
+	 * Recursively check if value contains incomplete objects.
+	 *
+	 * @param mixed $value Value to check.
+	 * @return bool True if contains incomplete object, false otherwise.
+	 */
+	private function contains_incomplete_object( $value ): bool {
+		if ( $value instanceof \__PHP_Incomplete_Class ) {
+			return true;
+		}
+
+		if ( is_array( $value ) ) {
+			foreach ( $value as $item ) {
+				if ( $this->contains_incomplete_object( $item ) ) {
+					return true;
+				}
+			}
+		}
+
+		if ( is_object( $value ) && ! ( $value instanceof \__PHP_Incomplete_Class ) ) {
+			// Check object properties recursively.
+			// Convert object to array to safely access properties.
+			// This prevents errors when accessing properties of incomplete objects.
+			try {
+				$properties = (array) $value;
+				foreach ( $properties as $prop_value ) {
+					if ( $this->contains_incomplete_object( $prop_value ) ) {
+						return true;
+					}
+				}
+			} catch ( \Error $e ) {
+				// If we can't access object properties, assume it contains incomplete objects.
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
