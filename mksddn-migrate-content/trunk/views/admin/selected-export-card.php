@@ -29,10 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					?>
 					<div class="mksddn-mc-basic-selection">
 						<label for="selected_<?php echo esc_attr( $type ); ?>_ids">
-							<?php
-							/* translators: %s type label */
-							echo esc_html( sprintf( __( '%s entries', 'mksddn-migrate-content' ), $label ) );
-							?>
+							<?php echo esc_html( $label ); ?>
 						</label>
 						<input 
 							type="search" 
