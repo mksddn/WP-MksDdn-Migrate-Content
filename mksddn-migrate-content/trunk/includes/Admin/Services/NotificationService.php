@@ -31,15 +31,7 @@ class NotificationService implements NotificationServiceInterface {
 	 */
 	public function show_success( string $message ): void {
 		echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
-		
-		// Only add inline script if not in admin-post.php context.
-		$is_admin_post = defined( 'DOING_ADMIN_POST' ) || ( isset( $_SERVER['REQUEST_URI'] ) && strpos( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), 'admin-post.php' ) !== false );
-		if ( ! $is_admin_post ) {
-			wp_add_inline_script(
-				'mksddn-mc-admin-scripts',
-				'if(window.mksddnMcProgress && window.mksddnMcProgress.hide){window.mksddnMcProgress.hide();}'
-			);
-		}
+		$this->hide_progress_if_needed();
 	}
 
 	/**
@@ -59,15 +51,7 @@ class NotificationService implements NotificationServiceInterface {
 			'<div class="notice notice-success is-dismissible"><p><strong>%s</strong></p></div>',
 			esc_html( $message )
 		);
-
-		// Only add inline script if not in admin-post.php context.
-		$is_admin_post = defined( 'DOING_ADMIN_POST' ) || ( isset( $_SERVER['REQUEST_URI'] ) && strpos( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), 'admin-post.php' ) !== false );
-		if ( ! $is_admin_post ) {
-			wp_add_inline_script(
-				'mksddn-mc-admin-scripts',
-				'if(window.mksddnMcProgress && window.mksddnMcProgress.hide){window.mksddnMcProgress.hide();}'
-			);
-		}
+		$this->hide_progress_if_needed();
 	}
 
 	/**
@@ -79,9 +63,20 @@ class NotificationService implements NotificationServiceInterface {
 	 */
 	public function show_error( string $message ): void {
 		echo '<div class="error"><p>' . esc_html( $message ) . '</p></div>';
+		$this->hide_progress_if_needed();
+	}
+
+	/**
+	 * Hide progress bar if not in admin-post.php context.
+	 *
+	 * @return void
+	 * @since 2.0.0
+	 */
+	private function hide_progress_if_needed(): void {
+		$is_admin_post = defined( 'DOING_ADMIN_POST' ) || 
+			( isset( $_SERVER['REQUEST_URI'] ) && 
+			  strpos( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), 'admin-post.php' ) !== false );
 		
-		// Only add inline script if not in admin-post.php context.
-		$is_admin_post = defined( 'DOING_ADMIN_POST' ) || ( isset( $_SERVER['REQUEST_URI'] ) && strpos( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), 'admin-post.php' ) !== false );
 		if ( ! $is_admin_post ) {
 			wp_add_inline_script(
 				'mksddn-mc-admin-scripts',

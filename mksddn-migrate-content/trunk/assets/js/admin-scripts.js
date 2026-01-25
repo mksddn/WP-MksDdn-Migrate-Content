@@ -168,20 +168,38 @@
 									option.textContent = window.mksddnMcSearch.i18n.noResults;
 									select.appendChild(option);
 								}
-							} else {
-								select.innerHTML = '<option value="" disabled>' + (response.data && response.data.message ? response.data.message : window.mksddnMcSearch.i18n.error) + '</option>';
-							}
-						} catch (e) {
-							console.error('Error parsing AJAX response:', e);
-							select.innerHTML = '<option value="" disabled>' + window.mksddnMcSearch.i18n.error + '</option>';
-						}
 					} else {
-						select.innerHTML = '<option value="" disabled>' + window.mksddnMcSearch.i18n.error + '</option>';
+						const errorMessage = response.data && response.data.message ? response.data.message : window.mksddnMcSearch.i18n.error;
+						console.error('MksDdn Migrate Content: AJAX request returned error', {
+							status: currentRequest.status,
+							response: response
+						});
+						select.innerHTML = '<option value="" disabled>' + errorMessage + '</option>';
 					}
+				} catch (e) {
+					console.error('MksDdn Migrate Content: Error parsing AJAX response', {
+						error: e,
+						responseText: currentRequest.responseText,
+						status: currentRequest.status
+					});
+					select.innerHTML = '<option value="" disabled>' + window.mksddnMcSearch.i18n.error + '</option>';
+				}
+			} else {
+				console.error('MksDdn Migrate Content: AJAX request failed with status', {
+					status: currentRequest.status,
+					statusText: currentRequest.statusText
+				});
+				select.innerHTML = '<option value="" disabled>' + window.mksddnMcSearch.i18n.error + '</option>';
+			}
 					currentRequest = null;
 				};
 
 				currentRequest.onerror = function() {
+					console.error('MksDdn Migrate Content: AJAX request failed', {
+						status: currentRequest.status,
+						statusText: currentRequest.statusText,
+						url: window.mksddnMcSearch.ajaxUrl
+					});
 					select.innerHTML = '<option value="" disabled>' + window.mksddnMcSearch.i18n.error + '</option>';
 					currentRequest = null;
 				};

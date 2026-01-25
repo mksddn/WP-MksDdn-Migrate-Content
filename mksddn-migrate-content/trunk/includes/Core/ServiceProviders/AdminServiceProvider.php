@@ -15,11 +15,13 @@ use MksDdn\MigrateContent\Admin\Handlers\UserMergeRequestHandler;
 use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportFileValidator;
 use MksDdn\MigrateContent\Admin\Services\ImportPayloadPreparer;
+use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Services\ResponseHandler;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Admin\Services\UnifiedImportOrchestrator;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
@@ -157,11 +159,32 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
+			ImportTypeDetector::class,
+			function ( ServiceContainer $container ) {
+				return new ImportTypeDetector();
+			}
+		);
+
+		$container->register(
+			UnifiedImportOrchestrator::class,
+			function ( ServiceContainer $container ) {
+				return new UnifiedImportOrchestrator(
+					$container->get( SelectedContentImportService::class ),
+					$container->get( FullSiteImportService::class ),
+					$container->get( ImportTypeDetector::class ),
+					$container->get( ServerBackupScanner::class )
+				);
+			}
+		);
+
+		$container->register(
 			ImportRequestHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ImportRequestHandler(
 					$container->get( SelectedContentImportService::class ),
-					$container->get( FullSiteImportService::class )
+					$container->get( FullSiteImportService::class ),
+					$container->get( ImportTypeDetector::class ),
+					$container->get( UnifiedImportOrchestrator::class )
 				);
 			}
 		);

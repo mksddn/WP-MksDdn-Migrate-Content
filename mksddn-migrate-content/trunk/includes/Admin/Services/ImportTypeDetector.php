@@ -81,72 +81,67 @@ class ImportTypeDetector {
 			return new WP_Error( 'mksddn_mc_zip_open', __( 'Unable to open archive.', 'mksddn-migrate-content' ) );
 		}
 
-		// Check if manifest.json exists.
-		$manifest_raw = $zip->getFromName( 'manifest.json' );
-		if ( false === $manifest_raw ) {
-			$zip->close();
-			return new WP_Error( 'mksddn_mc_missing_manifest', __( 'Archive is missing manifest.json.', 'mksddn-migrate-content' ) );
-		}
+		try {
+			// Check if manifest.json exists.
+			$manifest_raw = $zip->getFromName( 'manifest.json' );
+			if ( false === $manifest_raw ) {
+				return new WP_Error( 'mksddn_mc_missing_manifest', __( 'Archive is missing manifest.json.', 'mksddn-migrate-content' ) );
+			}
 
-		$manifest = json_decode( $manifest_raw, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $manifest ) ) {
-			$zip->close();
-			return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid manifest in archive.', 'mksddn-migrate-content' ) );
-		}
+			$manifest = json_decode( $manifest_raw, true );
+			if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $manifest ) ) {
+				return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid manifest in archive.', 'mksddn-migrate-content' ) );
+			}
 
-		// Check manifest type first.
-		$manifest_type = sanitize_key( $manifest['type'] ?? '' );
-		if ( 'full' === $manifest_type ) {
-			$zip->close();
-			return 'full';
-		}
-
-		// Check if payload/content.json exists and contains database data.
-		$payload_stat = $zip->statName( 'payload/content.json' );
-		if ( false === $payload_stat ) {
-			$zip->close();
-			// No payload/content.json means it's selected content import.
-			return 'selected';
-		}
-
-		// Read a small portion of payload to check for database structure.
-		// Read first 2048 bytes to get enough data for detection.
-		$payload_sample = $zip->getFromName( 'payload/content.json', 0, 2048 );
-
-		if ( false === $payload_sample ) {
-			$zip->close();
-			return 'selected';
-		}
-
-		// Check if payload contains database structure (full site import).
-		$payload_data = json_decode( $payload_sample, true );
-		if ( JSON_ERROR_NONE === json_last_error() && is_array( $payload_data ) ) {
-			// Full site archives have 'database' key with 'tables' array.
-			if ( isset( $payload_data['database'] ) && is_array( $payload_data['database'] ) ) {
-				$zip->close();
+			// Check manifest type first.
+			$manifest_type = sanitize_key( $manifest['type'] ?? '' );
+			if ( 'full' === $manifest_type ) {
 				return 'full';
 			}
-		}
 
-		// Check for database-related directories/files in archive.
-		$db_indicators = array( 'database/', 'options/', 'filesystem/' );
-		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
-			$filename = $zip->getNameIndex( $i );
-			if ( false === $filename ) {
-				continue;
+			// Check if payload/content.json exists and contains database data.
+			$payload_stat = $zip->statName( 'payload/content.json' );
+			if ( false === $payload_stat ) {
+				// No payload/content.json means it's selected content import.
+				return 'selected';
 			}
 
-			foreach ( $db_indicators as $indicator ) {
-				if ( 0 === strpos( $filename, $indicator ) ) {
-					$zip->close();
+			// Read a small portion of payload to check for database structure.
+			// Read first 2048 bytes to get enough data for detection.
+			$payload_sample = $zip->getFromName( 'payload/content.json', 0, 2048 );
+
+			if ( false === $payload_sample ) {
+				return 'selected';
+			}
+
+			// Check if payload contains database structure (full site import).
+			$payload_data = json_decode( $payload_sample, true );
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $payload_data ) ) {
+				// Full site archives have 'database' key with 'tables' array.
+				if ( isset( $payload_data['database'] ) && is_array( $payload_data['database'] ) ) {
 					return 'full';
 				}
 			}
+
+			// Check for database-related directories/files in archive.
+			$db_indicators = array( 'database/', 'options/', 'filesystem/' );
+			for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+				$filename = $zip->getNameIndex( $i );
+				if ( false === $filename ) {
+					continue;
+				}
+
+				foreach ( $db_indicators as $indicator ) {
+					if ( 0 === strpos( $filename, $indicator ) ) {
+						return 'full';
+					}
+				}
+			}
+
+			// Default to selected content import.
+			return 'selected';
+		} finally {
+			$zip->close();
 		}
-
-		$zip->close();
-
-		// Default to selected content import.
-		return 'selected';
 	}
 }

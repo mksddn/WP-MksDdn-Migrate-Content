@@ -24,14 +24,21 @@ class ImportLock {
 	 *
 	 * @var string
 	 */
-	private string $key = 'mksddn_mc_import_lock';
+	private const LOCK_KEY = 'mksddn_mc_import_lock';
 
 	/**
 	 * Maximum lock age before considering it stale (in seconds).
 	 *
 	 * @var int
 	 */
-	private int $max_lock_age = 3600; // 1 hour
+	private const MAX_LOCK_AGE = 3600; // 1 hour
+
+	/**
+	 * Default lock time-to-live (in seconds).
+	 *
+	 * @var int
+	 */
+	private const DEFAULT_TTL = 1800; // 30 minutes
 
 	/**
 	 * Acquire lock.
@@ -40,8 +47,8 @@ class ImportLock {
 	 * @return string|false Lock token or false if already locked.
 	 * @since 1.0.0
 	 */
-	public function acquire( int $ttl = 1800 ): string|false {
-		$current = get_transient( $this->key );
+	public function acquire( int $ttl = self::DEFAULT_TTL ): string|false {
+		$current = get_transient( self::LOCK_KEY );
 		
 		// Check if lock exists and is still valid.
 		if ( is_array( $current ) && ! empty( $current['token'] ) ) {
@@ -49,10 +56,12 @@ class ImportLock {
 			$lock_time = isset( $current['created_at'] ) ? (int) $current['created_at'] : 0;
 			$age = time() - $lock_time;
 			
-			if ( $lock_time > 0 && $age > $this->max_lock_age ) {
+			if ( $lock_time > 0 && $age > self::MAX_LOCK_AGE ) {
 				// Lock is stale, log and clear it.
-				error_log( sprintf( 'MksDdn Migrate: Clearing stale import lock (age: %d seconds)', $age ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				delete_transient( $this->key );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( sprintf( 'MksDdn Migrate: Clearing stale import lock (age: %d seconds)', $age ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
+				delete_transient( self::LOCK_KEY );
 			} else {
 				// Lock is still valid.
 				return false;
@@ -61,7 +70,7 @@ class ImportLock {
 
 		$token = function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : uniqid( 'mksddn_mc_', true );
 		set_transient( 
-			$this->key, 
+			self::LOCK_KEY, 
 			array( 
 				'token'     => $token,
 				'created_at' => time(),
@@ -80,7 +89,7 @@ class ImportLock {
 	 * @since 1.0.0
 	 */
 	public function release( string $token ): void {
-		$current = get_transient( $this->key );
+		$current = get_transient( self::LOCK_KEY );
 		if ( ! is_array( $current ) ) {
 			return;
 		}
@@ -89,11 +98,15 @@ class ImportLock {
 			return;
 		}
 
-		delete_transient( $this->key );
+		delete_transient( self::LOCK_KEY );
 	}
 
 	/**
 	 * Force release lock (admin only).
+	 *
+	 * Note: This method checks capabilities, but it's expected to be called
+	 * from contexts where capabilities are already verified (e.g., AdminPageController).
+	 * This serves as an additional safety check.
 	 *
 	 * @return bool True if lock was released, false otherwise.
 	 * @since 1.0.0
@@ -103,12 +116,12 @@ class ImportLock {
 			return false;
 		}
 
-		$current = get_transient( $this->key );
+		$current = get_transient( self::LOCK_KEY );
 		if ( ! is_array( $current ) || empty( $current['token'] ) ) {
 			return false;
 		}
 
-		delete_transient( $this->key );
+		delete_transient( self::LOCK_KEY );
 		return true;
 	}
 
@@ -119,7 +132,7 @@ class ImportLock {
 	 * @since 1.0.0
 	 */
 	public function is_locked(): bool {
-		$current = get_transient( $this->key );
+		$current = get_transient( self::LOCK_KEY );
 		if ( ! is_array( $current ) || empty( $current['token'] ) ) {
 			return false;
 		}
@@ -128,9 +141,9 @@ class ImportLock {
 		$lock_time = isset( $current['created_at'] ) ? (int) $current['created_at'] : 0;
 		$age = time() - $lock_time;
 		
-		if ( $lock_time > 0 && $age > $this->max_lock_age ) {
+		if ( $lock_time > 0 && $age > self::MAX_LOCK_AGE ) {
 			// Lock is stale, clear it.
-			delete_transient( $this->key );
+			delete_transient( self::LOCK_KEY );
 			return false;
 		}
 
@@ -144,7 +157,7 @@ class ImportLock {
 	 * @since 1.0.0
 	 */
 	public function get_info(): ?array {
-		$current = get_transient( $this->key );
+		$current = get_transient( self::LOCK_KEY );
 		if ( ! is_array( $current ) || empty( $current['token'] ) ) {
 			return null;
 		}
@@ -156,7 +169,7 @@ class ImportLock {
 			'token'     => $current['token'] ?? '',
 			'created_at' => $lock_time,
 			'age'       => $age,
-			'is_stale'  => $age > $this->max_lock_age,
+			'is_stale'  => $age > self::MAX_LOCK_AGE,
 		);
 	}
 }

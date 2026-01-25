@@ -88,43 +88,6 @@ class AdminPageView {
 	}
 
 	/**
-	 * Render full site section.
-	 *
-	 * @param array|null $pending_user_preview Pending user preview data.
-	 * @return void
-	 * @since 1.0.0
-	 * @deprecated Use render_export_sections() or render_import_sections() instead.
-	 */
-	public function render_full_site_section( ?array $pending_user_preview = null ): void {
-		$this->renderer->render( 'admin/full-site-section.php', array( 'pending_user_preview' => $pending_user_preview ) );
-	}
-
-	/**
-	 * Render selected content section.
-	 *
-	 * @return void
-	 * @since 1.0.0
-	 * @deprecated Use render_export_sections() or render_import_sections() instead.
-	 */
-	public function render_selected_content_section(): void {
-		$exportable_types = $this->get_exportable_post_types();
-		$items_by_type    = array();
-
-		foreach ( $exportable_types as $type => $label ) {
-			$items_by_type[ $type ] = $this->get_items_for_type( $type );
-		}
-
-		$this->renderer->render(
-			'admin/selected-content-section.php',
-			array(
-				'exportable_types' => $exportable_types,
-				'items_by_type'    => $items_by_type,
-			)
-		);
-	}
-
-
-	/**
 	 * Get exportable post types.
 	 *
 	 * @return array
@@ -162,19 +125,31 @@ class AdminPageView {
 	 * @since 1.0.0
 	 */
 	private function get_items_for_type( string $type ): array {
-		if ( 'page' === $type ) {
-			return get_pages();
+		$cache_key = 'mksddn_mc_export_items_' . $type;
+		$cached = wp_cache_get( $cache_key );
+
+		if ( false !== $cached ) {
+			return $cached;
 		}
 
-		return get_posts(
-			array(
-				'post_type'      => $type,
-				'posts_per_page' => 100,
-				'post_status'    => 'publish',
-				'orderby'        => 'title',
-				'order'          => 'ASC',
-			)
-		);
+		if ( 'page' === $type ) {
+			$items = get_pages();
+		} else {
+			$items = get_posts(
+				array(
+					'post_type'      => $type,
+					'posts_per_page' => 100,
+					'post_status'    => 'publish',
+					'orderby'        => 'title',
+					'order'          => 'ASC',
+				)
+			);
+		}
+
+		// Cache for 5 minutes.
+		wp_cache_set( $cache_key, $items, '', 300 );
+
+		return $items;
 	}
 
 
