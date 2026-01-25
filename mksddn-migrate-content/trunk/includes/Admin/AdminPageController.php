@@ -116,6 +116,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_export_selected', array( $this->export_handler, 'handle_selected_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this->export_handler, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
+		add_action( 'admin_post_mksddn_mc_unified_import', array( $this->import_handler, 'handle_unified_import' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 	}
@@ -211,8 +212,6 @@ class AdminPageController {
 
 		$this->view->render_styles();
 		$this->view->render_import_sections( $pending_user_preview );
-
-		$this->import_handler->handle_selected_import();
 
 		echo '</div>';
 		$this->progress->render_javascript();

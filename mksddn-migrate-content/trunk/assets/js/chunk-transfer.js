@@ -257,7 +257,7 @@ function hideProgressLabel( delay = 0 ) {
 		}
 	}
 	function attachFullImportHandler() {
-		const form = document.querySelector( '[data-mksddn-full-import]' );
+		const form = document.querySelector( '[data-mksddn-full-import], [data-mksddn-unified-import]' );
 		if ( ! form ) {
 			return;
 		}
@@ -266,13 +266,25 @@ function hideProgressLabel( delay = 0 ) {
 		const submitButton = form.querySelector( 'button[type="submit"]' );
 
 		form.addEventListener( 'submit', async ( event ) => {
+			// Skip chunked upload if server file is selected.
+			const serverRadio = form.querySelector( 'input[name="import_source"][value="server"]' );
+			if ( serverRadio && serverRadio.checked ) {
+				return;
+			}
+
 			if ( ! fileInput || ! fileInput.files || ! fileInput.files.length ) {
+				return;
+			}
+
+			const file = fileInput.files[ 0 ];
+			// Only use chunked upload for .wpbkp files (full site imports).
+			// JSON files are typically smaller and don't need chunking.
+			if ( ! file.name.toLowerCase().endsWith( '.wpbkp' ) ) {
 				return;
 			}
 
 			event.preventDefault();
 
-			const file = fileInput.files[ 0 ];
 			if ( submitButton ) {
 				submitButton.disabled = true;
 			}

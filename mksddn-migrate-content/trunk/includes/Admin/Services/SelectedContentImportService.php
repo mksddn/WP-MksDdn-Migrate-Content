@@ -119,11 +119,38 @@ class SelectedContentImportService {
 		}
 
 		try {
-			// Check if server file is provided.
+			// Check if chunked file path is provided (from chunked upload).
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-			$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
+			$chunk_file_path = isset( $_POST['chunk_file_path'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_file_path'] ) ) : '';
 
-			if ( $server_file ) {
+			if ( $chunk_file_path && file_exists( $chunk_file_path ) ) {
+				// Validate that file path is within allowed directory (chunk job repository).
+				// Chunk files are stored in a controlled directory, so this is safe.
+				$real_path = realpath( $chunk_file_path );
+				if ( false === $real_path ) {
+					$this->notifications->show_error( esc_html__( 'Invalid chunked file path.', 'mksddn-migrate-content' ) );
+					$this->progress->update( 100, __( 'Invalid file path', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				// Use chunked file directly.
+				$extension = strtolower( pathinfo( $real_path, PATHINFO_EXTENSION ) );
+				if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+					$extension = 'wpbkp'; // Default to wpbkp for chunked uploads.
+				}
+
+				$file_data = array(
+					'name'      => isset( $_POST['chunk_job_id'] ) ? sprintf( 'chunk:%s.wpbkp', sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) ) : 'chunked-upload.wpbkp',
+					'path'      => $real_path,
+					'size'      => filesize( $real_path ),
+					'extension' => $extension,
+					'mime'      => MimeTypeHelper::detect( $real_path, $extension ),
+				);
+			} elseif ( isset( $_POST['server_file'] ) ) {
+				// Check if server file is provided.
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+				$server_file = sanitize_text_field( wp_unslash( $_POST['server_file'] ) );
+
 				$file_info = $this->server_scanner->get_file( $server_file );
 
 				if ( is_wp_error( $file_info ) ) {

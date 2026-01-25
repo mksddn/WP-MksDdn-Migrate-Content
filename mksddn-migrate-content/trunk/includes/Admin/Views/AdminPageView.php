@@ -77,15 +77,14 @@ class AdminPageView {
 	}
 
 	/**
-	 * Render import sections (Full Site and Selected Content import).
+	 * Render import sections (unified import form).
 	 *
 	 * @param array|null $pending_user_preview Pending user preview data.
 	 * @return void
 	 * @since 1.0.0
 	 */
 	public function render_import_sections( ?array $pending_user_preview = null ): void {
-		$this->renderer->render( 'admin/full-site-import-section.php', array( 'pending_user_preview' => $pending_user_preview ) );
-		$this->renderer->render( 'admin/selected-content-import-section.php' );
+		$this->renderer->render( 'admin/unified-import-form.php', array( 'pending_user_preview' => $pending_user_preview ) );
 	}
 
 	/**
