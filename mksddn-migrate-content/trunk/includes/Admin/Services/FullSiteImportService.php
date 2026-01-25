@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Filesystem\FullContentImporter;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ImportLock;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
@@ -211,6 +212,13 @@ class FullSiteImportService {
 
 		$this->log( sprintf( 'Starting import of file: %s', $original_name ) );
 
+		$lock       = new ImportLock();
+		$lock_token = $lock->acquire();
+		if ( ! $lock_token ) {
+			$this->response_handler->redirect_with_status( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
 		$status  = 'success';
 		$message = null;
 		$site_guard = new SiteUrlGuard();
@@ -233,6 +241,7 @@ class FullSiteImportService {
 		} finally {
 			$site_guard->restore();
 			$this->cleanup( $temp, $cleanup, $job );
+			$lock->release( $lock_token );
 		}
 
 		if ( 'error' === $status ) {

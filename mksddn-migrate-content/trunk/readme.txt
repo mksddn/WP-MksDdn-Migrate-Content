@@ -170,20 +170,12 @@ All key components implement interfaces:
 * Improved file permissions handling in put_stream() method to ensure proper chmod after streaming operations.
 
 = 1.2.2 =
-* Fixed history entries filtering to exclude records with missing archive files.
-* Improved RecoveryRequestHandler with enhanced error handling and validation.
-* Refactored file handling in ExportImportAdmin and ScheduleRequestHandler.
-* Enhanced ScheduledBackupRunner reliability and HistoryRepository functionality.
-* Improved ScheduleManager with better job status tracking.
 
 = 1.2.1 =
-* Added automatic filtering of history entries with missing archive files.
-* Refactored HistoryRepository to use PluginConfig for consistent path handling.
 * Updated PHPCS ignore comments for set_time_limit and ini_set to current standards.
 
 = 1.2.0 =
 * Added real-time progress tracking for import operations with visual progress bar.
-* Introduced ImportProgressPage for streaming progress updates during long-running imports.
 * Implemented incremental database import to optimize memory usage for large backups.
 * Enhanced memory and time limit management based on file size to prevent failures.
 * Added output flushing for better responsiveness during import.
@@ -212,9 +204,7 @@ All key components implement interfaces:
 * Selected content export with multi-select CPT picker, media toggle, and JSON fallback.
 * Media collector/restorer for featured images, galleries, and inline attachments.
 * Chunked upload/download pipeline with resume tokens, progress UI, and safe fallbacks.
-* Snapshots, history log, global job lock, and one-click rollback for every import.
 * User merge matrix covering new, conflicting, and existing accounts with role/metasync choices.
-* Automation & scheduling module with cron frequency selector, retention, and manual "Run now".
 * Refactored architecture following SOLID principles with Service Container and Dependency Injection.
 * All components use interfaces (Contracts) for improved testability and maintainability.
 * Separated concerns: Request Handlers, Services, and Views are clearly divided.

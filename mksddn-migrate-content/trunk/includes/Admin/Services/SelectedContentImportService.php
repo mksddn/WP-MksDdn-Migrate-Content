@@ -11,6 +11,7 @@ namespace MksDdn\MigrateContent\Admin\Services;
 use MksDdn\MigrateContent\Archive\Extractor;
 use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Support\ImportLock;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -109,9 +110,18 @@ class SelectedContentImportService {
 			return;
 		}
 
-		// Check if server file is provided.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-		$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
+		$lock       = new ImportLock();
+		$lock_token = $lock->acquire();
+		if ( ! $lock_token ) {
+			$this->notifications->show_error( esc_html__( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+			$this->progress->update( 100, __( 'Import is already running', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		try {
+			// Check if server file is provided.
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+			$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
 
 			if ( $server_file ) {
 				$file_info = $this->server_scanner->get_file( $server_file );
@@ -188,13 +198,16 @@ class SelectedContentImportService {
 
 			$import_result = $this->process_import( $import_handler, $payload_type, $payload );
 
-		if ( $import_result ) {
-			$this->progress->update( 100, __( 'Completed', 'mksddn-migrate-content' ) );
-			// translators: %s is imported item type.
-			$this->notifications->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
-		} else {
-			$this->progress->update( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
-			$this->notifications->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
+			if ( $import_result ) {
+				$this->progress->update( 100, __( 'Completed', 'mksddn-migrate-content' ) );
+				// translators: %s is imported item type.
+				$this->notifications->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
+			} else {
+				$this->progress->update( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
+				$this->notifications->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
+			}
+		} finally {
+			$lock->release( $lock_token );
 		}
 	}
 
