@@ -3,6 +3,7 @@
 	const settings = window.mksddnChunk || {};
 	let currentJobId = null;
 	let uploadInProgress = false;
+	let downloadInProgress = false;
 	const BYTES_KB = 1024;
 	const BYTES_MB = 1024 * 1024;
 	const BYTES_GB = 1024 * 1024 * 1024;
@@ -220,11 +221,14 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 5, settings.i18n.exportBusy );
 
 			const init = await initDownloadJob();
+			const jobId = init.job_id;
+			currentJobId = jobId;
+			downloadInProgress = true;
 			const totalChunks = init.total_chunks || 0;
 			const parts = [];
 
 			for ( let i = 0; i < totalChunks; i++ ) {
-				const { chunk } = await fetchDownloadChunk( init.job_id, i );
+				const { chunk } = await fetchDownloadChunk( jobId, i );
 				parts.push( base64ToUint8( chunk ) );
 
 					const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
@@ -253,7 +257,13 @@ function hideProgressLabel( delay = 0 ) {
 			alert( settings.i18n.downloadError );
 			setProgressLabel( 0, settings.i18n.downloadError );
 			hideProgressLabel( 2000 );
+			if ( currentJobId ) {
+				cancelChunkJob( currentJobId );
+			}
 			throw error;
+		} finally {
+			downloadInProgress = false;
+			currentJobId = null;
 		}
 	}
 	function attachFullImportHandler() {
@@ -374,7 +384,7 @@ function hideProgressLabel( delay = 0 ) {
 	}
 
 	window.addEventListener( 'beforeunload', () => {
-		if ( uploadInProgress && currentJobId ) {
+		if ( currentJobId && ( uploadInProgress || downloadInProgress ) ) {
 			cancelChunkJob( currentJobId, true );
 		}
 	} );
