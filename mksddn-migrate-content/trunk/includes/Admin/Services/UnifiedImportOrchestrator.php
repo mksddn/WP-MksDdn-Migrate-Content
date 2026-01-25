@@ -84,6 +84,20 @@ class UnifiedImportOrchestrator {
 	 * @since 2.0.0
 	 */
 	public function process( array $request_data ): void {
+		// Verify nonce for form data processing.
+		// Check for unified import nonce first, then fallback to other nonces.
+		$nonce_verified = false;
+		if ( isset( $_REQUEST['_wpnonce'] ) ) {
+			$nonce = sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) );
+			$nonce_verified = wp_verify_nonce( $nonce, 'mksddn_mc_unified_import' )
+				|| wp_verify_nonce( $nonce, 'mksddn_mc_full_import' )
+				|| wp_verify_nonce( $nonce, 'import_single_page_nonce' );
+		}
+
+		if ( ! $nonce_verified ) {
+			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
+		}
+
 		// Resolve file source.
 		$file_info = $this->resolve_file_source( $request_data );
 
@@ -187,15 +201,18 @@ class UnifiedImportOrchestrator {
 	 * @since 2.0.0
 	 */
 	private function resolve_uploaded_file(): array|WP_Error {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
 		if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
 			return new WP_Error( 'mksddn_mc_upload_failed', __( 'Failed to upload file.', 'mksddn-migrate-content' ) );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
 		$tmp_name = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( wp_unslash( $_FILES['import_file']['tmp_name'] ) ) : '';
 		if ( ! $tmp_name || ! is_uploaded_file( $tmp_name ) ) {
 			return new WP_Error( 'mksddn_mc_upload_security', __( 'File upload security check failed.', 'mksddn-migrate-content' ) );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
 		$name      = isset( $_FILES['import_file']['name'] ) ? sanitize_file_name( wp_unslash( (string) $_FILES['import_file']['name'] ) ) : '';
 		$extension = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
 
