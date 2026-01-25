@@ -92,6 +92,11 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	 * @since 1.4.0
 	 */
 	public function handle_unified_import(): void {
+		// Start output buffering early to catch any accidental output.
+		if ( ! ob_get_level() ) {
+			ob_start();
+		}
+
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to import.', 'mksddn-migrate-content' ) );
 		}

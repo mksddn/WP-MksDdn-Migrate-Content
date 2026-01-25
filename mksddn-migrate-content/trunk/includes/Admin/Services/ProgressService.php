@@ -54,7 +54,16 @@ class ProgressService implements ProgressServiceInterface {
 	 * @since 1.0.0
 	 */
 	public function update( int $percent, string $message ): void {
-		// Use wp_add_inline_script for dynamic progress updates.
+		// Check if we're in admin-post.php context (no scripts loaded).
+		// In admin-post.php, progress updates don't work and wp_add_inline_script() can cause issues.
+		$is_admin_post = defined( 'DOING_ADMIN_POST' ) || ( isset( $_SERVER['REQUEST_URI'] ) && strpos( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), 'admin-post.php' ) !== false );
+		
+		if ( $is_admin_post ) {
+			// In admin-post.php context, skip progress updates to avoid output issues.
+			return;
+		}
+
+		// Use wp_add_inline_script for dynamic progress updates in normal admin pages.
 		wp_add_inline_script(
 			'mksddn-mc-admin-scripts',
 			sprintf(

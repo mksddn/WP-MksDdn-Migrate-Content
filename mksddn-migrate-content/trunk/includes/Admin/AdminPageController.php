@@ -118,6 +118,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
 		add_action( 'admin_post_mksddn_mc_unified_import', array( $this->import_handler, 'handle_unified_import' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
+		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 	}
 
@@ -207,6 +208,7 @@ class AdminPageController {
 		echo '<h1>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h1>';
 
 		$pending_user_preview = $this->maybe_load_user_preview();
+		$this->render_lock_warning();
 		$this->notifications->render_status_notices();
 		$this->progress->render_container();
 
@@ -407,6 +409,66 @@ class AdminPageController {
 		}
 
 		wp_send_json_success( array( 'files' => $files ) );
+	}
+
+	/**
+	 * Handle release import lock request.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	public function handle_release_import_lock(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_release_lock' );
+
+		$lock = new \MksDdn\MigrateContent\Support\ImportLock();
+		$released = $lock->force_release();
+
+		if ( $released ) {
+			$this->notifications->redirect_with_notice( 'success', __( 'Import lock released successfully.', 'mksddn-migrate-content' ) );
+		} else {
+			$this->notifications->redirect_with_notice( 'error', __( 'No active import lock found.', 'mksddn-migrate-content' ) );
+		}
+	}
+
+	/**
+	 * Render lock warning if import is locked.
+	 *
+	 * @return void
+	 * @since 1.0.0
+	 */
+	private function render_lock_warning(): void {
+		$lock = new \MksDdn\MigrateContent\Support\ImportLock();
+		
+		if ( ! $lock->is_locked() ) {
+			return;
+		}
+
+		$lock_info = $lock->get_info();
+		if ( ! $lock_info ) {
+			return;
+		}
+
+		$age_minutes = round( $lock_info['age'] / 60, 1 );
+		$release_url = wp_nonce_url(
+			admin_url( 'admin-post.php?action=mksddn_mc_release_import_lock' ),
+			'mksddn_mc_release_lock'
+		);
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-small">%s</a></p></div>',
+			esc_html__( 'Import is currently locked', 'mksddn-migrate-content' ),
+			sprintf(
+				// translators: %s is the age of the lock in minutes.
+				esc_html__( 'An import operation appears to be running or was interrupted. Lock age: %s minutes.', 'mksddn-migrate-content' ),
+				esc_html( (string) $age_minutes )
+			),
+			esc_url( $release_url ),
+			esc_html__( 'Release Lock', 'mksddn-migrate-content' )
+		);
 	}
 }
 

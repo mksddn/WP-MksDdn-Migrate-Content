@@ -101,6 +101,11 @@ class SelectedContentImportService {
 	 * @since 1.0.0
 	 */
 	public function import(): void {
+		// Start output buffering early to catch any accidental output.
+		if ( ! ob_get_level() ) {
+			ob_start();
+		}
+
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
@@ -113,8 +118,7 @@ class SelectedContentImportService {
 		$lock       = new ImportLock();
 		$lock_token = $lock->acquire();
 		if ( ! $lock_token ) {
-			$this->notifications->show_error( esc_html__( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
-			$this->progress->update( 100, __( 'Import is already running', 'mksddn-migrate-content' ) );
+			$this->notifications->redirect_with_notice( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
 			return;
 		}
 
@@ -128,8 +132,7 @@ class SelectedContentImportService {
 				// Chunk files are stored in a controlled directory, so this is safe.
 				$real_path = realpath( $chunk_file_path );
 				if ( false === $real_path ) {
-					$this->notifications->show_error( esc_html__( 'Invalid chunked file path.', 'mksddn-migrate-content' ) );
-					$this->progress->update( 100, __( 'Invalid file path', 'mksddn-migrate-content' ) );
+					$this->notifications->redirect_with_notice( 'error', __( 'Invalid chunked file path.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
@@ -154,8 +157,7 @@ class SelectedContentImportService {
 				$file_info = $this->server_scanner->get_file( $server_file );
 
 				if ( is_wp_error( $file_info ) ) {
-					$this->notifications->show_error( $file_info->get_error_message() );
-					$this->progress->update( 100, __( 'Server file not found', 'mksddn-migrate-content' ) );
+					$this->notifications->redirect_with_notice( 'error', $file_info->get_error_message() );
 					return;
 				}
 
@@ -168,29 +170,24 @@ class SelectedContentImportService {
 				);
 			} else {
 				if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
-					$this->notifications->show_error( esc_html__( 'Failed to upload file.', 'mksddn-migrate-content' ) );
-					$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+					$this->notifications->redirect_with_notice( 'error', __( 'Failed to upload file.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
 				// Verify that the file was actually uploaded via HTTP POST.
 				$tmp_name = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( wp_unslash( $_FILES['import_file']['tmp_name'] ) ) : '';
 				if ( ! $tmp_name || ! is_uploaded_file( $tmp_name ) ) {
-					$this->notifications->show_error( esc_html__( 'File upload security check failed.', 'mksddn-migrate-content' ) );
-					$this->progress->update( 100, __( 'Upload failed', 'mksddn-migrate-content' ) );
+					$this->notifications->redirect_with_notice( 'error', __( 'File upload security check failed.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
 				// Pass file data to validator which will sanitize all fields.
 				$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- file validated and sanitized by validator
 				if ( is_wp_error( $file_data ) ) {
-					$this->notifications->show_error( $file_data->get_error_message() );
-					$this->progress->update( 100, __( 'Validation failed', 'mksddn-migrate-content' ) );
+					$this->notifications->redirect_with_notice( 'error', $file_data->get_error_message() );
 					return;
 				}
 			}
-
-			$this->progress->update( 10, __( 'Validating file…', 'mksddn-migrate-content' ) );
 
 			$result = $this->payload_preparer->prepare(
 				$file_data['extension'],
@@ -199,12 +196,9 @@ class SelectedContentImportService {
 			);
 
 			if ( is_wp_error( $result ) ) {
-				$this->notifications->show_error( $result->get_error_message() );
-				$this->progress->update( 100, __( 'Import aborted', 'mksddn-migrate-content' ) );
+				$this->notifications->redirect_with_notice( 'error', $result->get_error_message() );
 				return;
 			}
-
-			$this->progress->update( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
 
 			$payload                 = $result['payload'];
 			$payload_type            = $result['type'];
@@ -221,17 +215,22 @@ class SelectedContentImportService {
 				);
 			}
 
-			$this->progress->update( 70, __( 'Importing content…', 'mksddn-migrate-content' ) );
-
 			$import_result = $this->process_import( $import_handler, $payload_type, $payload );
 
 			if ( $import_result ) {
-				$this->progress->update( 100, __( 'Completed', 'mksddn-migrate-content' ) );
-				// translators: %s is imported item type.
-				$this->notifications->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
+				// Get import details for redirect.
+				// For bundle, don't pass slug/title as it contains multiple items.
+				if ( 'bundle' === $payload_type ) {
+					$this->notifications->redirect_with_selected_import_success( $payload_type, '', '', '' );
+				} else {
+					$slug = isset( $payload['slug'] ) ? sanitize_text_field( $payload['slug'] ) : '';
+					$title = isset( $payload['title'] ) ? sanitize_text_field( $payload['title'] ) : '';
+					$post_type = isset( $payload['type'] ) ? sanitize_text_field( $payload['type'] ) : 'page';
+					
+					$this->notifications->redirect_with_selected_import_success( $payload_type, $slug, $title, $post_type );
+				}
 			} else {
-				$this->progress->update( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
-				$this->notifications->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
+				$this->notifications->redirect_with_notice( 'error', __( 'Failed to import content.', 'mksddn-migrate-content' ) );
 			}
 		} finally {
 			$lock->release( $lock_token );
