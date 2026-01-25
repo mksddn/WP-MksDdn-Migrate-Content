@@ -206,11 +206,12 @@ class FullDatabaseImporter {
 			}
 
 			while ( $offset < $row_count ) {
-				$batch_end = min( $offset + $batch_size, $row_count );
+				$batch_end = (int) min( $offset + $batch_size, $row_count );
 				$batch_rows = array();
 				
 				// Collect rows for batch insert.
-				for ( $i = $offset; $i < $batch_end; ++$i ) {
+				$offset_int = (int) $offset;
+				for ( $i = $offset_int; $i < $batch_end; ++$i ) {
 					if ( ! isset( $row_keys[ $i ] ) ) {
 						continue;
 					}
