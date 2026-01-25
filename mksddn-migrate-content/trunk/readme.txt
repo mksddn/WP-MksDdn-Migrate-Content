@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.4.0
+Stable tag: 2.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,7 +17,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 = Why MksDdn Migrate Content? =
 
 * **Dual export modes** – choose Full Site (database + uploads/plugins/themes) or Selected Content (multi-select posts/pages/CPTs) with or without referenced media.
-* **Chunked pipeline** – large archives stream through AJAX endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
+* **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Integrity & safety** – `.wpbkp` archives ship with manifests and checksums; imports verify capabilities, nonces, and disk space before touching data.
 
@@ -48,7 +48,7 @@ Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads 
 Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported. Taxonomies, menus, widgets, and serialized options are also covered.
 
 = How do chunked uploads resume? =
-The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via `wp_ajax_mksddn_mc_*` endpoints. If the browser reloads, the resume token restarts from the last confirmed chunk.
+The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via REST API endpoints (`mksddn/v1/chunk/*`). If the browser reloads, the resume token restarts from the last confirmed chunk.
 
 = How do I import a backup file from the server? =
 You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
@@ -77,46 +77,70 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 
 = Request Handlers =
 * `ExportRequestHandler` - handles export requests
-* `ImportRequestHandler` - delegates to specialized import services
+* `ImportRequestHandler` - delegates to specialized import services (supports unified import via `UnifiedImportOrchestrator`)
 * `UserMergeRequestHandler` - processes user merge operations
+* `ChunkRestController` - REST API controller for chunked upload/download operations
 * All handlers implement corresponding interfaces for testability
 
 = Service Layer =
 * `SelectedContentImportService` - handles selected content imports
 * `FullSiteImportService` - manages full site imports
+* `UnifiedImportOrchestrator` - orchestrates unified import with automatic type detection and routing
+* `ImportTypeDetector` - detects import type (full site or selected content) from archive file
 * `ImportFileValidator` - validates uploaded files
 * `ImportPayloadPreparer` - prepares import payloads
+* `ServerBackupScanner` - scans and validates backup files on the server
 * `ResponseHandler` - manages redirects and status messages
 * `NotificationService` - handles user notifications
 * `ProgressService` - tracks operation progress
+* `ErrorHandler` - centralized error handling and logging
+* `UserDiffBuilder` - builds user difference comparison
+* `UserMergeApplier` - applies user merge operations
 
 = Contracts (Interfaces) =
 All key components implement interfaces:
 * `ExporterInterface`, `ImporterInterface`
 * `MediaCollectorInterface`, `ChunkJobRepositoryInterface`
-* `UserPreviewStoreInterface`
+* `UserPreviewStoreInterface`, `UserDiffBuilderInterface`, `UserMergeApplierInterface`
 * `NotificationServiceInterface`, `ProgressServiceInterface`
+* `ArchiveHandlerInterface`, `ValidatorInterface`
 * Request handler interfaces for all handlers
 
 = Error Handling =
 * Specialized exceptions: `ValidationException`, `FileOperationException`, `DatabaseOperationException`, `ImportException`, `ExportException`
 * Centralized `ErrorHandler` for consistent error processing
 * Proper logging and user-friendly error messages
+* Validation classes: `ArchiveValidator`, `ImportDataValidator`, `ExportDataValidator`, `FileValidator`
 
 = Performance =
 * `BatchLoader` for optimized database queries (prevents N+1 problems)
-* Efficient media collection with batch processing
-* Chunked transfer for large files
+* Efficient media collection with batch processing (`AttachmentCollector`)
+* Chunked transfer for large files via REST API (`ChunkRestController`)
 * Memory-efficient streaming for large archives
+* `FullArchivePayload` for efficient archive payload handling
+* `ContentCollector` for filesystem content collection
 
 = Security =
 * All admin operations check `current_user_can('manage_options')`
 * Nonce verification for all forms and AJAX requests
+* REST API endpoints protected with permission callbacks
 * Input sanitization using WordPress sanitization functions
 * Output escaping with `esc_html()`, `esc_attr()`, `esc_url()`
 * File upload validation with MIME type checking
+* Path traversal protection for server file access (`ServerBackupScanner`)
+* `SiteUrlGuard` prevents accidental site URL changes during import
+* `ImportLock` prevents concurrent import operations
+* `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.0.0 =
+* Added: Unified import feature with automatic type detection - single import form automatically detects and routes full site or selected content imports.
+* Added: Import locking mechanism to prevent concurrent import operations and ensure data integrity.
+* Added: AJAX search functionality for post selection, improving usability when selecting content for export.
+* Enhanced: Download progress handling in chunked transfers for better user experience.
+* Enhanced: Security with improved nonce verification in unified import orchestrator.
+* Refactored: Import handling architecture with unified orchestrator for cleaner code organization.
 
 = 1.4.0 =
 * Added: Post-import maintenance tasks (cache flushing, WooCommerce maintenance, plugin reactivation hooks).
