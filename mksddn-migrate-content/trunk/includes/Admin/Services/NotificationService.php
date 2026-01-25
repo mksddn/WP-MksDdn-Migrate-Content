@@ -133,12 +133,6 @@ class NotificationService implements NotificationServiceInterface {
 			}
 		}
 
-		// Handle import status from progress page redirect.
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only status from redirect.
-		if ( ! empty( $_GET['mksddn_mc_import_status'] ) ) {
-			$this->render_import_completion_notice( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_import_status'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		}
-
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only notice flag after redirect.
 		if ( empty( $_GET['mksddn_mc_notice'] ) ) {
 			return;
@@ -157,41 +151,5 @@ class NotificationService implements NotificationServiceInterface {
 		}
 	}
 
-	/**
-	 * Render import completion notice based on history status.
-	 *
-	 * @param string $history_id History entry ID.
-	 * @return void
-	 * @since 1.0.0
-	 */
-	private function render_import_completion_notice( string $history_id ): void {
-		$history = get_option( 'mksddn_mc_history', array() );
-		if ( ! is_array( $history ) ) {
-			$history = array();
-		}
-
-		$entry = null;
-		foreach ( $history as $item ) {
-			if ( isset( $item['id'] ) && $item['id'] === $history_id ) {
-				$entry = $item;
-				break;
-			}
-		}
-
-		if ( ! $entry ) {
-			$this->show_inline_notice( 'info', __( 'Import completed. Check History section for details.', 'mksddn-migrate-content' ) );
-			return;
-		}
-
-		$status = $entry['status'] ?? 'unknown';
-
-		if ( 'success' === $status ) {
-			$this->show_success( __( 'Full site import completed successfully.', 'mksddn-migrate-content' ) );
-		} elseif ( 'error' === $status ) {
-			$error_msg = $entry['context']['error'] ?? __( 'Import failed. Check logs for details.', 'mksddn-migrate-content' );
-			$this->show_error( $error_msg );
-		}
-		// For 'running' status, don't show static notice - JavaScript will handle progress display via polling.
-	}
 }
 

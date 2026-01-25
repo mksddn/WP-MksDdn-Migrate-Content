@@ -11,8 +11,6 @@ namespace MksDdn\MigrateContent\Core\ServiceProviders;
 use MksDdn\MigrateContent\Admin\AdminPageController;
 use MksDdn\MigrateContent\Admin\Handlers\ExportRequestHandler;
 use MksDdn\MigrateContent\Admin\Handlers\ImportRequestHandler;
-use MksDdn\MigrateContent\Admin\Handlers\RecoveryRequestHandler;
-use MksDdn\MigrateContent\Admin\Handlers\ScheduleRequestHandler;
 use MksDdn\MigrateContent\Admin\Handlers\UserMergeRequestHandler;
 use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportFileValidator;
@@ -27,8 +25,6 @@ use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
-use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
-use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
@@ -116,9 +112,6 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			function ( ServiceContainer $container ) {
 				return new SelectedContentImportService(
 					$container->get( \MksDdn\MigrateContent\Archive\Extractor::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\SnapshotManagerInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
 					$container->get( NotificationServiceInterface::class ),
 					$container->get( ProgressServiceInterface::class ),
 					$container->get( ImportFileValidator::class ),
@@ -132,11 +125,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			FullSiteImportService::class,
 			function ( ServiceContainer $container ) {
 				return new FullSiteImportService(
-					$container->get( \MksDdn\MigrateContent\Contracts\SnapshotManagerInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
 					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class ),
-					$container->get( NotificationServiceInterface::class ),
 					$container->get( ResponseHandler::class ),
 					$container->get( ServerBackupScanner::class )
 				);
@@ -147,11 +136,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		$container->register(
 			AdminPageView::class,
 			function ( ServiceContainer $container ) {
-				return new AdminPageView(
-					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\ScheduleManagerInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class )
-				);
+				return new AdminPageView();
 			}
 		);
 
@@ -184,40 +169,6 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			ImportRequestHandler::class,
 			function ( ServiceContainer $container ) {
 				return $container->get( ImportRequestHandlerInterface::class );
-			}
-		);
-
-		$container->register(
-			ScheduleRequestHandlerInterface::class,
-			function ( ServiceContainer $container ) {
-				return new ScheduleRequestHandler(
-					$container->get( \MksDdn\MigrateContent\Contracts\ScheduleManagerInterface::class ),
-					$container->get( NotificationServiceInterface::class )
-				);
-			}
-		);
-		$container->register(
-			ScheduleRequestHandler::class,
-			function ( ServiceContainer $container ) {
-				return $container->get( ScheduleRequestHandlerInterface::class );
-			}
-		);
-
-		$container->register(
-			RecoveryRequestHandlerInterface::class,
-			function ( ServiceContainer $container ) {
-				return new RecoveryRequestHandler(
-					$container->get( \MksDdn\MigrateContent\Contracts\SnapshotManagerInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\HistoryRepositoryInterface::class ),
-					$container->get( \MksDdn\MigrateContent\Recovery\JobLock::class ),
-					$container->get( NotificationServiceInterface::class )
-				);
-			}
-		);
-		$container->register(
-			RecoveryRequestHandler::class,
-			function ( ServiceContainer $container ) {
-				return $container->get( RecoveryRequestHandlerInterface::class );
 			}
 		);
 

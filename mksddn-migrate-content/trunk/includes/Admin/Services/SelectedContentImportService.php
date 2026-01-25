@@ -2,7 +2,7 @@
 /**
  * @file: SelectedContentImportService.php
  * @description: Service for importing selected content (pages, posts, etc.)
- * @dependencies: Archive\Extractor, Import\ImportHandler, Recovery\SnapshotManager, Recovery\HistoryRepository, Recovery\JobLock, Admin\Services\NotificationService, Admin\Services\ProgressService, Admin\Services\ImportFileValidator, Admin\Services\ImportPayloadPreparer
+ * @dependencies: Archive\Extractor, Import\ImportHandler, Admin\Services\NotificationService, Admin\Services\ProgressService, Admin\Services\ImportFileValidator, Admin\Services\ImportPayloadPreparer
  * @created: 2024-12-15
  */
 
@@ -10,12 +10,8 @@ namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Archive\Extractor;
 use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
-use MksDdn\MigrateContent\Recovery\HistoryRepository;
-use MksDdn\MigrateContent\Recovery\JobLock;
-use MksDdn\MigrateContent\Recovery\SnapshotManager;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
-use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -34,27 +30,6 @@ class SelectedContentImportService {
 	 * @var Extractor
 	 */
 	private Extractor $extractor;
-
-	/**
-	 * Snapshot manager.
-	 *
-	 * @var SnapshotManager
-	 */
-	private SnapshotManager $snapshot_manager;
-
-	/**
-	 * History repository.
-	 *
-	 * @var HistoryRepository
-	 */
-	private HistoryRepository $history;
-
-	/**
-	 * Job lock.
-	 *
-	 * @var JobLock
-	 */
-	private JobLock $job_lock;
 
 	/**
 	 * Notification service.
@@ -95,9 +70,6 @@ class SelectedContentImportService {
 	 * Constructor.
 	 *
 	 * @param Extractor|null              $extractor        Archive extractor.
-	 * @param SnapshotManager|null        $snapshot_manager Snapshot manager.
-	 * @param HistoryRepository|null       $history          History repository.
-	 * @param JobLock|null                $job_lock         Job lock.
 	 * @param NotificationService|null    $notifications    Notification service.
 	 * @param ProgressService|null        $progress         Progress service.
 	 * @param ImportFileValidator|null    $file_validator   File validator.
@@ -107,9 +79,6 @@ class SelectedContentImportService {
 	 */
 	public function __construct(
 		?Extractor $extractor = null,
-		?SnapshotManager $snapshot_manager = null,
-		?HistoryRepository $history = null,
-		?JobLock $job_lock = null,
 		?NotificationService $notifications = null,
 		?ProgressService $progress = null,
 		?ImportFileValidator $file_validator = null,
@@ -117,9 +86,6 @@ class SelectedContentImportService {
 		?ServerBackupScanner $server_scanner = null
 	) {
 		$this->extractor        = $extractor ?? new Extractor();
-		$this->snapshot_manager = $snapshot_manager ?? new SnapshotManager();
-		$this->history          = $history ?? new HistoryRepository();
-		$this->job_lock         = $job_lock ?? new JobLock();
 		$this->notifications    = $notifications ?? new NotificationService();
 		$this->progress         = $progress ?? new ProgressService();
 		$this->file_validator   = $file_validator ?? new ImportFileValidator();
@@ -143,18 +109,9 @@ class SelectedContentImportService {
 			return;
 		}
 
-		$lock_id = $this->job_lock->acquire( 'selected-import' );
-		if ( is_wp_error( $lock_id ) ) {
-			$this->notifications->show_error( esc_html( $lock_id->get_error_message() ) );
-			return;
-		}
-
-		$history_id = null;
-
-		try {
-			// Check if server file is provided.
-			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-			$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
+		// Check if server file is provided.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$server_file = isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '';
 
 			if ( $server_file ) {
 				$file_info = $this->server_scanner->get_file( $server_file );
@@ -212,28 +169,6 @@ class SelectedContentImportService {
 
 			$this->progress->update( 40, __( 'Parsing content…', 'mksddn-migrate-content' ) );
 
-			$snapshot = $this->snapshot_manager->create(
-				array(
-					'label' => 'pre-import-selected',
-					'meta'  => array( 'file' => $file_data['name'] ),
-				)
-			);
-
-			if ( is_wp_error( $snapshot ) ) {
-				$this->notifications->show_error( $snapshot->get_error_message() );
-				return;
-			}
-
-			$history_id = $this->history->start(
-				'import',
-				array(
-					'mode'           => 'selected',
-					'file'           => $file_data['name'],
-					'snapshot_id'    => $snapshot['id'],
-					'snapshot_label' => $snapshot['label'] ?? $snapshot['id'],
-				)
-			);
-
 			$payload                 = $result['payload'];
 			$payload_type            = $result['type'];
 			$payload['type']         = $payload_type;
@@ -253,26 +188,13 @@ class SelectedContentImportService {
 
 			$import_result = $this->process_import( $import_handler, $payload_type, $payload );
 
-			if ( $import_result ) {
-				$this->progress->update( 100, __( 'Completed', 'mksddn-migrate-content' ) );
-				// translators: %s is imported item type.
-				$this->notifications->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
-				if ( $history_id ) {
-					$this->history->finish( $history_id, 'success' );
-				}
-			} else {
-				$this->progress->update( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
-				$this->notifications->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
-				if ( $history_id ) {
-					$this->history->finish(
-						$history_id,
-						'error',
-						array( 'message' => __( 'Selected import failed.', 'mksddn-migrate-content' ) )
-					);
-				}
-			}
-		} finally {
-			$this->job_lock->release( $lock_id );
+		if ( $import_result ) {
+			$this->progress->update( 100, __( 'Completed', 'mksddn-migrate-content' ) );
+			// translators: %s is imported item type.
+			$this->notifications->show_success( sprintf( esc_html__( '%s imported successfully!', 'mksddn-migrate-content' ), ucfirst( (string) $payload_type ) ) );
+		} else {
+			$this->progress->update( 100, __( 'Import failed', 'mksddn-migrate-content' ) );
+			$this->notifications->show_error( esc_html__( 'Failed to import content.', 'mksddn-migrate-content' ) );
 		}
 	}
 

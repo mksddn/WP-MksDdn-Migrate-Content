@@ -251,8 +251,6 @@ class PluginConfig {
 		return array(
 			'base'       => $base,
 			'jobs'       => $base . 'jobs/',
-			'scheduled'  => $base . 'scheduled/',
-			'snapshots'  => $base . 'snapshots/',
 			'imports'    => $base . 'imports/',
 		);
 	}

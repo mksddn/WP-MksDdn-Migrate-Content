@@ -70,14 +70,5 @@ register_activation_hook(
 	}
 );
 
-register_deactivation_hook(
-	__FILE__,
-	function (): void {
-		if ( class_exists( '\MksDdn\MigrateContent\Automation\ScheduleManager' ) ) {
-			\MksDdn\MigrateContent\Automation\ScheduleManager::deactivate();
-		}
-	}
-);
-
 // Bootstrap existing functionality.
 require_once MKSDDN_MC_DIR . 'mksddn-migrate-content-core.php';

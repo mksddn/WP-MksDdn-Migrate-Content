@@ -15,8 +15,6 @@ use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
-use MksDdn\MigrateContent\Contracts\RecoveryRequestHandlerInterface;
-use MksDdn\MigrateContent\Contracts\ScheduleRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
@@ -53,20 +51,6 @@ class AdminPageController {
 	 * @var ImportRequestHandlerInterface
 	 */
 	private ImportRequestHandlerInterface $import_handler;
-
-	/**
-	 * Schedule handler.
-	 *
-	 * @var ScheduleRequestHandlerInterface
-	 */
-	private ScheduleRequestHandlerInterface $schedule_handler;
-
-	/**
-	 * Recovery handler.
-	 *
-	 * @var RecoveryRequestHandlerInterface
-	 */
-	private RecoveryRequestHandlerInterface $recovery_handler;
 
 	/**
 	 * User merge handler.
@@ -113,8 +97,6 @@ class AdminPageController {
 		$this->view              = $container->get( AdminPageView::class );
 		$this->export_handler    = $container->get( ExportRequestHandlerInterface::class );
 		$this->import_handler    = $container->get( ImportRequestHandlerInterface::class );
-		$this->schedule_handler  = $container->get( ScheduleRequestHandlerInterface::class );
-		$this->recovery_handler  = $container->get( RecoveryRequestHandlerInterface::class );
 		$this->user_merge_handler = $container->get( UserMergeRequestHandlerInterface::class );
 		$this->notifications     = $container->get( NotificationServiceInterface::class );
 		$this->progress          = $container->get( ProgressServiceInterface::class );
@@ -134,13 +116,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_export_selected', array( $this->export_handler, 'handle_selected_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this->export_handler, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
-		add_action( 'admin_post_mksddn_mc_rollback_snapshot', array( $this->recovery_handler, 'handle_rollback' ) );
-		add_action( 'admin_post_mksddn_mc_delete_snapshot', array( $this->recovery_handler, 'handle_delete' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
-		add_action( 'admin_post_mksddn_mc_schedule_save', array( $this->schedule_handler, 'handle_save' ) );
-		add_action( 'admin_post_mksddn_mc_schedule_run', array( $this->schedule_handler, 'handle_run_now' ) );
-		add_action( 'admin_post_mksddn_mc_download_scheduled', array( $this->schedule_handler, 'handle_download' ) );
-		add_action( 'admin_post_mksddn_mc_delete_scheduled', array( $this->schedule_handler, 'handle_delete' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 	}
 
@@ -169,16 +145,7 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function render_admin_page(): void {
-		// WordPress already checks 'manage_options' capability when registering the menu page.
-		// However, if user is viewing import progress page (has mksddn_mc_import_status parameter),
-		// we allow access even if session expired, as import continues in background.
-		$has_import_status = ! empty( $_GET['mksddn_mc_import_status'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		
 		if ( ! current_user_can( 'manage_options' ) ) {
-			if ( $has_import_status ) {
-				$this->render_import_progress_page();
-				return;
-			}
 			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'mksddn-migrate-content' ) );
 		}
 
@@ -192,33 +159,11 @@ class AdminPageController {
 		$this->view->render_styles();
 		$this->view->render_full_site_section( $pending_user_preview );
 		$this->view->render_selected_content_section();
-		$this->view->render_history_section();
-		$this->view->render_automation_section();
 
 		$this->import_handler->handle_selected_import();
 
 		echo '</div>';
 		$this->progress->render_javascript();
-	}
-
-	/**
-	 * Render minimal import progress page for expired sessions.
-	 *
-	 * @return void
-	 * @since 1.0.0
-	 */
-	private function render_import_progress_page(): void {
-		echo '<!DOCTYPE html><html><head><title>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</title>';
-		wp_head();
-		echo '</head><body class="wp-admin wp-core-ui">';
-		echo '<div class="wrap" style="max-width: 800px; margin: 50px auto;">';
-		echo '<h1>' . esc_html__( 'Import Progress', 'mksddn-migrate-content' ) . '</h1>';
-		echo '<p>' . esc_html__( 'Your import is running in the background. This page will update automatically.', 'mksddn-migrate-content' ) . '</p>';
-		$this->progress->render_container();
-		$this->progress->render_javascript();
-		echo '</div>';
-		wp_footer();
-		echo '</body></html>';
 	}
 
 	/**
@@ -248,16 +193,6 @@ class AdminPageController {
 			array(),
 			PluginConfig::version(),
 			true
-		);
-
-		// Localize script with REST API settings.
-		wp_localize_script(
-			'mksddn-mc-admin-scripts',
-			'wpApiSettings',
-			array(
-				'root'  => esc_url_raw( rest_url() ),
-				'nonce' => wp_create_nonce( 'wp_rest' ),
-			)
 		);
 
 		// Enqueue server file selector script.

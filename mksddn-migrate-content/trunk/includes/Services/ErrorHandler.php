@@ -132,7 +132,6 @@ class ErrorHandler {
 			'mksddn_mc_chunk_missing'     => __( 'Chunked upload is incomplete. Please retry.', 'mksddn-migrate-content' ),
 			'mksddn_mc_temp_unavailable'  => __( 'Unable to allocate a temporary file.', 'mksddn-migrate-content' ),
 			'mksddn_mc_move_failed'       => __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ),
-			'mksddn_snapshot_missing'     => __( 'Snapshot archive is missing on disk.', 'mksddn-migrate-content' ),
 		);
 
 		if ( isset( $user_messages[ $code ] ) ) {
