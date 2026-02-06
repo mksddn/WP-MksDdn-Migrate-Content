@@ -496,6 +496,7 @@ class AdminPageController {
 			'orderby'        => 'title',
 			'order'          => 'ASC',
 			'paged'          => $page,
+			'lang'           => '', // Get posts from all languages (Polylang compatibility).
 		);
 
 		// Add search if provided.

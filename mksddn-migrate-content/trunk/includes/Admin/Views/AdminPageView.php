@@ -133,7 +133,11 @@ class AdminPageView {
 		}
 
 		if ( 'page' === $type ) {
-			$items = get_pages();
+			$items = get_pages(
+				array(
+					'lang' => '', // Get pages from all languages (Polylang compatibility).
+				)
+			);
 		} else {
 			$items = get_posts(
 				array(
@@ -142,6 +146,7 @@ class AdminPageView {
 					'post_status'    => 'publish',
 					'orderby'        => 'title',
 					'order'          => 'ASC',
+					'lang'           => '', // Get posts from all languages (Polylang compatibility).
 				)
 			);
 		}
