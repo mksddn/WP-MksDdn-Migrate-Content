@@ -9,7 +9,7 @@
 Plugin Name: MksDdn Migrate Content
 Plugin URI: https://github.com/mksddn/WP-MksDdn-Migrate-Content
 Description: Export and import single pages (and more) with metadata and media.
-Version: 2.0.2
+Version: 2.0.3
 Author: mksddn
 Author URI: https://github.com/mksddn
 Text Domain: mksddn-migrate-content
