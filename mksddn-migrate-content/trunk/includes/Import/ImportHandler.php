@@ -138,11 +138,12 @@ class ImportHandler implements ImporterInterface {
 			$this->assign_taxonomies( $post_id, $data );
 		}
 
-		$media_maps = $this->restore_media( $data, $post_id );
-		$id_map     = $media_maps['id_map'] ?? array();
-		$url_map    = $media_maps['url_map'] ?? array();
+		$media_maps  = $this->restore_media( $data, $post_id );
+		$id_map      = $media_maps['id_map'] ?? array();
+		$url_map     = $media_maps['url_map'] ?? array();
+		$url_to_new_id = $this->build_url_to_new_id_map( $data, $id_map );
 
-		$this->import_acf_fields( $data, $post_id, $id_map, $url_map );
+		$this->import_acf_fields( $data, $post_id, $id_map, $url_map, $url_to_new_id );
 
 		return true;
 	}
@@ -302,21 +303,42 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
+	 * Build map: original media URL => new attachment ID (for ACF image fields).
+	 *
+	 * @param array $data   Payload with _mksddn_media.
+	 * @param array $id_map Original ID => new ID.
+	 * @return array<string,int>
+	 */
+	private function build_url_to_new_id_map( array $data, array $id_map ): array {
+		$entries = $data['_mksddn_media'] ?? array();
+		$result  = array();
+		foreach ( $entries as $entry ) {
+			$old_url = isset( $entry['source_url'] ) ? (string) $entry['source_url'] : '';
+			$old_id  = isset( $entry['original_id'] ) ? (int) $entry['original_id'] : 0;
+			if ( '' !== $old_url && $old_id > 0 && isset( $id_map[ $old_id ] ) ) {
+				$result[ $old_url ] = $id_map[ $old_id ];
+			}
+		}
+		return $result;
+	}
+
+	/**
 	 * Import ACF fields for a post.
 	 *
-	 * @param array      $data    Payload containing 'acf_fields'.
-	 * @param int|string $post_id Target post ID.
-	 * @param array      $id_map  Media ID mapping.
-	 * @param array      $url_map Media URL mapping.
+	 * @param array      $data           Payload containing 'acf_fields'.
+	 * @param int|string $post_id        Target post ID.
+	 * @param array      $id_map         Media ID mapping.
+	 * @param array      $url_map        Media URL mapping.
+	 * @param array      $url_to_new_id  Original URL => new attachment ID (for image fields).
 	 * @return void
 	 */
-	private function import_acf_fields( array $data, int|string $post_id, array $id_map = array(), array $url_map = array() ): void {
+	private function import_acf_fields( array $data, int|string $post_id, array $id_map = array(), array $url_map = array(), array $url_to_new_id = array() ): void {
 		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
 			return;
 		}
 
 		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
-			$value = $this->remap_media_values( $field_value, $id_map, $url_map );
+			$value = $this->remap_media_values( $field_value, $id_map, $url_map, $url_to_new_id );
 			update_field( sanitize_text_field( $field_name ), $value, $post_id );
 		}
 	}
@@ -328,7 +350,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param int   $post_id Target post ID.
 	 * @return void
 	 */
-	private function import_meta_data( array $data, int $post_id, array $id_map = array(), array $url_map = array() ): void {
+	private function import_meta_data( array $data, int $post_id, array $id_map = array(), array $url_map = array(), array $url_to_new_id = array() ): void {
 		if ( ! isset( $data['meta'] ) || ! is_array( $data['meta'] ) ) {
 			return;
 		}
@@ -340,20 +362,27 @@ class ImportHandler implements ImporterInterface {
 			if ( is_array( $values ) ) {
 				foreach ( $values as $value ) {
 					$value = maybe_unserialize( $value );
-					$value = $this->remap_media_values( $value, $id_map, $url_map );
+					$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
 					add_post_meta( $post_id, $meta_key, $value );
 				}
 			} else {
-				// Single value.
 				$value = maybe_unserialize( $values );
-				$value = $this->remap_media_values( $value, $id_map, $url_map );
+				$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
 				update_post_meta( $post_id, $meta_key, $value );
 			}
 		}
 	}
 
-
-	private function remap_media_values( mixed $value, array $id_map, array $url_map ): mixed {
+	/**
+	 * Remap media IDs and URLs in values (ACF/meta). Prefers new attachment ID for URLs so ACF image fields get ID.
+	 *
+	 * @param mixed $value         Value to remap.
+	 * @param array $id_map        Original attachment ID => new ID.
+	 * @param array $url_map       Original URL => new URL.
+	 * @param array $url_to_new_id Original URL => new attachment ID (optional).
+	 * @return mixed
+	 */
+	private function remap_media_values( mixed $value, array $id_map, array $url_map, array $url_to_new_id = array() ): mixed {
 		if ( is_array( $value ) ) {
 			if ( isset( $value['ID'] ) ) {
 				$old_id = (int) $value['ID'];
@@ -363,12 +392,12 @@ class ImportHandler implements ImporterInterface {
 					$value['id']    = $new_id;
 					$value['url']   = \wp_get_attachment_url( $new_id );
 					$value['link']  = \get_permalink( $new_id );
-					$value['sizes'] = $this->remap_media_values( $value['sizes'] ?? array(), $id_map, $url_map );
+					$value['sizes'] = $this->remap_media_values( $value['sizes'] ?? array(), $id_map, $url_map, $url_to_new_id );
 				}
 			}
 
 			foreach ( $value as $key => $child ) {
-				$value[ $key ] = $this->remap_media_values( $child, $id_map, $url_map );
+				$value[ $key ] = $this->remap_media_values( $child, $id_map, $url_map, $url_to_new_id );
 			}
 
 			return $value;
@@ -381,8 +410,13 @@ class ImportHandler implements ImporterInterface {
 			}
 		}
 
-		if ( is_string( $value ) && isset( $url_map[ $value ] ) ) {
-			return $url_map[ $value ];
+		if ( is_string( $value ) ) {
+			if ( isset( $url_to_new_id[ $value ] ) ) {
+				return $url_to_new_id[ $value ];
+			}
+			if ( isset( $url_map[ $value ] ) ) {
+				return $url_map[ $value ];
+			}
 		}
 
 		return $value;
