@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -133,6 +133,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.0.3 =
+* Fixed: Media files are now properly linked to pages/posts during wpbkp import. ACF Image fields correctly receive new attachment IDs for all return formats.
 
 = 2.0.2 =
 * Fixed: Partial export material selection now displays items from all languages when Polylang is installed.
