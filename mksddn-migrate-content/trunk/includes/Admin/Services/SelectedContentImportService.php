@@ -116,13 +116,23 @@ class SelectedContentImportService {
 		}
 
 		$lock       = new ImportLock();
-		$lock_token = $lock->acquire();
-		if ( ! $lock_token ) {
-			$this->notifications->redirect_with_notice( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
-			return;
-		}
+		$lock_token = null;
 
 		try {
+			$lock_token = $lock->acquire();
+			if ( ! $lock_token ) {
+				$this->notifications->redirect_with_notice( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+				return;
+			}
+
+			// Register shutdown function to ensure lock is released even on fatal errors.
+			register_shutdown_function(
+				function() use ( $lock, &$lock_token ) {
+					if ( $lock_token ) {
+						$lock->release( $lock_token );
+					}
+				}
+			);
 			// Check if chunked file path is provided (from chunked upload).
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 			$chunk_file_path = isset( $_POST['chunk_file_path'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_file_path'] ) ) : '';
@@ -239,7 +249,9 @@ class SelectedContentImportService {
 				$this->notifications->redirect_with_notice( 'error', __( 'Failed to import content.', 'mksddn-migrate-content' ) );
 			}
 		} finally {
-			$lock->release( $lock_token );
+			if ( $lock_token ) {
+				$lock->release( $lock_token );
+			}
 		}
 	}
 

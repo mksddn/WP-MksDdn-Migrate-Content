@@ -31,14 +31,14 @@ class ImportLock {
 	 *
 	 * @var int
 	 */
-	private const MAX_LOCK_AGE = 3600; // 1 hour
+	private const MAX_LOCK_AGE = 600; // 10 minutes
 
 	/**
 	 * Default lock time-to-live (in seconds).
 	 *
 	 * @var int
 	 */
-	private const DEFAULT_TTL = 1800; // 30 minutes
+	private const DEFAULT_TTL = 900; // 15 minutes
 
 	/**
 	 * Acquire lock.
@@ -69,13 +69,17 @@ class ImportLock {
 		}
 
 		$token = function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : uniqid( 'mksddn_mc_', true );
+		
+		// Use shorter TTL to ensure automatic cleanup even if release() fails.
+		$effective_ttl = min( $ttl, self::MAX_LOCK_AGE * 2 );
+		
 		set_transient( 
 			self::LOCK_KEY, 
 			array( 
-				'token'     => $token,
+				'token'      => $token,
 				'created_at' => time(),
 			), 
-			$ttl 
+			$effective_ttl 
 		);
 
 		return $token;
