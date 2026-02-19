@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constants.
-define( 'MKSDDN_MC_VERSION', '2.0.2' );
+define( 'MKSDDN_MC_VERSION', '2.0.3' );
 define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );

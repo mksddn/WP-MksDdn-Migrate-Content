@@ -12,6 +12,7 @@ use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Admin\Services\ThemeImportService;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
@@ -42,6 +43,13 @@ class UnifiedImportOrchestrator {
 	private FullSiteImportService $full_import_service;
 
 	/**
+	 * Theme import service.
+	 *
+	 * @var ThemeImportService
+	 */
+	private ThemeImportService $theme_import_service;
+
+	/**
 	 * Import type detector.
 	 *
 	 * @var ImportTypeDetector
@@ -62,16 +70,19 @@ class UnifiedImportOrchestrator {
 	 * @param FullSiteImportService|null        $full_import_service     Full site import service.
 	 * @param ImportTypeDetector|null           $type_detector            Import type detector.
 	 * @param ServerBackupScanner|null         $server_scanner           Server backup scanner.
+	 * @param ThemeImportService|null          $theme_import_service     Theme import service.
 	 * @since 2.0.0
 	 */
 	public function __construct(
 		?SelectedContentImportService $selected_import_service = null,
 		?FullSiteImportService $full_import_service = null,
 		?ImportTypeDetector $type_detector = null,
-		?ServerBackupScanner $server_scanner = null
+		?ServerBackupScanner $server_scanner = null,
+		?ThemeImportService $theme_import_service = null
 	) {
 		$this->selected_import_service = $selected_import_service ?? new SelectedContentImportService();
 		$this->full_import_service      = $full_import_service ?? new FullSiteImportService();
+		$this->theme_import_service     = $theme_import_service ?? new ThemeImportService();
 		$this->type_detector            = $type_detector ?? new ImportTypeDetector();
 		$this->server_scanner           = $server_scanner ?? new ServerBackupScanner();
 	}
@@ -91,6 +102,7 @@ class UnifiedImportOrchestrator {
 			$nonce = sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) );
 			$nonce_verified = wp_verify_nonce( $nonce, 'mksddn_mc_unified_import' )
 				|| wp_verify_nonce( $nonce, 'mksddn_mc_full_import' )
+				|| wp_verify_nonce( $nonce, 'mksddn_mc_theme_import' )
 				|| wp_verify_nonce( $nonce, 'import_single_page_nonce' );
 		}
 
@@ -115,6 +127,8 @@ class UnifiedImportOrchestrator {
 		// Route to appropriate service.
 		if ( 'full' === $import_type ) {
 			$this->route_to_full_import( $file_info );
+		} elseif ( 'themes' === $import_type ) {
+			$this->route_to_theme_import( $file_info );
 		} else {
 			$this->route_to_selected_import( $file_info );
 		}
@@ -229,23 +243,22 @@ class UnifiedImportOrchestrator {
 	}
 
 	/**
-	 * Route to full site import service.
+	 * Prepare file for import service.
 	 *
-	 * @param array $file_info File information.
+	 * @param array  $file_info File information.
+	 * @param string $file_key  Key for $_FILES array.
+	 * @param string $nonce_action Nonce action name.
 	 * @return void
-	 * @since 2.0.0
+	 * @since 2.1.0
 	 */
-	private function route_to_full_import( array $file_info ): void {
+	private function prepare_file_for_import( array $file_info, string $file_key, string $nonce_action ): void {
 		if ( 'chunked' === $file_info['source'] ) {
-			// For chunked uploads, set chunk_job_id in POST.
 			$_POST['chunk_job_id'] = $file_info['chunk_job_id'];
-			$_REQUEST['_wpnonce']  = wp_create_nonce( 'mksddn_mc_full_import' );
+			$_REQUEST['_wpnonce']  = wp_create_nonce( $nonce_action );
 		} elseif ( 'server' === $file_info['source'] ) {
-			// For server files, set server_file in POST.
-			$_POST['server_file']  = $file_info['server_file'];
-			$_REQUEST['_wpnonce']  = wp_create_nonce( 'mksddn_mc_full_import' );
+			$_POST['server_file'] = $file_info['server_file'];
+			$_REQUEST['_wpnonce'] = wp_create_nonce( $nonce_action );
 		} else {
-			// For uploaded files, move to temp location and set in $_FILES.
 			$temp = wp_tempnam( 'mksddn-unified-import-' );
 			if ( ! $temp ) {
 				wp_die( esc_html__( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
@@ -255,16 +268,26 @@ class UnifiedImportOrchestrator {
 				wp_die( esc_html__( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
 			}
 
-			$_FILES['full_import_file'] = array(
+			$_FILES[ $file_key ] = array(
 				'name'     => $file_info['name'],
 				'tmp_name' => $temp,
 				'size'     => filesize( $temp ),
 				'error'    => UPLOAD_ERR_OK,
 				'type'     => 'application/zip',
 			);
-			$_REQUEST['_wpnonce'] = wp_create_nonce( 'mksddn_mc_full_import' );
+			$_REQUEST['_wpnonce'] = wp_create_nonce( $nonce_action );
 		}
+	}
 
+	/**
+	 * Route to full site import service.
+	 *
+	 * @param array $file_info File information.
+	 * @return void
+	 * @since 2.0.0
+	 */
+	private function route_to_full_import( array $file_info ): void {
+		$this->prepare_file_for_import( $file_info, 'full_import_file', 'mksddn_mc_full_import' );
 		$this->full_import_service->import();
 	}
 
@@ -291,5 +314,24 @@ class UnifiedImportOrchestrator {
 		}
 
 		$this->selected_import_service->import();
+	}
+
+	/**
+	 * Route to theme import service.
+	 *
+	 * @param array $file_info File information.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	private function route_to_theme_import( array $file_info ): void {
+		// Get import mode from POST if available, default to 'replace'.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
+		$import_mode = isset( $_POST['import_mode'] ) ? sanitize_key( $_POST['import_mode'] ) : 'replace';
+		$import_mode = in_array( $import_mode, array( 'merge', 'replace' ), true ) ? $import_mode : 'replace';
+
+		$this->prepare_file_for_import( $file_info, 'theme_import_file', 'mksddn_mc_unified_import' );
+		$_POST['import_mode'] = $import_mode;
+
+		$this->theme_import_service->import();
 	}
 }

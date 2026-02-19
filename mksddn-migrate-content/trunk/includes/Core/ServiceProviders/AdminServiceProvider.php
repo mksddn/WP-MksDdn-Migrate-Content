@@ -21,6 +21,7 @@ use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Services\ResponseHandler;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Admin\Services\ThemeImportService;
 use MksDdn\MigrateContent\Admin\Services\UnifiedImportOrchestrator;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
@@ -166,13 +167,24 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
+			ThemeImportService::class,
+			function ( ServiceContainer $container ) {
+				return new ThemeImportService(
+					$container->get( ResponseHandler::class ),
+					$container->get( ServerBackupScanner::class )
+				);
+			}
+		);
+
+		$container->register(
 			UnifiedImportOrchestrator::class,
 			function ( ServiceContainer $container ) {
 				return new UnifiedImportOrchestrator(
 					$container->get( SelectedContentImportService::class ),
 					$container->get( FullSiteImportService::class ),
 					$container->get( ImportTypeDetector::class ),
-					$container->get( ServerBackupScanner::class )
+					$container->get( ServerBackupScanner::class ),
+					$container->get( ThemeImportService::class )
 				);
 			}
 		);

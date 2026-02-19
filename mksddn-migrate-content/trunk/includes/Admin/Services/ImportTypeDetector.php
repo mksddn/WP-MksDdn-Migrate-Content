@@ -45,7 +45,7 @@ class ImportTypeDetector {
 	 *
 	 * @param string $file_path File path.
 	 * @param string $extension File extension (lowercase).
-	 * @return string|WP_Error Import type ('full' or 'selected') or error.
+	 * @return string|WP_Error Import type ('full', 'selected', or 'themes') or error.
 	 * @since 1.4.0
 	 */
 	public function detect( string $file_path, string $extension ): string|WP_Error {
@@ -96,7 +96,18 @@ class ImportTypeDetector {
 			// Check manifest type first.
 			$manifest_type = sanitize_key( $manifest['type'] ?? '' );
 			if ( 'full' === $manifest_type ) {
+				// Validate full site manifest structure.
+				if ( ! isset( $manifest['format_version'] ) || ! isset( $manifest['plugin_version'] ) ) {
+					return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid full site manifest structure.', 'mksddn-migrate-content' ) );
+				}
 				return 'full';
+			}
+			if ( 'themes' === $manifest_type ) {
+				// Validate themes manifest structure.
+				if ( ! isset( $manifest['format_version'] ) || ! isset( $manifest['plugin_version'] ) || ! isset( $manifest['themes'] ) || ! is_array( $manifest['themes'] ) ) {
+					return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid themes manifest structure.', 'mksddn-migrate-content' ) );
+				}
+				return 'themes';
 			}
 
 			// Check if payload/content.json exists and contains database data.
@@ -120,6 +131,10 @@ class ImportTypeDetector {
 				// Full site archives have 'database' key with 'tables' array.
 				if ( isset( $payload_data['database'] ) && is_array( $payload_data['database'] ) ) {
 					return 'full';
+				}
+				// Theme archives have 'themes' key.
+				if ( isset( $payload_data['themes'] ) && is_array( $payload_data['themes'] ) ) {
+					return 'themes';
 				}
 			}
 

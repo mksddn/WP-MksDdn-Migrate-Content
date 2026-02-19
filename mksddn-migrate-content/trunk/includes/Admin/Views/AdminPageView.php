@@ -52,7 +52,7 @@ class AdminPageView {
 	}
 
 	/**
-	 * Render export sections (Full Site and Selected Content export).
+	 * Render export sections (Full Site, Selected Content, and Theme export).
 	 *
 	 * @return void
 	 * @since 1.0.0
@@ -72,6 +72,15 @@ class AdminPageView {
 			array(
 				'exportable_types' => $exportable_types,
 				'items_by_type'    => $items_by_type,
+			)
+		);
+
+		$theme_exporter = new \MksDdn\MigrateContent\Filesystem\ThemeExporter();
+		$available_themes = $theme_exporter->get_available_themes();
+		$this->renderer->render(
+			'admin/theme-export-section.php',
+			array(
+				'available_themes' => $available_themes,
 			)
 		);
 	}

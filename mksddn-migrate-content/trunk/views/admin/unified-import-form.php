@@ -63,6 +63,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 				</div>
 			</div>
 			
+			<div class="mksddn-mc-field" id="mksddn-mc-theme-import-mode" style="display: none;">
+				<h4><?php esc_html_e( 'Theme Import Mode', 'mksddn-migrate-content' ); ?></h4>
+				<label style="display: block; margin-bottom: 10px;">
+					<input type="radio" name="import_mode" value="replace" checked>
+					<strong><?php esc_html_e( 'Replace', 'mksddn-migrate-content' ); ?></strong>
+					<p class="description" style="margin-left: 25px;">
+						<?php esc_html_e( 'Remove existing theme directory and replace with files from archive.', 'mksddn-migrate-content' ); ?>
+					</p>
+				</label>
+				<label style="display: block;">
+					<input type="radio" name="import_mode" value="merge">
+					<strong><?php esc_html_e( 'Merge', 'mksddn-migrate-content' ); ?></strong>
+					<p class="description" style="margin-left: 25px;">
+						<?php esc_html_e( 'Combine files from archive with existing theme. Files from archive will overwrite existing files.', 'mksddn-migrate-content' ); ?>
+					</p>
+				</label>
+			</div>
+			
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></button>
 		</form>
 	<?php endif; ?>
