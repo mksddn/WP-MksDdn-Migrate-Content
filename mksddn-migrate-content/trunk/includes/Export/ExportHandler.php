@@ -322,10 +322,24 @@ class ExportHandler implements ExporterInterface {
 			'status'     => $post->post_status,
 			'author'     => $post->post_author,
 			'date'       => $post->post_date_gmt,
+			'date_local' => $post->post_date,
+			'modified'   => $post->post_modified_gmt,
+			'modified_local' => $post->post_modified,
+			'menu_order' => $post->menu_order,
+			'comment_status' => $post->comment_status,
+			'ping_status' => $post->ping_status,
 			'acf_fields' => $acf_fields,
 			'meta'       => $meta_data,
 			'featured_media' => $thumbnail_id,
 		);
+
+		// Export parent page slug if parent exists.
+		if ( $post->post_parent > 0 ) {
+			$parent_post = \get_post( $post->post_parent );
+			if ( $parent_post && $parent_post->post_name ) {
+				$data['parent_slug'] = $parent_post->post_name;
+			}
+		}
 
 		if ( 'post' === $post->post_type ) {
 			$data['taxonomies'] = $this->collect_taxonomies( $post->ID );

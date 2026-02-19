@@ -96,6 +96,9 @@ class ImportHandler implements ImporterInterface {
 	public function import_bundle( array $data ): bool {
 		$items = isset( $data['items'] ) && is_array( $data['items'] ) ? $data['items'] : array();
 
+		// Sort items to import parent pages before child pages.
+		$items = $this->sort_items_by_parent( $items );
+
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
 				continue;
@@ -111,6 +114,93 @@ class ImportHandler implements ImporterInterface {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Sort items to ensure parent pages are imported before child pages.
+	 *
+	 * @param array $items Array of items to sort.
+	 * @return array Sorted items array.
+	 */
+	private function sort_items_by_parent( array $items ): array {
+		// Build map: slug => item for quick lookup.
+		$items_by_slug = array();
+		foreach ( $items as $item ) {
+			if ( is_array( $item ) && isset( $item['slug'] ) ) {
+				$items_by_slug[ $item['slug'] ] = $item;
+			}
+		}
+
+		// Build dependency graph: child_slug => parent_slug.
+		$dependencies = array();
+		foreach ( $items as $item ) {
+			if ( is_array( $item ) && isset( $item['slug'], $item['parent_slug'] ) && ! empty( $item['parent_slug'] ) ) {
+				$dependencies[ $item['slug'] ] = $item['parent_slug'];
+			}
+		}
+
+		// Topological sort: items without parents first, then children.
+		$sorted = array();
+		$visited = array();
+
+		// First pass: add items without parents.
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || ! isset( $item['slug'] ) ) {
+				continue;
+			}
+
+			$slug = $item['slug'];
+			if ( ! isset( $dependencies[ $slug ] ) || ! isset( $items_by_slug[ $dependencies[ $slug ] ] ) ) {
+				$sorted[] = $item;
+				$visited[ $slug ] = true;
+			}
+		}
+
+		// Second pass: add children after their parents.
+		$remaining = array_filter(
+			$items,
+			function( $item ) use ( $visited ) {
+				return is_array( $item ) && isset( $item['slug'] ) && ! isset( $visited[ $item['slug'] ] );
+			}
+		);
+
+		$max_iterations = count( $remaining ) * 2; // Prevent infinite loops.
+		$iteration = 0;
+
+		while ( ! empty( $remaining ) && $iteration < $max_iterations ) {
+			$iteration++;
+			$added = false;
+
+			foreach ( $remaining as $key => $item ) {
+				if ( ! is_array( $item ) || ! isset( $item['slug'] ) ) {
+					unset( $remaining[ $key ] );
+					continue;
+				}
+
+				$slug = $item['slug'];
+				$parent_slug = $dependencies[ $slug ] ?? null;
+
+				// If parent is already imported or doesn't exist in bundle, add this item.
+				if ( ! $parent_slug || isset( $visited[ $parent_slug ] ) || ! isset( $items_by_slug[ $parent_slug ] ) ) {
+					$sorted[] = $item;
+					$visited[ $slug ] = true;
+					unset( $remaining[ $key ] );
+					$added = true;
+				}
+			}
+
+			// If no items were added in this iteration, break to avoid infinite loop.
+			if ( ! $added ) {
+				break;
+			}
+		}
+
+		// Add any remaining items (shouldn't happen in normal cases).
+		foreach ( $remaining as $item ) {
+			$sorted[] = $item;
+		}
+
+		return $sorted;
 	}
 	/**
 	 * Imports a single page with ACF fields.
@@ -207,7 +297,7 @@ class ImportHandler implements ImporterInterface {
 	 * @return array
 	 */
 	private function prepare_post_data( array $data, string $post_type ): array {
-		return array(
+		$post_data = array(
 			'post_title'   => sanitize_text_field( $data['title'] ),
 			'post_content' => wp_kses_post( $data['content'] ),
 			'post_excerpt' => sanitize_text_field( $data['excerpt'] ?? '' ),
@@ -217,6 +307,42 @@ class ImportHandler implements ImporterInterface {
 			'post_author'  => absint( $data['author'] ?? $this->wp_user_functions->get_current_user_id() ),
 			'post_date_gmt'=> isset( $data['date'] ) ? sanitize_text_field( $data['date'] ) : current_time( 'mysql', true ),
 		);
+
+		// Set local date if provided.
+		if ( isset( $data['date_local'] ) && ! empty( $data['date_local'] ) ) {
+			$post_data['post_date'] = sanitize_text_field( $data['date_local'] );
+		}
+
+		// Set modified dates if provided.
+		if ( isset( $data['modified'] ) && ! empty( $data['modified'] ) ) {
+			$post_data['post_modified_gmt'] = sanitize_text_field( $data['modified'] );
+		}
+		if ( isset( $data['modified_local'] ) && ! empty( $data['modified_local'] ) ) {
+			$post_data['post_modified'] = sanitize_text_field( $data['modified_local'] );
+		}
+
+		// Set menu order (important for page hierarchy).
+		if ( isset( $data['menu_order'] ) ) {
+			$post_data['menu_order'] = absint( $data['menu_order'] );
+		}
+
+		// Set comment and ping status.
+		if ( isset( $data['comment_status'] ) ) {
+			$post_data['comment_status'] = sanitize_key( $data['comment_status'] );
+		}
+		if ( isset( $data['ping_status'] ) ) {
+			$post_data['ping_status'] = sanitize_key( $data['ping_status'] );
+		}
+
+		// Set parent page if parent_slug is provided.
+		if ( isset( $data['parent_slug'] ) && ! empty( $data['parent_slug'] ) ) {
+			$parent = $this->wp_functions->get_page_by_path( sanitize_title( $data['parent_slug'] ), 'OBJECT', $post_type );
+			if ( $parent ) {
+				$post_data['post_parent'] = $parent->ID;
+			}
+		}
+
+		return $post_data;
 	}
 
 	/**
