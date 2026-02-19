@@ -224,9 +224,8 @@ class ImportHandler implements ImporterInterface {
 			return false;
 		}
 
-		if ( 'post' === $post_type ) {
-			$this->assign_taxonomies( $post_id, $data );
-		}
+		// Assign taxonomies for all post types (including Polylang language taxonomy).
+		$this->assign_taxonomies( $post_id, $data );
 
 		$media_maps  = $this->restore_media( $data, $post_id );
 		$id_map      = $media_maps['id_map'] ?? array();
