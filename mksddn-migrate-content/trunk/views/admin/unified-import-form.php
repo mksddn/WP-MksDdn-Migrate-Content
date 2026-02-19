@@ -12,6 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 <section class="mksddn-mc-section">
 	<h2><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Upload or select a backup file (.wpbkp or .json). The system will automatically detect the import type.', 'mksddn-migrate-content' ); ?></p>
+	<?php
+	$imports_dir = wp_upload_dir();
+	?>
+	<div class="notice notice-info" style="margin: 15px 0;">
+		<p>
+			<strong><?php esc_html_e( 'Tip:', 'mksddn-migrate-content' ); ?></strong>
+			<?php
+			printf(
+				/* translators: %s: imports directory path */
+				esc_html__( 'For large files, it is recommended to upload them via FTP/SFTP to the %s directory and then use the "Select from server" option.', 'mksddn-migrate-content' ),
+				'<code>' . esc_html( str_replace( ABSPATH, '', trailingslashit( $imports_dir['basedir'] ) . 'mksddn-mc/imports/' ) ) . '</code>'
+			);
+			?>
+		</p>
+	</div>
 	<?php if ( $pending_user_preview ) : ?>
 		<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
 	<?php else : ?>
