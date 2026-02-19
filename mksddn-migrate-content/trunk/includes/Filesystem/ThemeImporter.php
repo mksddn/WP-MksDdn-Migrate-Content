@@ -59,6 +59,7 @@ class ThemeImporter {
 	 */
 	private function log_debug( string $message ): void {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging only when WP_DEBUG is enabled
 			error_log( sprintf( '[MksDdn MC] %s', $message ) );
 		}
 	}
@@ -198,6 +199,7 @@ class ThemeImporter {
 			$check_path = is_dir( $target_theme_path ) ? $target_theme_path : dirname( $target_theme_path );
 			$real_check_path = realpath( $check_path );
 			if ( $real_check_path && ( ! $real_theme_root || 0 !== strpos( $real_check_path, $real_theme_root ) ) ) {
+				/* translators: %s: Theme slug */
 				return new WP_Error( 'mksddn_mc_invalid_theme_path', sprintf( __( 'Invalid theme path detected: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 			}
 
@@ -213,12 +215,15 @@ class ThemeImporter {
 				if ( $is_active || $is_parent ) {
 					$this->log_debug( sprintf( 'Skipping deletion of active/parent theme: %s (mode: %s)', $theme_slug, $this->mode ) );
 					// Fall back to merge mode for active/parent themes.
+					/* translators: %s: Theme slug */
 					$this->report_progress( 20, sprintf( __( 'Skipping deletion of active/parent theme: %s (using merge mode)', 'mksddn-migrate-content' ), $theme_slug ) );
 				} else {
+					/* translators: %s: Theme slug */
 					$this->report_progress( 20, sprintf( __( 'Removing existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 					$this->log_debug( sprintf( 'Deleting theme directory: %s', $target_theme_path ) );
 					
 					if ( ! FilesystemHelper::delete( $target_theme_path, true ) ) {
+						/* translators: %s: Theme slug */
 						return new WP_Error( 'mksddn_mc_theme_delete_failed', sprintf( __( 'Failed to remove existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 					}
 				}
@@ -244,6 +249,7 @@ class ThemeImporter {
 
 				$stream = $zip->getStream( $archive_file );
 				if ( ! $stream ) {
+					/* translators: %s: Archive file path */
 					return new WP_Error( 'mksddn_zip_stream', sprintf( __( 'Unable to read "%s" from archive.', 'mksddn-migrate-content' ), $archive_file ) );
 				}
 
@@ -251,10 +257,12 @@ class ThemeImporter {
 				fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with ZipArchive stream
 
 				if ( ! $write_ok ) {
+					/* translators: %s: Target file path */
 					return new WP_Error( 'mksddn_fs_write', sprintf( __( 'Unable to write "%s". Check permissions.', 'mksddn-migrate-content' ), $target ) );
 				}
 			}
 
+			/* translators: %s: Theme slug */
 			$this->report_progress( 50, sprintf( __( 'Imported theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 			$this->log_debug( sprintf( 'Successfully imported theme: %s (mode: %s)', $theme_slug, $this->mode ) );
 		}

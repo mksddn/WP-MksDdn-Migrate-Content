@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<h2><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Upload or select a backup file (.wpbkp or .json). The system will automatically detect the import type.', 'mksddn-migrate-content' ); ?></p>
 	<?php
-	$imports_dir = wp_upload_dir();
+	$mksddn_mc_imports_dir = wp_upload_dir();
 	?>
 	<div class="notice notice-info" style="margin: 15px 0;">
 		<p>
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			printf(
 				/* translators: %s: imports directory path */
 				esc_html__( 'For large files, it is recommended to upload them via FTP/SFTP to the %s directory and then use the "Select from server" option.', 'mksddn-migrate-content' ),
-				'<code>' . esc_html( str_replace( ABSPATH, '', trailingslashit( $imports_dir['basedir'] ) . 'mksddn-mc/imports/' ) ) . '</code>'
+				'<code>' . esc_html( str_replace( ABSPATH, '', trailingslashit( $mksddn_mc_imports_dir['basedir'] ) . 'mksddn-mc/imports/' ) ) . '</code>'
 			);
 			?>
 		</p>
