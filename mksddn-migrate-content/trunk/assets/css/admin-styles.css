@@ -96,6 +96,11 @@
 	margin-bottom: 1.25rem;
 }
 
+.mksddn-mc-basic-selection {
+	display: flex;
+	flex-direction: column;
+}
+
 .mksddn-mc-field h4,
 .mksddn-mc-basic-selection h4 {
 	margin: 0 0 .35rem;
@@ -115,6 +120,8 @@
 .mksddn-mc-field input[type="file"],
 .mksddn-mc-format-selector select {
 	width: 100%;
+	box-sizing: border-box;
+	padding: 6px 8px;
 }
 
 .mksddn-mc-search-input {
@@ -125,12 +132,31 @@
 	border-radius: 4px;
 	font-size: 13px;
 	line-height: 1.5;
+	box-sizing: border-box;
 }
 
 .mksddn-mc-search-input:focus {
 	border-color: #2271b1;
 	box-shadow: 0 0 0 1px #2271b1;
 	outline: 2px solid transparent;
+}
+
+.mksddn-mc-basic-selection .mksddn-mc-search-input {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	min-width: 0;
+}
+
+.mksddn-mc-basic-selection select {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	min-width: 0;
+	padding: 6px 8px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	font-size: 13px;
 }
 
 /* Selection grid */
@@ -187,5 +213,23 @@
 
 .mksddn-mc-import-source-server select {
 	margin-bottom: 0.5rem;
+}
+
+/* Theme selection styles */
+.mksddn-mc-theme-selection {
+	margin-bottom: 1rem;
+}
+
+.mksddn-mc-theme-item {
+	display: block;
+	margin-bottom: 10px;
+}
+
+.mksddn-mc-theme-status {
+	color: #2271b1;
+}
+
+.mksddn-mc-theme-version {
+	color: #666;
 }
 

@@ -11,6 +11,7 @@ namespace MksDdn\MigrateContent\Admin\Handlers;
 use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
+use MksDdn\MigrateContent\Admin\Services\ThemeImportService;
 use MksDdn\MigrateContent\Admin\Services\UnifiedImportOrchestrator;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;

@@ -12,6 +12,7 @@ use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Export\ExportHandler as ExportService;
 use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Filesystem\ThemeExporter;
 use MksDdn\MigrateContent\Selection\SelectionBuilder;
 use MksDdn\MigrateContent\Support\FilenameBuilder;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
@@ -99,6 +100,44 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 		}
 
 		$filename = FilenameBuilder::build( 'full-site', 'wpbkp' );
+		$this->stream_file_download( $temp, $filename );
+	}
+
+	/**
+	 * Handle theme export.
+	 *
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function handle_theme_export(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to export.', 'mksddn-migrate-content' ) );
+		}
+
+		check_admin_referer( 'mksddn_mc_theme_export' );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$selected_themes = isset( $_POST['selected_themes'] ) && is_array( $_POST['selected_themes'] )
+			? array_map( 'sanitize_text_field', wp_unslash( $_POST['selected_themes'] ) )
+			: array();
+
+		if ( empty( $selected_themes ) ) {
+			wp_die( esc_html__( 'No themes selected for export.', 'mksddn-migrate-content' ) );
+		}
+
+		$temp = \wp_tempnam( 'mksddn-themes-' );
+		if ( ! $temp ) {
+			wp_die( esc_html__( 'Unable to create temporary file.', 'mksddn-migrate-content' ) );
+		}
+
+		$exporter = new ThemeExporter();
+		$result   = $exporter->export_themes( $selected_themes, $temp );
+
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ) );
+		}
+
+		$filename = FilenameBuilder::build( 'themes', 'wpbkp' );
 		$this->stream_file_download( $temp, $filename );
 	}
 

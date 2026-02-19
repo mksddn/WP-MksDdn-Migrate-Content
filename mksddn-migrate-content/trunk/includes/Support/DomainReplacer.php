@@ -136,14 +136,14 @@ class DomainReplacer {
 	private function build_domain_map( array $signatures, string $target ): array {
 		$map = array();
 
-		// Normalize target URL - remove standard ports.
+		// Normalize target URL - parse and rebuild to avoid port duplication.
 		$target_parts = wp_parse_url( $target );
 		$target_scheme = isset( $target_parts['scheme'] ) ? $target_parts['scheme'] : 'https';
 		$target_host = isset( $target_parts['host'] ) ? $target_parts['host'] : '';
 		$target_port = isset( $target_parts['port'] ) ? (int) $target_parts['port'] : null;
 		$target_path = isset( $target_parts['path'] ) ? $target_parts['path'] : '';
 
-		// Build normalized target without port (if standard).
+		// Build normalized target URL - ensure port is included only once.
 		$normalized_target = $target_scheme . '://' . $target_host;
 		if ( null !== $target_port && ! $this->is_standard_port( $target_port, $target_scheme ) ) {
 			$normalized_target .= ':' . $target_port;
@@ -157,13 +157,13 @@ class DomainReplacer {
 			$path = $sig_data['path'];
 
 			foreach ( array( 'http', 'https' ) as $scheme ) {
-				// Build URL with port if port exists and is non-standard.
+				// Build source URL with port if port exists and is non-standard.
 				$host_with_port = $host;
 				if ( null !== $port && ! $this->is_standard_port( $port, $scheme ) ) {
 					$host_with_port .= ':' . $port;
 				}
 
-				// URL with port (if non-standard).
+				// Source URL with port (if non-standard).
 				$base_with_port = $scheme . '://' . $host_with_port . $path;
 				$map[ $base_with_port ] = $normalized_target;
 				$map[ $base_with_port . '/' ] = trailingslashit( $normalized_target );
@@ -247,11 +247,13 @@ class DomainReplacer {
 			$data = @unserialize( trim( $value ) );
 
 			if ( false === $data && 'b:0;' !== $value ) {
-				return str_replace( array_keys( $map ), array_values( $map ), $value );
+				$replaced = str_replace( array_keys( $map ), array_values( $map ), $value );
+				return $this->normalize_urls( $replaced );
 			}
 
 			if ( $data instanceof \__PHP_Incomplete_Class ) {
-				return str_replace( array_keys( $map ), array_values( $map ), $value );
+				$replaced = str_replace( array_keys( $map ), array_values( $map ), $value );
+				return $this->normalize_urls( $replaced );
 			}
 
 			$updated = $this->replace_recursive( $data, $map );
@@ -263,7 +265,8 @@ class DomainReplacer {
 			return $result;
 		}
 
-		return str_replace( array_keys( $map ), array_values( $map ), $value );
+		$replaced = str_replace( array_keys( $map ), array_values( $map ), $value );
+		return $this->normalize_urls( $replaced );
 	}
 
 	/**
@@ -295,7 +298,8 @@ class DomainReplacer {
 		}
 
 		if ( is_string( $data ) && '' !== $data ) {
-			return str_replace( array_keys( $map ), array_values( $map ), $data );
+			$replaced = str_replace( array_keys( $map ), array_values( $map ), $data );
+			return $this->normalize_urls( $replaced );
 		}
 
 		return $data;
@@ -317,6 +321,29 @@ class DomainReplacer {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Normalize URLs in string to remove duplicate ports (e.g., localhost:8000:8000 -> localhost:8000).
+	 *
+	 * @param string $value String that may contain URLs with duplicate ports.
+	 * @return string Normalized string.
+	 */
+	private function normalize_urls( string $value ): string {
+		// Pattern to match URLs with duplicate ports: scheme://host:port:port[/path]
+		// Matches: http://localhost:8000:8000, http://localhost:8000:8000/path, etc.
+		// Uses word boundary to ensure we match complete port numbers.
+		$pattern = '/(https?:\/\/[^:\/\s]+):(\d+):\2(?=[\/\s]|$)/';
+		
+		// Replace duplicate ports with single port.
+		$normalized = preg_replace( $pattern, '$1:$2', $value );
+		
+		// If still contains duplicate ports (multiple occurrences), recursively fix them.
+		if ( $normalized !== null && preg_match( $pattern, $normalized ) ) {
+			return $this->normalize_urls( $normalized );
+		}
+		
+		return $normalized !== null ? $normalized : $value;
 	}
 }
 

@@ -213,20 +213,30 @@ class FullSiteImportService {
 		$this->log( sprintf( 'Starting import of file: %s', $original_name ) );
 
 		$lock       = new ImportLock();
-		$lock_token = $lock->acquire();
-		if ( ! $lock_token ) {
-			$this->response_handler->redirect_with_status( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
-			return;
-		}
-
-		$status  = 'success';
-		$message = null;
+		$lock_token = null;
+		$status     = 'success';
+		$message    = null;
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
 
-		$this->log( 'Calling importer->import_from()...' );
-
 		try {
+			$lock_token = $lock->acquire();
+			if ( ! $lock_token ) {
+				$this->response_handler->redirect_with_status( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+				return;
+			}
+
+			// Register shutdown function to ensure lock is released even on fatal errors.
+			register_shutdown_function(
+				function() use ( $lock, &$lock_token ) {
+					if ( $lock_token ) {
+						$lock->release( $lock_token );
+					}
+				}
+			);
+
+			$this->log( 'Calling importer->import_from()...' );
+
 			$result = $importer->import_from( $temp, $site_guard, $options );
 
 			$this->log( sprintf( 'importer->import_from() returned: %s', is_wp_error( $result ) ? 'WP_Error: ' . $result->get_error_message() : 'success' ) );
@@ -241,7 +251,9 @@ class FullSiteImportService {
 		} finally {
 			$site_guard->restore();
 			$this->cleanup( $temp, $cleanup, $job );
-			$lock->release( $lock_token );
+			if ( $lock_token ) {
+				$lock->release( $lock_token );
+			}
 		}
 
 		if ( 'error' === $status ) {

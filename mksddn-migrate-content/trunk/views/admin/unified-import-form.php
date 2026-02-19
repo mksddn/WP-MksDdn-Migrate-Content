@@ -12,6 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 <section class="mksddn-mc-section">
 	<h2><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Upload or select a backup file (.wpbkp or .json). The system will automatically detect the import type.', 'mksddn-migrate-content' ); ?></p>
+	<?php
+	$mksddn_mc_imports_dir = wp_upload_dir();
+	?>
+	<div class="notice notice-info" style="margin: 15px 0;">
+		<p>
+			<strong><?php esc_html_e( 'Tip:', 'mksddn-migrate-content' ); ?></strong>
+			<?php
+			printf(
+				/* translators: %s: imports directory path */
+				esc_html__( 'For large files, it is recommended to upload them via FTP/SFTP to the %s directory and then use the "Select from server" option.', 'mksddn-migrate-content' ),
+				'<code>' . esc_html( str_replace( ABSPATH, '', trailingslashit( $mksddn_mc_imports_dir['basedir'] ) . 'mksddn-mc/imports/' ) ) . '</code>'
+			);
+			?>
+		</p>
+	</div>
 	<?php if ( $pending_user_preview ) : ?>
 		<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
 	<?php else : ?>
@@ -46,6 +61,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<p class="description"><?php esc_html_e( 'Select an import file from the server directory.', 'mksddn-migrate-content' ); ?></p>
 					<div class="mksddn-mc-server-file-notice notice notice-error" style="display: none; margin-top: 0.5rem;"></div>
 				</div>
+			</div>
+			
+			<div class="mksddn-mc-field" id="mksddn-mc-theme-import-mode" style="display: none;">
+				<h4><?php esc_html_e( 'Theme Import Mode', 'mksddn-migrate-content' ); ?></h4>
+				<label style="display: block; margin-bottom: 10px;">
+					<input type="radio" name="import_mode" value="replace" checked>
+					<strong><?php esc_html_e( 'Replace', 'mksddn-migrate-content' ); ?></strong>
+					<p class="description" style="margin-left: 25px;">
+						<?php esc_html_e( 'Remove existing theme directory and replace with files from archive.', 'mksddn-migrate-content' ); ?>
+					</p>
+				</label>
+				<label style="display: block;">
+					<input type="radio" name="import_mode" value="merge">
+					<strong><?php esc_html_e( 'Merge', 'mksddn-migrate-content' ); ?></strong>
+					<p class="description" style="margin-left: 25px;">
+						<?php esc_html_e( 'Combine files from archive with existing theme. Files from archive will overwrite existing files.', 'mksddn-migrate-content' ); ?>
+					</p>
+				</label>
 			</div>
 			
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></button>

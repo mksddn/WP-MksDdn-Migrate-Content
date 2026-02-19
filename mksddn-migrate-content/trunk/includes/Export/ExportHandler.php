@@ -235,18 +235,20 @@ class ExportHandler implements ExporterInterface {
 			$this->batch_loader->load_thumbnails_batch( $all_post_ids );
 			$this->batch_loader->load_acf_fields_batch( $all_post_ids );
 
-			// Preload taxonomy terms for posts.
-			$post_type_ids = array();
+			// Preload taxonomy terms for all post types (including Polylang language taxonomy).
+			$post_types_map = array();
 			foreach ( $posts_by_id as $post ) {
-				if ( 'post' === $post->post_type ) {
-					$post_type_ids[] = $post->ID;
+				$post_type = $post->post_type;
+				if ( ! isset( $post_types_map[ $post_type ] ) ) {
+					$post_types_map[ $post_type ] = array();
 				}
+				$post_types_map[ $post_type ][] = $post->ID;
 			}
 
-			if ( ! empty( $post_type_ids ) ) {
-				$taxonomies = \get_object_taxonomies( 'post', 'names' );
+			foreach ( $post_types_map as $post_type => $post_ids ) {
+				$taxonomies = \get_object_taxonomies( $post_type, 'names' );
 				foreach ( $taxonomies as $taxonomy ) {
-					$this->batch_loader->load_terms_batch( $post_type_ids, $taxonomy );
+					$this->batch_loader->load_terms_batch( $post_ids, $taxonomy );
 				}
 			}
 		}
@@ -322,13 +324,29 @@ class ExportHandler implements ExporterInterface {
 			'status'     => $post->post_status,
 			'author'     => $post->post_author,
 			'date'       => $post->post_date_gmt,
+			'date_local' => $post->post_date,
+			'modified'   => $post->post_modified_gmt,
+			'modified_local' => $post->post_modified,
+			'menu_order' => $post->menu_order,
+			'comment_status' => $post->comment_status,
+			'ping_status' => $post->ping_status,
 			'acf_fields' => $acf_fields,
 			'meta'       => $meta_data,
 			'featured_media' => $thumbnail_id,
 		);
 
-		if ( 'post' === $post->post_type ) {
-			$data['taxonomies'] = $this->collect_taxonomies( $post->ID );
+		// Export parent page slug if parent exists.
+		if ( $post->post_parent > 0 ) {
+			$parent_post = \get_post( $post->post_parent );
+			if ( $parent_post && $parent_post->post_name ) {
+				$data['parent_slug'] = $parent_post->post_name;
+			}
+		}
+
+		// Export taxonomies for all post types (including Polylang language taxonomy).
+		$taxonomies = $this->collect_taxonomies( $post->ID, $post->post_type );
+		if ( ! empty( $taxonomies ) ) {
+			$data['taxonomies'] = $taxonomies;
 		}
 
 		if ( $media && $media->has_items() ) {
@@ -352,11 +370,12 @@ class ExportHandler implements ExporterInterface {
 	/**
 	 * Collect taxonomy terms for posts.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int    $post_id   Post ID.
+	 * @param string $post_type Post type.
 	 * @return array
 	 */
-	private function collect_taxonomies( int $post_id ): array {
-		$taxonomies = \get_object_taxonomies( 'post', 'names' );
+	private function collect_taxonomies( int $post_id, string $post_type ): array {
+		$taxonomies = \get_object_taxonomies( $post_type, 'names' );
 		$result     = array();
 
 		foreach ( $taxonomies as $taxonomy ) {

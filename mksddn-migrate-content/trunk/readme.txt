@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.0.3
+Stable tag: 2.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -133,6 +133,16 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.0 =
+* Added: Theme export and import functionality - users can now export and import WordPress themes with merge and replace mode options.
+* Enhanced: Export and Import Handlers for improved data handling - added local dates, modified dates, menu order, comment status, and parent page slug to exports. Import now sorts items by parent-child relationships.
+* Enhanced: Taxonomy handling in Export and Import Handlers - preloads taxonomy terms for all post types including Polylang language taxonomy, improving export accuracy and import consistency.
+* Enhanced: DomainReplacer for improved URL normalization - prevents port duplication in URLs during domain replacements.
+* Enhanced: Import locking mechanism with improved error handling and automatic lock release on fatal errors, ensuring only one import can run at a time.
+* Enhanced: Admin styles with new flexbox layout classes for better organization and responsiveness of selection elements.
+* Enhanced: Theme import and export with improved logging, optimized theme retrieval, and validation to prevent deletion of active or parent themes.
+* Refactored: Removed deprecated import templates and sections from admin interface for cleaner codebase.
 
 = 2.0.3 =
 * Fixed: Media files are now properly linked to pages/posts during wpbkp import. ACF Image fields correctly receive new attachment IDs for all return formats.
