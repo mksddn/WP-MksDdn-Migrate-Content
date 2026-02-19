@@ -215,3 +215,21 @@
 	margin-bottom: 0.5rem;
 }
 
+/* Theme selection styles */
+.mksddn-mc-theme-selection {
+	margin-bottom: 1rem;
+}
+
+.mksddn-mc-theme-item {
+	display: block;
+	margin-bottom: 10px;
+}
+
+.mksddn-mc-theme-status {
+	color: #2271b1;
+}
+
+.mksddn-mc-theme-version {
+	color: #666;
+}
+

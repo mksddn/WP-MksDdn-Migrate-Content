@@ -55,6 +55,18 @@ class ThemeImportService {
 	}
 
 	/**
+	 * Log debug message if WP_DEBUG is enabled.
+	 *
+	 * @param string $message Debug message.
+	 * @return void
+	 */
+	private function log_debug( string $message ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( '[MksDdn MC] %s', $message ) );
+		}
+	}
+
+	/**
 	 * Handle theme import request.
 	 *
 	 * @return void
@@ -120,16 +132,9 @@ class ThemeImportService {
 			if ( is_wp_error( $result ) ) {
 				$status  = 'error';
 				$message = $result->get_error_message();
-				
-				// Log import errors for debugging.
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( sprintf( '[MksDdn MC] Theme import failed: %s', $message ) );
-				}
+				$this->log_debug( sprintf( 'Theme import failed: %s', $message ) );
 			} else {
-				// Log successful import for debugging.
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( sprintf( '[MksDdn MC] Theme import completed successfully (mode: %s)', $import_mode ) );
-				}
+				$this->log_debug( sprintf( 'Theme import completed successfully (mode: %s)', $import_mode ) );
 			}
 		} finally {
 			$this->cleanup( $upload['temp'], $upload['cleanup'], $upload['job'] );
@@ -210,7 +215,8 @@ class ThemeImportService {
 		}
 
 		$file     = $_FILES['theme_import_file']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- sanitized below, nonce verified upstream
-		$tmp_name = isset( $file['tmp_name'] ) ? sanitize_text_field( wp_unslash( (string) $file['tmp_name'] ) ) : '';
+		// tmp_name is a server path, not user input - use direct cast, will be validated with is_uploaded_file().
+		$tmp_name = isset( $file['tmp_name'] ) ? (string) $file['tmp_name'] : '';
 		$name     = isset( $file['name'] ) ? sanitize_file_name( wp_unslash( (string) $file['name'] ) ) : '';
 		$size     = isset( $file['size'] ) ? (int) $file['size'] : 0;
 

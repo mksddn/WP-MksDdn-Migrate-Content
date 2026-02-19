@@ -52,6 +52,18 @@ class ThemeImporter {
 	}
 
 	/**
+	 * Log debug message if WP_DEBUG is enabled.
+	 *
+	 * @param string $message Debug message.
+	 * @return void
+	 */
+	private function log_debug( string $message ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( sprintf( '[MksDdn MC] %s', $message ) );
+		}
+	}
+
+	/**
 	 * Set progress callback.
 	 *
 	 * @param callable $callback Callback receiving (int $percent, string $message).
@@ -86,10 +98,12 @@ class ThemeImporter {
 		}
 
 		// Check available disk space before import.
+		// Using multiplier of 3 to account for extraction overhead and temporary files.
 		$archive_size = filesize( $archive_path );
 		if ( false !== $archive_size && function_exists( 'disk_free_space' ) ) {
 			$free_space = disk_free_space( dirname( get_theme_root() ) );
-			if ( false !== $free_space && $free_space < ( $archive_size * 3 ) ) {
+			$required_space = $archive_size * 3; // Multiplier accounts for extraction overhead.
+			if ( false !== $free_space && $free_space < $required_space ) {
 				return new WP_Error( 'mksddn_mc_insufficient_space', __( 'Insufficient disk space for theme import. Please free up space and try again.', 'mksddn-migrate-content' ) );
 			}
 		}
@@ -154,7 +168,8 @@ class ThemeImporter {
 
 			// Extract theme slug from path.
 			$relative_path = substr( $normalized, strlen( $allowed_prefix ) );
-			$theme_slug = strtok( $relative_path, '/' );
+			$path_parts = explode( '/', $relative_path, 2 );
+			$theme_slug = $path_parts[0] ?? '';
 
 			if ( empty( $theme_slug ) ) {
 				continue;
@@ -178,23 +193,34 @@ class ThemeImporter {
 			$target_theme_path = trailingslashit( $theme_root ) . $theme_slug;
 
 			// Validate that target path is within theme root for security.
+			// Check parent directory if theme doesn't exist yet.
 			$real_theme_root = realpath( $theme_root );
-			$real_target_path = realpath( $target_theme_path );
-			if ( $real_target_path && ( ! $real_theme_root || 0 !== strpos( $real_target_path, $real_theme_root ) ) ) {
+			$check_path = is_dir( $target_theme_path ) ? $target_theme_path : dirname( $target_theme_path );
+			$real_check_path = realpath( $check_path );
+			if ( $real_check_path && ( ! $real_theme_root || 0 !== strpos( $real_check_path, $real_theme_root ) ) ) {
 				return new WP_Error( 'mksddn_mc_invalid_theme_path', sprintf( __( 'Invalid theme path detected: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 			}
 
+			// Prevent deletion of active theme or parent theme in replace mode.
+			$active_stylesheet = get_stylesheet();
+			$active_template = get_template();
+			$is_active = $active_stylesheet === $theme_slug;
+			$is_parent = $active_template === $theme_slug && $active_stylesheet !== $theme_slug;
+
 			// Handle replace mode: delete existing theme directory.
 			if ( 'replace' === $this->mode && is_dir( $target_theme_path ) ) {
-				$this->report_progress( 20, sprintf( __( 'Removing existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
-				
-				// Log theme deletion for debugging.
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( sprintf( '[MksDdn MC] Deleting theme directory: %s', $target_theme_path ) );
-				}
-				
-				if ( ! FilesystemHelper::delete( $target_theme_path, true ) ) {
-					return new WP_Error( 'mksddn_mc_theme_delete_failed', sprintf( __( 'Failed to remove existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
+				// Safety check: prevent deletion of active or parent theme.
+				if ( $is_active || $is_parent ) {
+					$this->log_debug( sprintf( 'Skipping deletion of active/parent theme: %s (mode: %s)', $theme_slug, $this->mode ) );
+					// Fall back to merge mode for active/parent themes.
+					$this->report_progress( 20, sprintf( __( 'Skipping deletion of active/parent theme: %s (using merge mode)', 'mksddn-migrate-content' ), $theme_slug ) );
+				} else {
+					$this->report_progress( 20, sprintf( __( 'Removing existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
+					$this->log_debug( sprintf( 'Deleting theme directory: %s', $target_theme_path ) );
+					
+					if ( ! FilesystemHelper::delete( $target_theme_path, true ) ) {
+						return new WP_Error( 'mksddn_mc_theme_delete_failed', sprintf( __( 'Failed to remove existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
+					}
 				}
 			}
 
@@ -230,11 +256,7 @@ class ThemeImporter {
 			}
 
 			$this->report_progress( 50, sprintf( __( 'Imported theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
-			
-			// Log successful theme import for debugging.
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( '[MksDdn MC] Successfully imported theme: %s (mode: %s)', $theme_slug, $this->mode ) );
-			}
+			$this->log_debug( sprintf( 'Successfully imported theme: %s (mode: %s)', $theme_slug, $this->mode ) );
 		}
 
 		return true;

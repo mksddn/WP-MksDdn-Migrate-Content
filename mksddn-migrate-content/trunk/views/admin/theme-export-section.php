@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<div class="mksddn-mc-theme-selection">
 					<?php if ( ! empty( $available_themes ) ) : ?>
 						<?php foreach ( $available_themes as $theme_slug => $theme_data ) : ?>
-							<label style="display: block; margin-bottom: 10px;">
+							<label class="mksddn-mc-theme-item">
 								<input 
 									type="checkbox" 
 									name="selected_themes[]" 
@@ -32,12 +32,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 								>
 								<strong><?php echo esc_html( $theme_data['name'] ); ?></strong>
 								<?php if ( $theme_data['is_active'] ) : ?>
-									<span style="color: #2271b1;"><?php esc_html_e( '(Active)', 'mksddn-migrate-content' ); ?></span>
+									<span class="mksddn-mc-theme-status"><?php esc_html_e( '(Active)', 'mksddn-migrate-content' ); ?></span>
 								<?php elseif ( $theme_data['is_parent'] ) : ?>
-									<span style="color: #2271b1;"><?php esc_html_e( '(Parent)', 'mksddn-migrate-content' ); ?></span>
+									<span class="mksddn-mc-theme-status"><?php esc_html_e( '(Parent)', 'mksddn-migrate-content' ); ?></span>
 								<?php endif; ?>
 								<?php if ( ! empty( $theme_data['version'] ) ) : ?>
-									<span style="color: #666;">v<?php echo esc_html( $theme_data['version'] ); ?></span>
+									<span class="mksddn-mc-theme-version">v<?php echo esc_html( $theme_data['version'] ); ?></span>
 								<?php endif; ?>
 							</label>
 						<?php endforeach; ?>

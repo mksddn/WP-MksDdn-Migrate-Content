@@ -142,9 +142,12 @@ class ThemeExporter {
 			return $themes;
 		}
 
+		// Get all themes at once to avoid N+1 queries.
+		$all_themes = wp_get_themes();
+
 		foreach ( $theme_dirs as $theme_dir ) {
 			$theme_slug = basename( $theme_dir );
-			$theme = wp_get_theme( $theme_slug );
+			$theme = isset( $all_themes[ $theme_slug ] ) ? $all_themes[ $theme_slug ] : wp_get_theme( $theme_slug );
 
 			if ( ! $theme->exists() ) {
 				continue;
