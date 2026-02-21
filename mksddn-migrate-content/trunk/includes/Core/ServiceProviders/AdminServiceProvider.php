@@ -11,6 +11,7 @@ namespace MksDdn\MigrateContent\Core\ServiceProviders;
 use MksDdn\MigrateContent\Admin\AdminPageController;
 use MksDdn\MigrateContent\Admin\Handlers\ExportRequestHandler;
 use MksDdn\MigrateContent\Admin\Handlers\ImportRequestHandler;
+use MksDdn\MigrateContent\Admin\Handlers\ThemePreviewRequestHandler;
 use MksDdn\MigrateContent\Admin\Handlers\UserMergeRequestHandler;
 use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportFileValidator;
@@ -28,6 +29,7 @@ use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
+use MksDdn\MigrateContent\Contracts\ThemePreviewRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
@@ -171,7 +173,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			function ( ServiceContainer $container ) {
 				return new ThemeImportService(
 					$container->get( ResponseHandler::class ),
-					$container->get( ServerBackupScanner::class )
+					$container->get( ServerBackupScanner::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface::class )
 				);
 			}
 		);
@@ -184,7 +187,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( FullSiteImportService::class ),
 					$container->get( ImportTypeDetector::class ),
 					$container->get( ServerBackupScanner::class ),
-					$container->get( ThemeImportService::class )
+					$container->get( \MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface::class ),
+					$container->get( ResponseHandler::class )
 				);
 			}
 		);
@@ -196,7 +200,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( SelectedContentImportService::class ),
 					$container->get( FullSiteImportService::class ),
 					$container->get( ImportTypeDetector::class ),
-					$container->get( UnifiedImportOrchestrator::class )
+					$container->get( UnifiedImportOrchestrator::class ),
+					$container->get( ThemeImportService::class )
 				);
 			}
 		);
@@ -220,6 +225,22 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			UserMergeRequestHandler::class,
 			function ( ServiceContainer $container ) {
 				return $container->get( UserMergeRequestHandlerInterface::class );
+			}
+		);
+
+		$container->register(
+			ThemePreviewRequestHandlerInterface::class,
+			function ( ServiceContainer $container ) {
+				return new ThemePreviewRequestHandler(
+					$container->get( \MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface::class ),
+					$container->get( NotificationServiceInterface::class )
+				);
+			}
+		);
+		$container->register(
+			ThemePreviewRequestHandler::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ThemePreviewRequestHandlerInterface::class );
 			}
 		);
 

@@ -2,7 +2,7 @@
 /**
  * @file: UnifiedImportOrchestrator.php
  * @description: Orchestrates unified import with automatic type detection and routing
- * @dependencies: SelectedContentImportService, FullSiteImportService, ImportTypeDetector, ServerBackupScanner, ChunkJobRepository
+ * @dependencies: SelectedContentImportService, FullSiteImportService, ImportTypeDetector, ServerBackupScanner, ChunkJobRepository, Themes\ThemePreviewStore, Admin\Services\ResponseHandler
  * @created: 2026-01-25
  */
 
@@ -12,9 +12,10 @@ use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
-use MksDdn\MigrateContent\Admin\Services\ThemeImportService;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
+use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -43,11 +44,18 @@ class UnifiedImportOrchestrator {
 	private FullSiteImportService $full_import_service;
 
 	/**
-	 * Theme import service.
+	 * Theme preview store.
 	 *
-	 * @var ThemeImportService
+	 * @var ThemePreviewStoreInterface
 	 */
-	private ThemeImportService $theme_import_service;
+	private ThemePreviewStoreInterface $theme_preview_store;
+
+	/**
+	 * Response handler.
+	 *
+	 * @var ResponseHandler
+	 */
+	private ResponseHandler $response_handler;
 
 	/**
 	 * Import type detector.
@@ -70,7 +78,8 @@ class UnifiedImportOrchestrator {
 	 * @param FullSiteImportService|null        $full_import_service     Full site import service.
 	 * @param ImportTypeDetector|null           $type_detector            Import type detector.
 	 * @param ServerBackupScanner|null         $server_scanner           Server backup scanner.
-	 * @param ThemeImportService|null          $theme_import_service     Theme import service.
+	 * @param ThemePreviewStoreInterface|null  $theme_preview_store      Theme preview store.
+	 * @param ResponseHandler|null             $response_handler         Response handler.
 	 * @since 2.0.0
 	 */
 	public function __construct(
@@ -78,13 +87,15 @@ class UnifiedImportOrchestrator {
 		?FullSiteImportService $full_import_service = null,
 		?ImportTypeDetector $type_detector = null,
 		?ServerBackupScanner $server_scanner = null,
-		?ThemeImportService $theme_import_service = null
+		?ThemePreviewStoreInterface $theme_preview_store = null,
+		?ResponseHandler $response_handler = null
 	) {
 		$this->selected_import_service = $selected_import_service ?? new SelectedContentImportService();
 		$this->full_import_service      = $full_import_service ?? new FullSiteImportService();
-		$this->theme_import_service     = $theme_import_service ?? new ThemeImportService();
 		$this->type_detector            = $type_detector ?? new ImportTypeDetector();
 		$this->server_scanner           = $server_scanner ?? new ServerBackupScanner();
+		$this->theme_preview_store      = $theme_preview_store ?? new ThemePreviewStore();
+		$this->response_handler         = $response_handler ?? new ResponseHandler();
 	}
 
 	/**
@@ -128,7 +139,7 @@ class UnifiedImportOrchestrator {
 		if ( 'full' === $import_type ) {
 			$this->route_to_full_import( $file_info );
 		} elseif ( 'themes' === $import_type ) {
-			$this->route_to_theme_import( $file_info );
+			$this->route_to_theme_preview( $file_info );
 		} else {
 			$this->route_to_selected_import( $file_info );
 		}
@@ -317,21 +328,61 @@ class UnifiedImportOrchestrator {
 	}
 
 	/**
-	 * Route to theme import service.
+	 * Route to theme preview step before import.
 	 *
 	 * @param array $file_info File information.
 	 * @return void
 	 * @since 2.1.0
 	 */
-	private function route_to_theme_import( array $file_info ): void {
-		// Get import mode from POST if available, default to 'replace'.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
-		$import_mode = isset( $_POST['import_mode'] ) ? sanitize_key( $_POST['import_mode'] ) : 'replace';
-		$import_mode = in_array( $import_mode, array( 'merge', 'replace' ), true ) ? $import_mode : 'replace';
+	private function route_to_theme_preview( array $file_info ): void {
+		$preview_payload = $this->prepare_file_for_preview( $file_info );
 
-		$this->prepare_file_for_import( $file_info, 'theme_import_file', 'mksddn_mc_unified_import' );
-		$_POST['import_mode'] = $import_mode;
+		if ( is_wp_error( $preview_payload ) ) {
+			wp_die( esc_html( $preview_payload->get_error_message() ) );
+		}
 
-		$this->theme_import_service->import();
+		$preview_id = $this->theme_preview_store->create( $preview_payload );
+		$this->response_handler->redirect_to_theme_preview( $preview_id );
+	}
+
+	/**
+	 * Prepare file info for theme preview step.
+	 *
+	 * @param array $file_info File information.
+	 * @return array|WP_Error
+	 * @since 2.1.0
+	 */
+	private function prepare_file_for_preview( array $file_info ): array|WP_Error {
+		$result = array(
+			'file_path'     => '',
+			'cleanup'       => false,
+			'chunk_job_id'  => '',
+			'original_name' => $file_info['name'] ?? '',
+		);
+
+		if ( 'chunked' === $file_info['source'] ) {
+			$result['file_path']    = $file_info['path'];
+			$result['chunk_job_id'] = $file_info['chunk_job_id'] ?? '';
+			return $result;
+		}
+
+		if ( 'server' === $file_info['source'] ) {
+			$result['file_path'] = $file_info['path'];
+			return $result;
+		}
+
+		$temp = wp_tempnam( 'mksddn-theme-preview-' );
+		if ( ! $temp ) {
+			return new WP_Error( 'mksddn_mc_temp_unavailable', __( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( ! FilesystemHelper::move( $file_info['path'], $temp, true ) ) {
+			return new WP_Error( 'mksddn_mc_move_failed', __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
+		}
+
+		$result['file_path'] = $temp;
+		$result['cleanup']   = true;
+
+		return $result;
 	}
 }

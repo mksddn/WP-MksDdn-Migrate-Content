@@ -19,6 +19,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 * **Dual export modes** – choose Full Site (database + uploads/plugins/themes) or Selected Content (multi-select posts/pages/CPTs) with or without referenced media.
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
+* **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
 * **Integrity & safety** – `.wpbkp` archives ship with manifests and checksums; imports verify capabilities, nonces, and disk space before touching data.
 
 = Feature Highlights =
@@ -79,12 +80,14 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ExportRequestHandler` - handles export requests
 * `ImportRequestHandler` - delegates to specialized import services (supports unified import via `UnifiedImportOrchestrator`)
 * `UserMergeRequestHandler` - processes user merge operations
+* `ThemePreviewRequestHandler` - handles theme preview cancel operations
 * `ChunkRestController` - REST API controller for chunked upload/download operations
 * All handlers implement corresponding interfaces for testability
 
 = Service Layer =
 * `SelectedContentImportService` - handles selected content imports
 * `FullSiteImportService` - manages full site imports
+* `ThemeImportService` - handles theme archive imports
 * `UnifiedImportOrchestrator` - orchestrates unified import with automatic type detection and routing
 * `ImportTypeDetector` - detects import type (full site or selected content) from archive file
 * `ImportFileValidator` - validates uploaded files
@@ -96,12 +99,13 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ErrorHandler` - centralized error handling and logging
 * `UserDiffBuilder` - builds user difference comparison
 * `UserMergeApplier` - applies user merge operations
+* `ThemePreviewStore` - stores pending theme import previews
 
 = Contracts (Interfaces) =
 All key components implement interfaces:
 * `ExporterInterface`, `ImporterInterface`
 * `MediaCollectorInterface`, `ChunkJobRepositoryInterface`
-* `UserPreviewStoreInterface`, `UserDiffBuilderInterface`, `UserMergeApplierInterface`
+* `UserPreviewStoreInterface`, `ThemePreviewStoreInterface`, `UserDiffBuilderInterface`, `UserMergeApplierInterface`
 * `NotificationServiceInterface`, `ProgressServiceInterface`
 * `ArchiveHandlerInterface`, `ValidatorInterface`
 * Request handler interfaces for all handlers

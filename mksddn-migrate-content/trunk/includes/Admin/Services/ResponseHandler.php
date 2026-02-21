@@ -60,6 +60,28 @@ class ResponseHandler {
 	}
 
 	/**
+	 * Redirect to theme preview page.
+	 *
+	 * @param string $preview_id Preview identifier.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function redirect_to_theme_preview( string $preview_id ): void {
+		$base  = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
+		$nonce = wp_create_nonce( 'mksddn_mc_theme_preview' );
+		$url   = add_query_arg(
+			array(
+				'mksddn_mc_theme_review' => $preview_id,
+				'_wpnonce'               => $nonce,
+			),
+			$base
+		);
+
+		wp_safe_redirect( $url );
+		exit;
+	}
+
+	/**
 	 * Redirect with full import status.
 	 *
 	 * @param string      $status  success|error.
@@ -69,6 +91,18 @@ class ResponseHandler {
 	 */
 	public function redirect_with_status( string $status, ?string $message = null ): void {
 		$this->notifications->redirect_full_status( $status, $message );
+	}
+
+	/**
+	 * Redirect with theme import status.
+	 *
+	 * @param string      $status  success|error.
+	 * @param string|null $message Optional error message.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function redirect_with_theme_status( string $status, ?string $message = null ): void {
+		$this->notifications->redirect_with_theme_status( $status, $message );
 	}
 }
 

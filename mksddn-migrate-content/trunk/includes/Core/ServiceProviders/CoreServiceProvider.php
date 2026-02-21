@@ -11,6 +11,7 @@ namespace MksDdn\MigrateContent\Core\ServiceProviders;
 use MksDdn\MigrateContent\Archive\Extractor;
 use MksDdn\MigrateContent\Archive\Packer;
 use MksDdn\MigrateContent\Contracts\ArchiveHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
@@ -21,6 +22,7 @@ use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapper;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Core\BatchLoader;
+use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -103,6 +105,20 @@ class CoreServiceProvider implements ServiceProviderInterface {
 			UserPreviewStore::class,
 			function ( ServiceContainer $container ) {
 				return $container->get( UserPreviewStoreInterface::class );
+			}
+		);
+
+		// Theme services.
+		$container->register(
+			ThemePreviewStoreInterface::class,
+			function ( ServiceContainer $container ) {
+				return new ThemePreviewStore();
+			}
+		);
+		$container->register(
+			ThemePreviewStore::class,
+			function ( ServiceContainer $container ) {
+				return $container->get( ThemePreviewStoreInterface::class );
 			}
 		);
 

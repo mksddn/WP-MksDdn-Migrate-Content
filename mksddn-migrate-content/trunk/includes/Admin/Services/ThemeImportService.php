@@ -2,7 +2,7 @@
 /**
  * @file: ThemeImportService.php
  * @description: Service for importing theme archives
- * @dependencies: Filesystem\ThemeImporter, Admin\Services\ServerBackupScanner, Admin\Services\ResponseHandler, Support\FilesystemHelper, Chunking\ChunkJobRepository, Config\PluginConfig
+ * @dependencies: Filesystem\ThemeImporter, Admin\Services\ServerBackupScanner, Admin\Services\ResponseHandler, Support\FilesystemHelper, Chunking\ChunkJobRepository, Config\PluginConfig, Themes\ThemePreviewStore
  * @created: 2026-02-19
  */
 
@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Filesystem\ThemeImporter;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Support\ImportLock;
+use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -41,17 +42,27 @@ class ThemeImportService {
 	private ServerBackupScanner $server_scanner;
 
 	/**
+	 * Theme preview store.
+	 *
+	 * @var ThemePreviewStore
+	 */
+	private ThemePreviewStore $preview_store;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param ResponseHandler|null    $response_handler Response handler.
+	 * @param ResponseHandler|null     $response_handler Response handler.
 	 * @param ServerBackupScanner|null $server_scanner   Server backup scanner.
+	 * @param ThemePreviewStore|null   $preview_store    Theme preview store.
 	 */
 	public function __construct(
 		?ResponseHandler $response_handler = null,
-		?ServerBackupScanner $server_scanner = null
+		?ServerBackupScanner $server_scanner = null,
+		?ThemePreviewStore $preview_store = null
 	) {
 		$this->response_handler = $response_handler ?? new ResponseHandler();
 		$this->server_scanner   = $server_scanner ?? new ServerBackupScanner();
+		$this->preview_store    = $preview_store ?? new ThemePreviewStore();
 	}
 
 	/**
@@ -77,14 +88,86 @@ class ThemeImportService {
 			wp_die( esc_html__( 'Sorry, you are not allowed to import.', 'mksddn-migrate-content' ) );
 		}
 
+		$preview_id = isset( $_POST['preview_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preview_id'] ) ) : '';
+		if ( $preview_id ) {
+			check_admin_referer( 'mksddn_mc_theme_preview_' . $preview_id );
+			$this->finalize_from_preview( $preview_id );
+			return;
+		}
+
 		// Accept both unified_import and theme_import nonces for compatibility.
 		$nonce_verified = check_admin_referer( 'mksddn_mc_unified_import', '_wpnonce', false )
 			|| check_admin_referer( 'mksddn_mc_theme_import', '_wpnonce', false );
-		
+
 		if ( ! $nonce_verified ) {
 			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$chunk_job_id = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
+		$upload       = $this->resolve_upload( $chunk_job_id );
+
+		if ( is_wp_error( $upload ) ) {
+			$this->response_handler->redirect_with_theme_status( 'error', $upload->get_error_message() );
+			return;
+		}
+
+		$import_mode = $this->sanitize_import_mode( $_POST['import_mode'] ?? 'replace' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$this->execute_import( $upload, $import_mode );
+	}
+
+	/**
+	 * Finalize theme import from stored preview.
+	 *
+	 * @param string $preview_id Preview identifier.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	private function finalize_from_preview( string $preview_id ): void {
+		$preview = $this->preview_store->get( $preview_id );
+		if ( ! $preview ) {
+			$this->response_handler->redirect_with_theme_status( 'error', __( 'Theme import session expired. Please upload the archive again.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		if ( (int) ( $preview['created_by'] ?? 0 ) !== get_current_user_id() ) {
+			$this->response_handler->redirect_with_theme_status( 'error', __( 'You are not allowed to continue this theme import.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		$import_mode = $this->sanitize_import_mode( $_POST['import_mode'] ?? 'replace' );
+		$upload      = array(
+			'temp'          => isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '',
+			'cleanup'       => ! empty( $preview['cleanup'] ),
+			'chunk_job_id'  => isset( $preview['chunk_job_id'] ) ? sanitize_text_field( (string) $preview['chunk_job_id'] ) : '',
+			'original_name' => $preview['original_name'] ?? '',
+			'job'           => null,
+		);
+
+		if ( $upload['chunk_job_id'] ) {
+			$repo          = new ChunkJobRepository();
+			$upload['job'] = $repo->get( $upload['chunk_job_id'] );
+		}
+
+		if ( empty( $upload['temp'] ) || ! file_exists( $upload['temp'] ) ) {
+			$this->preview_store->delete( $preview_id );
+			$this->response_handler->redirect_with_theme_status( 'error', __( 'Import file is missing. Restart the upload.', 'mksddn-migrate-content' ) );
+			return;
+		}
+
+		$this->preview_store->delete( $preview_id );
+		$this->execute_import( $upload, $import_mode );
+	}
+
+	/**
+	 * Execute theme import.
+	 *
+	 * @param array  $upload      Upload data.
+	 * @param string $import_mode Import mode.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	private function execute_import( array $upload, string $import_mode ): void {
 		// Disable time limit for long-running import operations.
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
@@ -92,19 +175,6 @@ class ThemeImportService {
 
 		// Continue execution even if client disconnects.
 		@ignore_user_abort( true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-		$chunk_job_id = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
-		$upload       = $this->resolve_upload( $chunk_job_id );
-
-		if ( is_wp_error( $upload ) ) {
-			$this->response_handler->redirect_with_status( 'error', $upload->get_error_message() );
-			return;
-		}
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-		$import_mode = isset( $_POST['import_mode'] ) ? sanitize_key( $_POST['import_mode'] ) : 'replace';
-		$import_mode = in_array( $import_mode, array( 'merge', 'replace' ), true ) ? $import_mode : 'replace';
 
 		$lock       = new ImportLock();
 		$lock_token = null;
@@ -114,7 +184,7 @@ class ThemeImportService {
 		try {
 			$lock_token = $lock->acquire();
 			if ( ! $lock_token ) {
-				$this->response_handler->redirect_with_status( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+				$this->response_handler->redirect_with_theme_status( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
 				return;
 			}
 
@@ -145,11 +215,23 @@ class ThemeImportService {
 		}
 
 		if ( 'error' === $status ) {
-			$this->response_handler->redirect_with_status( 'error', $message );
+			$this->response_handler->redirect_with_theme_status( 'error', $message );
 			return;
 		}
 
-		$this->response_handler->redirect_with_status( 'success' );
+		$this->response_handler->redirect_with_theme_status( 'success' );
+	}
+
+	/**
+	 * Sanitize import mode value.
+	 *
+	 * @param string $import_mode Import mode.
+	 * @return string
+	 * @since 2.1.0
+	 */
+	private function sanitize_import_mode( string $import_mode ): string {
+		$import_mode = sanitize_key( $import_mode );
+		return in_array( $import_mode, array( 'merge', 'replace' ), true ) ? $import_mode : 'replace';
 	}
 
 	/**

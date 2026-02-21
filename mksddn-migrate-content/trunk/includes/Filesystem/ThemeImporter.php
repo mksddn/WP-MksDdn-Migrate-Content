@@ -203,29 +203,15 @@ class ThemeImporter {
 				return new WP_Error( 'mksddn_mc_invalid_theme_path', sprintf( __( 'Invalid theme path detected: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 			}
 
-			// Prevent deletion of active theme or parent theme in replace mode.
-			$active_stylesheet = get_stylesheet();
-			$active_template = get_template();
-			$is_active = $active_stylesheet === $theme_slug;
-			$is_parent = $active_template === $theme_slug && $active_stylesheet !== $theme_slug;
-
 			// Handle replace mode: delete existing theme directory.
 			if ( 'replace' === $this->mode && is_dir( $target_theme_path ) ) {
-				// Safety check: prevent deletion of active or parent theme.
-				if ( $is_active || $is_parent ) {
-					$this->log_debug( sprintf( 'Skipping deletion of active/parent theme: %s (mode: %s)', $theme_slug, $this->mode ) );
-					// Fall back to merge mode for active/parent themes.
+				/* translators: %s: Theme slug */
+				$this->report_progress( 20, sprintf( __( 'Removing existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
+				$this->log_debug( sprintf( 'Deleting theme directory: %s', $target_theme_path ) );
+
+				if ( ! FilesystemHelper::delete( $target_theme_path, true ) ) {
 					/* translators: %s: Theme slug */
-					$this->report_progress( 20, sprintf( __( 'Skipping deletion of active/parent theme: %s (using merge mode)', 'mksddn-migrate-content' ), $theme_slug ) );
-				} else {
-					/* translators: %s: Theme slug */
-					$this->report_progress( 20, sprintf( __( 'Removing existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
-					$this->log_debug( sprintf( 'Deleting theme directory: %s', $target_theme_path ) );
-					
-					if ( ! FilesystemHelper::delete( $target_theme_path, true ) ) {
-						/* translators: %s: Theme slug */
-						return new WP_Error( 'mksddn_mc_theme_delete_failed', sprintf( __( 'Failed to remove existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
-					}
+					return new WP_Error( 'mksddn_mc_theme_delete_failed', sprintf( __( 'Failed to remove existing theme: %s', 'mksddn-migrate-content' ), $theme_slug ) );
 				}
 			}
 

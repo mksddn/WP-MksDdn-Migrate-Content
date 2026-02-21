@@ -20,7 +20,7 @@
 	 * @param {HTMLElement} options.serverSelect Server file select.
 	 * @param {string} options.ajaxAction AJAX action name.
 	 * @param {string} options.nonce Nonce for AJAX request.
-	 * @param {Object} options.i18n Translation strings.
+ * @param {Object} options.i18n Translation strings.
 	 */
 	function ServerFileSelector(options) {
 		this.form = options.form;

@@ -68,6 +68,16 @@ interface NotificationServiceInterface {
 	public function redirect_full_status( string $status, ?string $message = null ): void;
 
 	/**
+	 * Redirect with theme import status.
+	 *
+	 * @param string      $status  success|error.
+	 * @param string|null $message Optional error message.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function redirect_with_theme_status( string $status, ?string $message = null ): void;
+
+	/**
 	 * Render status notices from query parameters.
 	 *
 	 * @return void
