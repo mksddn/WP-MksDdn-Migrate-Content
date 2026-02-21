@@ -534,6 +534,9 @@ class FullContentImporter {
 	/**
 	 * Extract filesystem from archive.
 	 *
+	 * On full import, existing theme directories present in the archive are removed
+	 * before extraction so themes are fully replaced, not merged.
+	 *
 	 * @param ZipArchive $zip Archive instance.
 	 * @return true|WP_Error
 	 */
@@ -543,6 +546,11 @@ class FullContentImporter {
 			'wp-content/plugins',
 			'wp-content/themes',
 		);
+
+		$themes_replace_result = $this->remove_existing_themes_from_archive( $zip );
+		if ( is_wp_error( $themes_replace_result ) ) {
+			return $themes_replace_result;
+		}
 
 		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
 			$stat = $zip->statIndex( $i );
@@ -585,6 +593,82 @@ class FullContentImporter {
 			if ( ! $write_ok ) {
 				/* translators: %s: target filesystem path. */
 				return new WP_Error( 'mksddn_fs_write', sprintf( __( 'Unable to write "%s". Check permissions.', 'mksddn-migrate-content' ), $target ) );
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Get theme slugs that appear under wp-content/themes/ in the archive.
+	 *
+	 * @param ZipArchive $zip Archive instance.
+	 * @return array<string> Theme slugs.
+	 */
+	private function get_theme_slugs_from_archive( ZipArchive $zip ): array {
+		$prefix = 'wp-content/themes/';
+		$slugs  = array();
+
+		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+			$stat = $zip->statIndex( $i );
+			if ( ! $stat || empty( $stat['name'] ) ) {
+				continue;
+			}
+
+			$normalized = $this->normalize_archive_path( $stat['name'] );
+			if ( null === $normalized || 0 !== strpos( $normalized, $prefix ) ) {
+				continue;
+			}
+
+			$relative = substr( $normalized, strlen( $prefix ) );
+			$parts    = explode( '/', $relative, 2 );
+			$slug     = $parts[0] ?? '';
+
+			if ( '' !== $slug && false === strpos( $slug, '..' ) ) {
+				$slugs[ $slug ] = true;
+			}
+		}
+
+		return array_keys( $slugs );
+	}
+
+	/**
+	 * Remove existing theme directories that are present in the archive.
+	 * Ensures full replace (not merge) of themes on full import.
+	 *
+	 * @param ZipArchive $zip Archive instance.
+	 * @return true|WP_Error
+	 */
+	private function remove_existing_themes_from_archive( ZipArchive $zip ) {
+		$theme_slugs = $this->get_theme_slugs_from_archive( $zip );
+		if ( empty( $theme_slugs ) ) {
+			return true;
+		}
+
+		$theme_root = get_theme_root();
+		$real_root  = realpath( $theme_root );
+		if ( ! $real_root ) {
+			return true;
+		}
+
+		foreach ( $theme_slugs as $slug ) {
+			$target_path = trailingslashit( $theme_root ) . $slug;
+			if ( ! is_dir( $target_path ) ) {
+				continue;
+			}
+
+			$real_target = realpath( $target_path );
+			if ( ! $real_target || 0 !== strpos( $real_target, $real_root ) ) {
+				continue;
+			}
+
+			$this->log( sprintf( 'Removing existing theme for full replace: %s', $slug ) );
+			if ( ! FilesystemHelper::delete( $target_path, true ) ) {
+				return new WP_Error(
+					'mksddn_mc_theme_delete_failed',
+					/* translators: %s: theme slug */
+					sprintf( __( 'Failed to remove existing theme: %s', 'mksddn-migrate-content' ), $slug )
+				);
 			}
 		}
 
