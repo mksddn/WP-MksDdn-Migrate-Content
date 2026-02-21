@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.0
+Stable tag: 2.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -138,6 +138,14 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.1 =
+* Added: Theme import preview - preview theme changes before applying.
+* Added: Russian translation (ru_RU).
+* Enhanced: Theme import - full theme replacement, improved error handling and validation.
+* Enhanced: ChunkJobRepository - improved directory handling and cleanup for chunked transfers.
+* Enhanced: FullSiteImportService - WooCommerce maintenance and plugin reactivation after import.
+* Enhanced: Theme export section descriptions for clarity.
 
 = 2.1.0 =
 * Added: Theme export and import functionality - users can now export and import WordPress themes with merge and replace mode options.
