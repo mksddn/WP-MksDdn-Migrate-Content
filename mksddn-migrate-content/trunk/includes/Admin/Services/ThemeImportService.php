@@ -112,7 +112,9 @@ class ThemeImportService {
 			return;
 		}
 
-		$import_mode = $this->sanitize_import_mode( $_POST['import_mode'] ?? 'replace' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above
+		$raw_mode    = isset( $_POST['import_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['import_mode'] ) ) : 'replace';
+		$import_mode = $this->sanitize_import_mode( $raw_mode );
 		$this->execute_import( $upload, $import_mode );
 	}
 
@@ -135,7 +137,9 @@ class ThemeImportService {
 			return;
 		}
 
-		$import_mode = $this->sanitize_import_mode( $_POST['import_mode'] ?? 'replace' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import() via preview_id
+		$raw_mode    = isset( $_POST['import_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['import_mode'] ) ) : 'replace';
+		$import_mode = $this->sanitize_import_mode( $raw_mode );
 		$upload      = array(
 			'temp'          => isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '',
 			'cleanup'       => ! empty( $preview['cleanup'] ),

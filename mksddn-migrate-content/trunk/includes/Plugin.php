@@ -44,22 +44,7 @@ class Plugin {
 	 * @since 1.0.0
 	 */
 	public function register(): void {
-		add_action( 'plugins_loaded', array( $this, 'load_textdomain' ), 0 );
 		add_action( 'init', array( $this, 'boot' ) );
-	}
-
-	/**
-	 * Load plugin text domain for translations.
-	 *
-	 * @return void
-	 */
-	public function load_textdomain(): void {
-		$path = dirname( MKSDDN_MC_BASENAME ) . '/languages';
-		load_plugin_textdomain(
-			MKSDDN_MC_TEXT_DOMAIN,
-			false,
-			$path
-		);
 	}
 
 	/**
