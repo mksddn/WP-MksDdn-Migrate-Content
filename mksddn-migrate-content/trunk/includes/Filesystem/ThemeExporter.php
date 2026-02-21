@@ -1,7 +1,7 @@
 <?php
 /**
  * @file: ThemeExporter.php
- * @description: Exports selected themes (active and parent if exists)
+ * @description: Exports selected themes to archive
  * @dependencies: ContentCollector, FilesystemHelper
  * @created: 2026-02-19
  */
