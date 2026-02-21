@@ -463,19 +463,8 @@ class FullSiteImportService {
 			wp_cache_flush();
 		}
 
-		// WooCommerce-specific maintenance (safe-guarded).
-		if ( function_exists( 'wc_delete_product_transients' ) ) {
-			wc_delete_product_transients();
-		}
-		if ( class_exists( '\WC_Install' ) ) {
-			\WC_Install::check_version();
-			\WC_Install::update_db_version();
-		}
-		if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
-			wc_update_product_lookup_tables();
-		}
-
 		$this->maybe_reactivate_plugins();
+		$this->run_woocommerce_maintenance();
 
 		/**
 		 * Fires after a successful full import completes.
@@ -492,7 +481,8 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	private function maybe_reactivate_plugins(): void {
-		$plugins = apply_filters( 'mksddn_mc_post_import_plugin_reactivate', array() );
+		$defaults = $this->get_default_post_import_plugins();
+		$plugins  = apply_filters( 'mksddn_mc_post_import_plugin_reactivate', $defaults );
 		if ( empty( $plugins ) || ! is_array( $plugins ) ) {
 			return;
 		}
@@ -514,10 +504,76 @@ class FullSiteImportService {
 				deactivate_plugins( $plugin, true );
 			}
 
-			$result = activate_plugin( $plugin, '', false, true );
+			$silent = 'woocommerce/woocommerce.php' !== $plugin;
+			$result = activate_plugin( $plugin, '', false, $silent );
 			if ( is_wp_error( $result ) ) {
 				$this->log( sprintf( 'Post-import plugin activation failed for %s: %s', $plugin, $result->get_error_message() ) );
 			}
+		}
+	}
+
+	/**
+	 * Resolve default plugins to reactivate after full import.
+	 *
+	 * @return string[]
+	 * @since 2.1.0
+	 */
+	private function get_default_post_import_plugins(): array {
+		$plugins = array();
+
+		if ( $this->should_reactivate_plugin( 'woocommerce/woocommerce.php' ) ) {
+			$plugins[] = 'woocommerce/woocommerce.php';
+		}
+
+		return $plugins;
+	}
+
+	/**
+	 * Determine whether a plugin should be reactivated after import.
+	 *
+	 * @param string $plugin Plugin file path.
+	 * @return bool
+	 * @since 2.1.0
+	 */
+	private function should_reactivate_plugin( string $plugin ): bool {
+		if ( '' === $plugin ) {
+			return false;
+		}
+
+		$plugin_path = trailingslashit( WP_PLUGIN_DIR ) . $plugin;
+		if ( ! file_exists( $plugin_path ) ) {
+			return false;
+		}
+
+		$active_plugins = get_option( 'active_plugins', array() );
+		if ( is_array( $active_plugins ) && in_array( $plugin, $active_plugins, true ) ) {
+			return true;
+		}
+
+		if ( is_multisite() ) {
+			$network_plugins = get_site_option( 'active_sitewide_plugins', array() );
+			return is_array( $network_plugins ) && isset( $network_plugins[ $plugin ] );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Run WooCommerce maintenance tasks if available.
+	 *
+	 * @return void
+	 * @since 2.1.0
+	 */
+	private function run_woocommerce_maintenance(): void {
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients();
+		}
+		if ( class_exists( '\WC_Install' ) ) {
+			\WC_Install::check_version();
+			\WC_Install::update_db_version();
+		}
+		if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
+			wc_update_product_lookup_tables();
 		}
 	}
 
