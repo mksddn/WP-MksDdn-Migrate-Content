@@ -534,6 +534,9 @@ class FullContentImporter {
 	/**
 	 * Extract filesystem from archive.
 	 *
+	 * On full import, existing theme directories present in the archive are removed
+	 * before extraction so themes are fully replaced, not merged.
+	 *
 	 * @param ZipArchive $zip Archive instance.
 	 * @return true|WP_Error
 	 */
@@ -544,6 +547,12 @@ class FullContentImporter {
 			'wp-content/themes',
 		);
 
+		$theme_backups = $this->backup_existing_themes_from_archive( $zip );
+		if ( is_wp_error( $theme_backups ) ) {
+			return $theme_backups;
+		}
+
+		$error = null;
 		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
 			$stat = $zip->statIndex( $i );
 			if ( ! $stat || empty( $stat['name'] ) ) {
@@ -576,7 +585,8 @@ class FullContentImporter {
 			$stream = $zip->getStream( $name );
 			if ( ! $stream ) {
 				/* translators: %s: path inside archive. */
-				return new WP_Error( 'mksddn_zip_stream', sprintf( __( 'Unable to read "%s" from archive.', 'mksddn-migrate-content' ), $name ) );
+				$error = new WP_Error( 'mksddn_zip_stream', sprintf( __( 'Unable to read "%s" from archive.', 'mksddn-migrate-content' ), $name ) );
+				break;
 			}
 
 			$write_ok = FilesystemHelper::put_stream( $target, $stream );
@@ -584,11 +594,159 @@ class FullContentImporter {
 
 			if ( ! $write_ok ) {
 				/* translators: %s: target filesystem path. */
-				return new WP_Error( 'mksddn_fs_write', sprintf( __( 'Unable to write "%s". Check permissions.', 'mksddn-migrate-content' ), $target ) );
+				$error = new WP_Error( 'mksddn_fs_write', sprintf( __( 'Unable to write "%s". Check permissions.', 'mksddn-migrate-content' ), $target ) );
+				break;
 			}
 		}
 
+		if ( $error ) {
+			$this->restore_theme_backups( $theme_backups );
+			return $error;
+		}
+
+		$this->cleanup_theme_backups( $theme_backups );
+
 		return true;
+	}
+
+	/**
+	 * Get theme slugs that appear under wp-content/themes/ in the archive.
+	 *
+	 * @param ZipArchive $zip Archive instance.
+	 * @return array<string> Theme slugs.
+	 */
+	private function get_theme_slugs_from_archive( ZipArchive $zip ): array {
+		$prefix = 'wp-content/themes/';
+		$slugs  = array();
+
+		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+			$stat = $zip->statIndex( $i );
+			if ( ! $stat || empty( $stat['name'] ) ) {
+				continue;
+			}
+
+			$normalized = $this->normalize_archive_path( $stat['name'] );
+			if ( null === $normalized || 0 !== strpos( $normalized, $prefix ) ) {
+				continue;
+			}
+
+			$relative = substr( $normalized, strlen( $prefix ) );
+			$parts    = explode( '/', $relative, 2 );
+			$slug     = $parts[0] ?? '';
+
+			if ( '' !== $slug && false === strpos( $slug, '..' ) ) {
+				$slugs[ $slug ] = true;
+			}
+		}
+
+		return array_keys( $slugs );
+	}
+
+	/**
+	 * Backup existing theme directories present in the archive.
+	 * Ensures a safe rollback if extraction fails.
+	 *
+	 * @param ZipArchive $zip Archive instance.
+	 * @return array|WP_Error
+	 */
+	private function backup_existing_themes_from_archive( ZipArchive $zip ) {
+		$theme_slugs = $this->get_theme_slugs_from_archive( $zip );
+		if ( empty( $theme_slugs ) ) {
+			return array();
+		}
+
+		$theme_root = get_theme_root();
+		$real_root  = realpath( $theme_root );
+		if ( ! $real_root ) {
+			return array();
+		}
+
+		$backup_root = '';
+		$backups = array();
+		foreach ( $theme_slugs as $slug ) {
+			$target_path = trailingslashit( $theme_root ) . $slug;
+			if ( ! is_dir( $target_path ) ) {
+				continue;
+			}
+
+			$real_target = realpath( $target_path );
+			if ( ! $real_target || 0 !== strpos( $real_target, $real_root ) ) {
+				continue;
+			}
+
+			if ( '' === $backup_root ) {
+				$backup_root = trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups/' . gmdate( 'Ymd-His' );
+				if ( ! wp_mkdir_p( $backup_root ) ) {
+					return new WP_Error( 'mksddn_mc_theme_backup_dir', __( 'Unable to prepare theme backup directory.', 'mksddn-migrate-content' ) );
+				}
+			}
+
+			$backup_path = trailingslashit( $backup_root ) . $slug;
+			$this->log( sprintf( 'Backing up existing theme before replace: %s', $slug ) );
+			if ( ! FilesystemHelper::move( $target_path, $backup_path, true ) ) {
+				return new WP_Error(
+					'mksddn_mc_theme_backup_failed',
+					/* translators: %s: theme slug */
+					sprintf( __( 'Failed to backup existing theme: %s', 'mksddn-migrate-content' ), $slug )
+				);
+			}
+
+			$backups[] = array(
+				'slug'     => $slug,
+				'original' => $target_path,
+				'backup'   => $backup_path,
+			);
+		}
+
+		return $backups;
+	}
+
+	/**
+	 * Restore backed up themes after failed extraction.
+	 *
+	 * @param array $backups Backups list.
+	 * @return void
+	 */
+	private function restore_theme_backups( array $backups ): void {
+		if ( empty( $backups ) ) {
+			return;
+		}
+
+		foreach ( $backups as $backup ) {
+			$original = $backup['original'] ?? '';
+			$stored   = $backup['backup'] ?? '';
+
+			if ( ! $original || ! $stored || ! is_dir( $stored ) ) {
+				continue;
+			}
+
+			if ( is_dir( $original ) ) {
+				FilesystemHelper::delete( $original, true );
+			}
+
+			if ( ! FilesystemHelper::move( $stored, $original, true ) ) {
+				$this->log( sprintf( 'Failed to restore theme backup: %s', $stored ) );
+			}
+		}
+	}
+
+	/**
+	 * Cleanup theme backups after successful extraction.
+	 *
+	 * @param array $backups Backups list.
+	 * @return void
+	 */
+	private function cleanup_theme_backups( array $backups ): void {
+		if ( empty( $backups ) ) {
+			return;
+		}
+
+		foreach ( $backups as $backup ) {
+			$stored = $backup['backup'] ?? '';
+			if ( $stored && is_dir( $stored ) ) {
+				FilesystemHelper::delete( $stored, true );
+			}
+		}
 	}
 
 	/**
@@ -602,6 +760,11 @@ class FullContentImporter {
 			return null;
 		}
 
+		$path = str_replace( '\\', '/', $path );
+		if ( false !== strpos( $path, "\0" ) ) {
+			return null;
+		}
+
 		// Skip manifest/payload/meta files.
 		if ( 0 === strpos( $path, 'manifest' ) || 0 === strpos( $path, 'payload/' ) ) {
 			return null;
@@ -612,8 +775,22 @@ class FullContentImporter {
 		}
 
 		$path = ltrim( $path, '/' );
+		if ( '' === $path ) {
+			return null;
+		}
 
-		return '' === $path ? null : $path;
+		$parts = explode( '/', $path );
+		foreach ( $parts as $part ) {
+			if ( '' === $part || '.' === $part ) {
+				continue;
+			}
+
+			if ( '..' === $part ) {
+				return null;
+			}
+		}
+
+		return $path;
 	}
 
 	/**

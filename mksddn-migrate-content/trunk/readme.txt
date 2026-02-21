@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.0
+Stable tag: 2.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 * **Dual export modes** – choose Full Site (database + uploads/plugins/themes) or Selected Content (multi-select posts/pages/CPTs) with or without referenced media.
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
+* **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
 * **Integrity & safety** – `.wpbkp` archives ship with manifests and checksums; imports verify capabilities, nonces, and disk space before touching data.
 
 = Feature Highlights =
@@ -57,7 +58,7 @@ You can import backup files directly from the server without uploading them thro
 Yes. The user merge dialog shows archive/current rows with conflict indicators. You can keep current roles, replace metadata, or skip entire accounts.
 
 = Does it touch production files directly? =
-Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports stage files before replacing anything critical.
+Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports back up theme directories before replace and restore them if extraction fails.
 
 == Screenshots ==
 
@@ -79,12 +80,14 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ExportRequestHandler` - handles export requests
 * `ImportRequestHandler` - delegates to specialized import services (supports unified import via `UnifiedImportOrchestrator`)
 * `UserMergeRequestHandler` - processes user merge operations
+* `ThemePreviewRequestHandler` - handles theme preview cancel operations
 * `ChunkRestController` - REST API controller for chunked upload/download operations
 * All handlers implement corresponding interfaces for testability
 
 = Service Layer =
 * `SelectedContentImportService` - handles selected content imports
 * `FullSiteImportService` - manages full site imports
+* `ThemeImportService` - handles theme archive imports
 * `UnifiedImportOrchestrator` - orchestrates unified import with automatic type detection and routing
 * `ImportTypeDetector` - detects import type (full site or selected content) from archive file
 * `ImportFileValidator` - validates uploaded files
@@ -96,12 +99,13 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ErrorHandler` - centralized error handling and logging
 * `UserDiffBuilder` - builds user difference comparison
 * `UserMergeApplier` - applies user merge operations
+* `ThemePreviewStore` - stores pending theme import previews
 
 = Contracts (Interfaces) =
 All key components implement interfaces:
 * `ExporterInterface`, `ImporterInterface`
 * `MediaCollectorInterface`, `ChunkJobRepositoryInterface`
-* `UserPreviewStoreInterface`, `UserDiffBuilderInterface`, `UserMergeApplierInterface`
+* `UserPreviewStoreInterface`, `ThemePreviewStoreInterface`, `UserDiffBuilderInterface`, `UserMergeApplierInterface`
 * `NotificationServiceInterface`, `ProgressServiceInterface`
 * `ArchiveHandlerInterface`, `ValidatorInterface`
 * Request handler interfaces for all handlers
@@ -128,11 +132,20 @@ All key components implement interfaces:
 * Output escaping with `esc_html()`, `esc_attr()`, `esc_url()`
 * File upload validation with MIME type checking
 * Path traversal protection for server file access (`ServerBackupScanner`)
+* Path traversal protection for archive extraction (full site + theme import)
 * `SiteUrlGuard` prevents accidental site URL changes during import
 * `ImportLock` prevents concurrent import operations
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.1 =
+* Added: Theme import preview - preview theme changes before applying.
+* Added: Russian translation (ru_RU).
+* Enhanced: Theme import - full theme replacement, improved error handling and validation.
+* Enhanced: ChunkJobRepository - improved directory handling and cleanup for chunked transfers.
+* Enhanced: FullSiteImportService - WooCommerce maintenance and plugin reactivation after import.
+* Enhanced: Theme export section descriptions for clarity.
 
 = 2.1.0 =
 * Added: Theme export and import functionality - users can now export and import WordPress themes with merge and replace mode options.

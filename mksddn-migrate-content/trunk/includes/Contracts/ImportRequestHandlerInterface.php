@@ -34,5 +34,13 @@ interface ImportRequestHandlerInterface extends RequestHandlerInterface {
 	 * @since 1.0.0
 	 */
 	public function handle_full_import(): void;
+
+	/**
+	 * Handle theme import.
+	 *
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function handle_theme_import(): void;
 }
 

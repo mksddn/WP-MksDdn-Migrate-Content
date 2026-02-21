@@ -2,7 +2,7 @@
 /**
  * @file: ImportRequestHandler.php
  * @description: Handler for import request operations
- * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService
+ * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator
  * @created: 2024-12-15
  */
 
@@ -50,19 +50,28 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	private UnifiedImportOrchestrator $orchestrator;
 
 	/**
+	 * Theme import service.
+	 *
+	 * @var ThemeImportService
+	 */
+	private ThemeImportService $theme_import_service;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param SelectedContentImportService|null $selected_import_service Selected content import service.
 	 * @param FullSiteImportService|null        $full_import_service     Full site import service.
 	 * @param ImportTypeDetector|null           $type_detector           Import type detector.
 	 * @param UnifiedImportOrchestrator|null    $orchestrator            Unified import orchestrator.
+	 * @param ThemeImportService|null          $theme_import_service     Theme import service.
 	 * @since 1.0.0
 	 */
 	public function __construct(
 		?SelectedContentImportService $selected_import_service = null,
 		?FullSiteImportService $full_import_service = null,
 		?ImportTypeDetector $type_detector = null,
-		?UnifiedImportOrchestrator $orchestrator = null
+		?UnifiedImportOrchestrator $orchestrator = null,
+		?ThemeImportService $theme_import_service = null
 	) {
 		$this->selected_import_service = $selected_import_service ?? new SelectedContentImportService();
 		$this->full_import_service      = $full_import_service ?? new FullSiteImportService();
@@ -70,6 +79,7 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 			$this->selected_import_service,
 			$this->full_import_service
 		);
+		$this->theme_import_service     = $theme_import_service ?? new ThemeImportService();
 	}
 
 	/**
@@ -90,6 +100,16 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	 */
 	public function handle_full_import(): void {
 		$this->full_import_service->import();
+	}
+
+	/**
+	 * Handle theme import.
+	 *
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function handle_theme_import(): void {
+		$this->theme_import_service->import();
 	}
 
 	/**

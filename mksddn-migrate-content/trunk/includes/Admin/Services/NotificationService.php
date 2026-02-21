@@ -195,6 +195,37 @@ class NotificationService implements NotificationServiceInterface {
 	}
 
 	/**
+	 * Redirect with theme import status.
+	 *
+	 * @param string      $status  success|error.
+	 * @param string|null $message Optional error message.
+	 * @return void
+	 * @since 2.1.0
+	 */
+	public function redirect_with_theme_status( string $status, ?string $message = null ): void {
+		while ( ob_get_level() > 0 ) {
+			@ob_end_clean(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+
+		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
+		$url  = add_query_arg(
+			array(
+				'mksddn_mc_theme_status' => $status,
+				'mksddn_mc_theme_error'  => $message,
+			),
+			$base
+		);
+
+		if ( ! headers_sent() ) {
+			wp_safe_redirect( $url );
+			exit;
+		}
+
+		printf( '<script>window.location.href = %s;</script>', wp_json_encode( esc_url_raw( $url ) ) );
+		exit;
+	}
+
+	/**
 	 * Redirect with selected import success details.
 	 *
 	 * @param string $type     Import type (page, post, bundle).
@@ -253,6 +284,16 @@ class NotificationService implements NotificationServiceInterface {
 	 * @since 1.0.0
 	 */
 	public function render_status_notices(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only status flag after redirect.
+		if ( ! empty( $_GET['mksddn_mc_theme_status'] ) ) {
+			$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_theme_status'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( 'success' === $status ) {
+				$this->show_success_with_actions( __( 'Theme import completed successfully!', 'mksddn-migrate-content' ), 'full' );
+			} elseif ( 'error' === $status && ! empty( $_GET['mksddn_mc_theme_error'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only after redirect
+				$this->show_error( sanitize_text_field( wp_unslash( $_GET['mksddn_mc_theme_error'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			}
+		}
+
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only status flag after redirect.
 		if ( ! empty( $_GET['mksddn_mc_full_status'] ) ) {
 			$status = sanitize_key( wp_unslash( $_GET['mksddn_mc_full_status'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended

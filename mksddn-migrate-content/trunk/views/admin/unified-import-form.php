@@ -27,9 +27,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 			?>
 		</p>
 	</div>
-	<?php if ( $pending_user_preview ) : ?>
-		<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
-	<?php else : ?>
+<?php if ( $pending_user_preview ) : ?>
+	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
+<?php elseif ( $pending_theme_preview ) : ?>
+	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/theme-preview.php', array( 'preview' => $pending_theme_preview ) ); ?>
+<?php else : ?>
 		<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="mksddn-mc-unified-import-form" data-mksddn-unified-import="true">
 			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
 			<input type="hidden" name="action" value="mksddn_mc_unified_import">
@@ -61,24 +63,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<p class="description"><?php esc_html_e( 'Select an import file from the server directory.', 'mksddn-migrate-content' ); ?></p>
 					<div class="mksddn-mc-server-file-notice notice notice-error" style="display: none; margin-top: 0.5rem;"></div>
 				</div>
-			</div>
-			
-			<div class="mksddn-mc-field" id="mksddn-mc-theme-import-mode" style="display: none;">
-				<h4><?php esc_html_e( 'Theme Import Mode', 'mksddn-migrate-content' ); ?></h4>
-				<label style="display: block; margin-bottom: 10px;">
-					<input type="radio" name="import_mode" value="replace" checked>
-					<strong><?php esc_html_e( 'Replace', 'mksddn-migrate-content' ); ?></strong>
-					<p class="description" style="margin-left: 25px;">
-						<?php esc_html_e( 'Remove existing theme directory and replace with files from archive.', 'mksddn-migrate-content' ); ?>
-					</p>
-				</label>
-				<label style="display: block;">
-					<input type="radio" name="import_mode" value="merge">
-					<strong><?php esc_html_e( 'Merge', 'mksddn-migrate-content' ); ?></strong>
-					<p class="description" style="margin-left: 25px;">
-						<?php esc_html_e( 'Combine files from archive with existing theme. Files from archive will overwrite existing files.', 'mksddn-migrate-content' ); ?>
-					</p>
-				</label>
 			</div>
 			
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></button>

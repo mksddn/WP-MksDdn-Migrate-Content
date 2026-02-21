@@ -15,6 +15,8 @@ use MksDdn\MigrateContent\Contracts\ExportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
+use MksDdn\MigrateContent\Contracts\ThemePreviewRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
@@ -60,6 +62,13 @@ class AdminPageController {
 	private UserMergeRequestHandlerInterface $user_merge_handler;
 
 	/**
+	 * Theme preview handler.
+	 *
+	 * @var ThemePreviewRequestHandlerInterface
+	 */
+	private ThemePreviewRequestHandlerInterface $theme_preview_handler;
+
+	/**
 	 * Notification service.
 	 *
 	 * @var NotificationServiceInterface
@@ -81,6 +90,13 @@ class AdminPageController {
 	private UserPreviewStoreInterface $preview_store;
 
 	/**
+	 * Theme preview store.
+	 *
+	 * @var ThemePreviewStoreInterface
+	 */
+	private ThemePreviewStoreInterface $theme_preview_store;
+
+	/**
 	 * Server backup scanner.
 	 *
 	 * @var ServerBackupScanner
@@ -98,9 +114,11 @@ class AdminPageController {
 		$this->export_handler    = $container->get( ExportRequestHandlerInterface::class );
 		$this->import_handler    = $container->get( ImportRequestHandlerInterface::class );
 		$this->user_merge_handler = $container->get( UserMergeRequestHandlerInterface::class );
+		$this->theme_preview_handler = $container->get( ThemePreviewRequestHandlerInterface::class );
 		$this->notifications     = $container->get( NotificationServiceInterface::class );
 		$this->progress          = $container->get( ProgressServiceInterface::class );
 		$this->preview_store     = $container->get( UserPreviewStoreInterface::class );
+		$this->theme_preview_store = $container->get( ThemePreviewStoreInterface::class );
 		$this->server_scanner    = $container->get( ServerBackupScanner::class );
 	}
 
@@ -117,8 +135,10 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_export_full', array( $this->export_handler, 'handle_full_export' ) );
 		add_action( 'admin_post_mksddn_mc_export_themes', array( $this->export_handler, 'handle_theme_export' ) );
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
+		add_action( 'admin_post_mksddn_mc_import_theme', array( $this->import_handler, 'handle_theme_import' ) );
 		add_action( 'admin_post_mksddn_mc_unified_import', array( $this->import_handler, 'handle_unified_import' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
+		add_action( 'admin_post_mksddn_mc_cancel_theme_preview', array( $this->theme_preview_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
@@ -210,12 +230,13 @@ class AdminPageController {
 		echo '<h1>' . esc_html__( 'Import', 'mksddn-migrate-content' ) . '</h1>';
 
 		$pending_user_preview = $this->maybe_load_user_preview();
+		$pending_theme_preview = $this->maybe_load_theme_preview();
 		$this->render_lock_warning();
 		$this->notifications->render_status_notices();
 		$this->progress->render_container();
 
 		$this->view->render_styles();
-		$this->view->render_import_sections( $pending_user_preview );
+		$this->view->render_import_sections( $pending_user_preview, $pending_theme_preview );
 
 		echo '</div>';
 		$this->progress->render_javascript();
@@ -398,6 +419,46 @@ class AdminPageController {
 			'id'            => $preview_id,
 			'original_name' => $preview['original_name'] ?? '',
 			'summary'       => $summary,
+		);
+	}
+
+	/**
+	 * Load preview context when theme selection query is present.
+	 *
+	 * @return array|null Preview data or null.
+	 * @since 2.1.0
+	 */
+	private function maybe_load_theme_preview(): ?array {
+		if ( empty( $_GET['mksddn_mc_theme_review'] ) ) {
+			return null;
+		}
+
+		// Check nonce.
+		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'mksddn_mc_theme_preview' ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
+		}
+
+		// Check permissions.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'mksddn-migrate-content' ) );
+		}
+
+		$preview_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_theme_review'] ) );
+		$preview    = $this->theme_preview_store->get( $preview_id );
+
+		if ( ! $preview ) {
+			$this->notifications->show_inline_notice( 'error', __( 'Theme import session expired. Please upload the archive again.', 'mksddn-migrate-content' ) );
+			return null;
+		}
+
+		if ( (int) ( $preview['created_by'] ?? 0 ) !== get_current_user_id() ) {
+			$this->notifications->show_inline_notice( 'error', __( 'You are not allowed to continue this theme import.', 'mksddn-migrate-content' ) );
+			return null;
+		}
+
+		return array(
+			'id'            => $preview_id,
+			'original_name' => $preview['original_name'] ?? '',
 		);
 	}
 

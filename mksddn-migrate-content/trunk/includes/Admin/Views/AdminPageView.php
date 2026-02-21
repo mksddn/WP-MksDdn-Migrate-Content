@@ -89,11 +89,18 @@ class AdminPageView {
 	 * Render import sections (unified import form).
 	 *
 	 * @param array|null $pending_user_preview Pending user preview data.
+	 * @param array|null $pending_theme_preview Pending theme preview data.
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function render_import_sections( ?array $pending_user_preview = null ): void {
-		$this->renderer->render( 'admin/unified-import-form.php', array( 'pending_user_preview' => $pending_user_preview ) );
+	public function render_import_sections( ?array $pending_user_preview = null, ?array $pending_theme_preview = null ): void {
+		$this->renderer->render(
+			'admin/unified-import-form.php',
+			array(
+				'pending_user_preview'  => $pending_user_preview,
+				'pending_theme_preview' => $pending_theme_preview,
+			)
+		);
 	}
 
 	/**

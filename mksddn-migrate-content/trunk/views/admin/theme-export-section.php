@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 ?>
 <section class="mksddn-mc-section">
 	<h2><?php esc_html_e( 'Theme Export', 'mksddn-migrate-content' ); ?></h2>
-	<p><?php esc_html_e( 'Export selected themes (active and parent themes are pre-selected).', 'mksddn-migrate-content' ); ?></p>
+	<p><?php esc_html_e( 'Export selected themes (active theme is pre-selected).', 'mksddn-migrate-content' ); ?></p>
 	<div class="mksddn-mc-grid">
 		<div class="mksddn-mc-card">
 			<h3><?php esc_html_e( 'Select Themes', 'mksddn-migrate-content' ); ?></h3>
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 									type="checkbox" 
 									name="selected_themes[]" 
 									value="<?php echo esc_attr( $mksddn_mc_theme_slug ); ?>"
-									<?php checked( $mksddn_mc_theme_data['is_active'] || $mksddn_mc_theme_data['is_parent'] ); ?>
+									<?php checked( $mksddn_mc_theme_data['is_active'] ); ?>
 								>
 								<strong><?php echo esc_html( $mksddn_mc_theme_data['name'] ); ?></strong>
 								<?php if ( $mksddn_mc_theme_data['is_active'] ) : ?>
