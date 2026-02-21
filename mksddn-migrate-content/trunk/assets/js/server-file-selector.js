@@ -123,7 +123,11 @@
 	 * Show loading state.
 	 */
 	ServerFileSelector.prototype.showLoading = function() {
-		this.serverSelect.innerHTML = '<option value="">' + (this.i18n.loading || 'Loading...') + '</option>';
+	this.serverSelect.innerHTML = '';
+	var option = document.createElement('option');
+	option.value = '';
+	option.textContent = this.i18n.loading || 'Loading...';
+	this.serverSelect.appendChild(option);
 		this.serverSelect.disabled = true;
 	};
 
@@ -151,7 +155,11 @@
 	 * @param {string} message Error message.
 	 */
 	ServerFileSelector.prototype.showError = function(message) {
-		this.serverSelect.innerHTML = '<option value="">' + message + '</option>';
+	this.serverSelect.innerHTML = '';
+	var option = document.createElement('option');
+	option.value = '';
+	option.textContent = message;
+	this.serverSelect.appendChild(option);
 		this.serverSelect.disabled = true;
 
 		// Show notice if possible.

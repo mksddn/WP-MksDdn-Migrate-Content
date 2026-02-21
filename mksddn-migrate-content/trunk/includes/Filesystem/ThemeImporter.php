@@ -139,6 +139,7 @@ class ThemeImporter {
 	private function extract_themes( ZipArchive $zip ) {
 		$theme_root = get_theme_root();
 		$allowed_prefix = self::THEME_ARCHIVE_PREFIX;
+		$theme_root_normalized = wp_normalize_path( trailingslashit( $theme_root ) );
 
 		$themes_to_extract = array();
 
@@ -223,6 +224,10 @@ class ThemeImporter {
 				}
 
 				$target = trailingslashit( $root_path ) . $normalized;
+				if ( ! $this->is_path_within_root( $target, $theme_root_normalized ) ) {
+					/* translators: %s: Archive file path */
+					return new WP_Error( 'mksddn_mc_invalid_theme_path', sprintf( __( 'Invalid theme path detected: %s', 'mksddn-migrate-content' ), $archive_file ) );
+				}
 				$is_directory = '/' === substr( $archive_file, -1 ) || '/' === substr( $normalized, -1 );
 
 				if ( $is_directory ) {
@@ -267,6 +272,11 @@ class ThemeImporter {
 			return null;
 		}
 
+		$path = str_replace( '\\', '/', $path );
+		if ( false !== strpos( $path, "\0" ) ) {
+			return null;
+		}
+
 		// Skip manifest/payload/meta files.
 		if ( 0 === strpos( $path, 'manifest' ) || 0 === strpos( $path, 'payload/' ) ) {
 			return null;
@@ -277,7 +287,33 @@ class ThemeImporter {
 		}
 
 		$path = ltrim( $path, '/' );
+		if ( '' === $path ) {
+			return null;
+		}
 
-		return '' === $path ? null : $path;
+		$parts = explode( '/', $path );
+		foreach ( $parts as $part ) {
+			if ( '' === $part || '.' === $part ) {
+				continue;
+			}
+
+			if ( '..' === $part ) {
+				return null;
+			}
+		}
+
+		return $path;
+	}
+
+	/**
+	 * Check that target path stays within theme root.
+	 *
+	 * @param string $target Target path.
+	 * @param string $theme_root_normalized Normalized theme root.
+	 * @return bool
+	 */
+	private function is_path_within_root( string $target, string $theme_root_normalized ): bool {
+		$target_normalized = wp_normalize_path( $target );
+		return 0 === strpos( $target_normalized, $theme_root_normalized );
 	}
 }

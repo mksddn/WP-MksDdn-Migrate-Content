@@ -58,7 +58,7 @@ You can import backup files directly from the server without uploading them thro
 Yes. The user merge dialog shows archive/current rows with conflict indicators. You can keep current roles, replace metadata, or skip entire accounts.
 
 = Does it touch production files directly? =
-Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports stage files before replacing anything critical.
+Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports back up theme directories before replace and restore them if extraction fails.
 
 == Screenshots ==
 
@@ -132,6 +132,7 @@ All key components implement interfaces:
 * Output escaping with `esc_html()`, `esc_attr()`, `esc_url()`
 * File upload validation with MIME type checking
 * Path traversal protection for server file access (`ServerBackupScanner`)
+* Path traversal protection for archive extraction (full site + theme import)
 * `SiteUrlGuard` prevents accidental site URL changes during import
 * `ImportLock` prevents concurrent import operations
 * `DomainReplacer` safely handles URL replacement during migrations
