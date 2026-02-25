@@ -30,6 +30,7 @@ use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
 use MksDdn\MigrateContent\Contracts\ProgressServiceInterface;
 use MksDdn\MigrateContent\Contracts\ThemePreviewRequestHandlerInterface;
+use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
@@ -174,7 +175,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 				return new ThemeImportService(
 					$container->get( ResponseHandler::class ),
 					$container->get( ServerBackupScanner::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface::class )
+					$container->get( ThemePreviewStoreInterface::class )
 				);
 			}
 		);
@@ -187,7 +188,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( FullSiteImportService::class ),
 					$container->get( ImportTypeDetector::class ),
 					$container->get( ServerBackupScanner::class ),
-					$container->get( \MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface::class ),
+					$container->get( ThemePreviewStoreInterface::class ),
 					$container->get( ResponseHandler::class )
 				);
 			}
@@ -232,7 +233,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			ThemePreviewRequestHandlerInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ThemePreviewRequestHandler(
-					$container->get( \MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface::class ),
+					$container->get( ThemePreviewStoreInterface::class ),
 					$container->get( NotificationServiceInterface::class )
 				);
 			}

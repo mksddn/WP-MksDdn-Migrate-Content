@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.1
+Stable tag: 2.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -138,6 +138,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.2 =
+* Fixed: UnifiedImportOrchestrator constructor now receives ThemePreviewStoreInterface as 5th argument (fixes full-site import error when wrong service was passed).
+* Enhanced: AdminServiceProvider - explicit use of ThemePreviewStoreInterface for UnifiedImportOrchestrator and related registrations.
 
 = 2.1.1 =
 * Added: Theme import preview - preview theme changes before applying.
