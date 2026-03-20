@@ -1,6 +1,6 @@
 <?php
 /**
- * Restores full wp-content from archive.
+ * Restores full wp-content from archive (uploads, plugins, mu-plugins, themes).
  *
  * @package MksDdn_Migrate_Content
  */
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Imports files to uploads/themes/plugins.
+ * Imports files to uploads, plugins, mu-plugins, and themes.
  */
 class FullContentImporter {
 
@@ -544,6 +544,7 @@ class FullContentImporter {
 		$allowed_roots = array(
 			'wp-content/uploads',
 			'wp-content/plugins',
+			'wp-content/mu-plugins',
 			'wp-content/themes',
 		);
 

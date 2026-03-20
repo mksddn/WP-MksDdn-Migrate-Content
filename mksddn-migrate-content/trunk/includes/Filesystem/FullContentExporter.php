@@ -1,6 +1,6 @@
 <?php
 /**
- * Exports full wp-content (uploads, themes, plugins).
+ * Exports full wp-content (uploads, plugins, mu-plugins, themes).
  *
  * @package MksDdn_Migrate_Content
  */
@@ -99,10 +99,13 @@ class FullContentExporter {
 		$prefix = '' === $base_prefix ? '' : trim( $base_prefix, '/' ) . '/';
 		$uploads = wp_upload_dir();
 
+		$mu_plugins_dir = defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
+
 		return array(
-			$prefix . 'wp-content/uploads' => $uploads['basedir'],
-			$prefix . 'wp-content/plugins' => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
-			$prefix . 'wp-content/themes'  => get_theme_root(),
+			$prefix . 'wp-content/uploads'    => $uploads['basedir'],
+			$prefix . 'wp-content/plugins'    => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
+			$prefix . 'wp-content/mu-plugins' => $mu_plugins_dir,
+			$prefix . 'wp-content/themes'     => get_theme_root(),
 		);
 	}
 
