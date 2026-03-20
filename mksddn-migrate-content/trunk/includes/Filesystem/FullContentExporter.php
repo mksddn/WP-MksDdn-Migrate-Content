@@ -1,6 +1,6 @@
 <?php
 /**
- * Exports full wp-content (uploads, themes, plugins).
+ * Exports full wp-content (uploads, plugins, mu-plugins, themes).
  *
  * @package MksDdn_Migrate_Content
  */
@@ -8,6 +8,7 @@
 namespace MksDdn\MigrateContent\Filesystem;
 
 use MksDdn\MigrateContent\Database\FullDatabaseExporter;
+use MksDdn\MigrateContent\Support\ExportMemoryHelper;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use ZipArchive;
@@ -41,42 +42,48 @@ class FullContentExporter {
 	 * @return string|WP_Error
 	 */
 	public function export_to( string $target_path ) {
-		$dir_result = FilesystemHelper::ensure_directory( $target_path );
-		if ( is_wp_error( $dir_result ) ) {
-			return new WP_Error( 'mksddn_zip_dir', __( 'Unable to create export directory.', 'mksddn-migrate-content' ) );
-		}
+		$original_memory = ExportMemoryHelper::raise_for_export();
+		try {
+			$dir_result = FilesystemHelper::ensure_directory( $target_path );
+			if ( is_wp_error( $dir_result ) ) {
+				return new WP_Error( 'mksddn_zip_dir', __( 'Unable to create export directory.', 'mksddn-migrate-content' ) );
+			}
 
-		$zip = new ZipArchive();
-		if ( true !== $zip->open( $target_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
-			return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
-		}
+			$zip = new ZipArchive();
+			if ( true !== $zip->open( $target_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
+				return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
+			}
 
-		$payload = array(
-			'type'     => 'full-site',
-			'database' => $this->db_exporter->export(),
-		);
+			$payload = array(
+				'type'     => 'full-site',
+				'database' => $this->db_exporter->export(),
+			);
 
-		$manifest = array(
-			'format_version' => 1,
-			'plugin_version' => MKSDDN_MC_VERSION,
-			'type'           => 'full-site',
-			'created_at_gmt' => gmdate( 'c' ),
-		);
+			$manifest = array(
+				'format_version' => 1,
+				'plugin_version' => MKSDDN_MC_VERSION,
+				'type'           => 'full-site',
+				'created_at_gmt' => gmdate( 'c' ),
+			);
 
-		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
-		$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
+			$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+			$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
+			unset( $payload );
 
-		if ( false === $manifest_json || false === $payload_json ) {
+			if ( false === $manifest_json || false === $payload_json ) {
+				$zip->close();
+				return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
+			}
+
+			$zip->addFromString( 'manifest.json', $manifest_json );
+			$zip->addFromString( 'payload/content.json', $payload_json );
+
+			$this->append_wp_content( $zip, 'files' );
 			$zip->close();
-			return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
+			return $target_path;
+		} finally {
+			ExportMemoryHelper::restore( $original_memory );
 		}
-
-		$zip->addFromString( 'manifest.json', $manifest_json );
-		$zip->addFromString( 'payload/content.json', $payload_json );
-
-		$this->append_wp_content( $zip, 'files' );
-		$zip->close();
-		return $target_path;
 	}
 
 	/**
@@ -99,10 +106,13 @@ class FullContentExporter {
 		$prefix = '' === $base_prefix ? '' : trim( $base_prefix, '/' ) . '/';
 		$uploads = wp_upload_dir();
 
+		$mu_plugins_dir = defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
+
 		return array(
-			$prefix . 'wp-content/uploads' => $uploads['basedir'],
-			$prefix . 'wp-content/plugins' => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
-			$prefix . 'wp-content/themes'  => get_theme_root(),
+			$prefix . 'wp-content/uploads'    => $uploads['basedir'],
+			$prefix . 'wp-content/plugins'    => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
+			$prefix . 'wp-content/mu-plugins' => $mu_plugins_dir,
+			$prefix . 'wp-content/themes'     => get_theme_root(),
 		);
 	}
 

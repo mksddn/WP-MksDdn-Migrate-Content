@@ -281,11 +281,16 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 */
 	private function update_existing_user( WP_User $user, array $remote, string $remote_prefix ) {
 		$userdata = array(
-			'ID'           => $user->ID,
-			'display_name' => sanitize_text_field( $remote['row']['display_name'] ?? $user->display_name ),
-			'user_nicename'=> sanitize_title( $remote['row']['user_nicename'] ?? $user->user_nicename ),
-			'user_url'     => esc_url_raw( $remote['row']['user_url'] ?? $user->user_url ),
+			'ID'            => $user->ID,
+			'display_name'  => sanitize_text_field( $remote['row']['display_name'] ?? $user->display_name ),
+			'user_nicename' => sanitize_title( $remote['row']['user_nicename'] ?? $user->user_nicename ),
+			'user_url'      => esc_url_raw( $remote['row']['user_url'] ?? $user->user_url ),
 		);
+
+		$desired_login = sanitize_user( $remote['row']['user_login'] ?? '', true );
+		if ( $desired_login ) {
+			$userdata['user_login'] = $this->ensure_unique_login_for_user( $desired_login, (int) $user->ID );
+		}
 
 		$result = wp_update_user( $userdata );
 		if ( is_wp_error( $result ) ) {
@@ -348,6 +353,28 @@ class UserMergeApplier implements UserMergeApplierInterface {
 		}
 
 		return $name;
+	}
+
+	/**
+	 * Resolve a login that is unique on this site, allowing the given user ID to keep its current login.
+	 *
+	 * @param string $login   Desired login from remote.
+	 * @param int    $user_id Local user being updated.
+	 * @return string
+	 */
+	private function ensure_unique_login_for_user( string $login, int $user_id ): string {
+		$base = $login ?: 'imported-user';
+		$name = $base;
+		$i    = 1;
+
+		while ( true ) {
+			$existing = get_user_by( 'login', $name );
+			if ( ! $existing instanceof WP_User || (int) $existing->ID === $user_id ) {
+				return $name;
+			}
+			$name = $base . '-' . $i;
+			++$i;
+		}
 	}
 
 	/**

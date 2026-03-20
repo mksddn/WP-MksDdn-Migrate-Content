@@ -219,6 +219,33 @@ class PluginConfig {
 		return apply_filters( 'mksddn_mc_max_import_memory_limit', 8 * 1024 * 1024 * 1024 );
 	}
 
+	// ==========================================================================
+	// Export Memory Limits
+	// ==========================================================================
+
+	/**
+	 * Minimum memory limit for full-site export (bytes).
+	 *
+	 * Full export builds a DB dump in RAM and JSON-encodes it; use
+	 * filter `mksddn_mc_min_export_memory_limit` for heavier sites (e.g. 2560M).
+	 *
+	 * @return int Size in bytes (default 2560MB — full export holds DB + JSON in RAM).
+	 * @since 2.1.2
+	 */
+	public static function min_export_memory_limit(): int {
+		return apply_filters( 'mksddn_mc_min_export_memory_limit', 2560 * 1024 * 1024 );
+	}
+
+	/**
+	 * Maximum memory limit for full-site export (bytes).
+	 *
+	 * @return int Size in bytes (default 8GB).
+	 * @since 2.1.2
+	 */
+	public static function max_export_memory_limit(): int {
+		return apply_filters( 'mksddn_mc_max_export_memory_limit', 8 * 1024 * 1024 * 1024 );
+	}
+
 	/**
 	 * Database row chunk size for large tables.
 	 *

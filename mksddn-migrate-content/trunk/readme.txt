@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.2
+Stable tag: 2.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 
 = Why MksDdn Migrate Content? =
 
-* **Dual export modes** – choose Full Site (database + uploads/plugins/themes) or Selected Content (multi-select posts/pages/CPTs) with or without referenced media.
+* **Dual export modes** – choose Full Site (database + uploads/plugins/mu-plugins/themes) or Selected Content (multi-select posts/pages/CPTs) with or without referenced media.
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
@@ -26,7 +26,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 
 - Archive format with manifest, checksum, and payload folders (`content.json`, `media/`, `options/`, filesystem slices).
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
-- File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/themes` with filters to skip VCS/system files.
+- File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/mu-plugins`, `wp-content/themes` with filters to skip VCS/system files.
 - Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
 - Server file import - select backup files directly from `wp-content/uploads/mksddn-mc/imports/` directory without browser uploads.
 - Custom `.wpbkp` drag-and-drop uploader with checksum guardrails (UI polish deferred to next milestone, functionality already complete).
@@ -138,6 +138,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.3 =
+* Added: Export memory management (`ExportMemoryHelper`) with configurable min/max export memory limits in `PluginConfig` for more stable full-site exports.
+* Enhanced: Full site export/import now includes `wp-content/mu-plugins` alongside uploads, plugins, and themes.
+* Fixed: User merge — when updating existing users, login is adjusted to stay unique if the archive login collides with another account.
 
 = 2.1.2 =
 * Fixed: UnifiedImportOrchestrator constructor now receives ThemePreviewStoreInterface as 5th argument (fixes full-site import error when wrong service was passed).
