@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.2
+Stable tag: 2.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -138,6 +138,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.3 =
+* Added: Export memory management (`ExportMemoryHelper`) with configurable min/max export memory limits in `PluginConfig` for more stable full-site exports.
+* Enhanced: Full site export/import now includes `wp-content/mu-plugins` alongside uploads, plugins, and themes.
+* Fixed: User merge — when updating existing users, login is adjusted to stay unique if the archive login collides with another account.
 
 = 2.1.2 =
 * Fixed: UnifiedImportOrchestrator constructor now receives ThemePreviewStoreInterface as 5th argument (fixes full-site import error when wrong service was passed).
