@@ -84,7 +84,7 @@ alwaysApply: true
 ## Стандарты кодирования
 
 ### PHP
-- **Версия**: PHP 8+
+- **Версия**: PHP ≥ 8.0 (minimum supported)
 - **Стандарты**: WordPress Coding Standards
 - **Документирование**: PHPDoc для всех функций и классов
 - **Обработка ошибок**: Используй try-catch и WordPress error handling
@@ -146,7 +146,7 @@ alwaysApply: true
 
 ### Технические требования
 - **WordPress**: ≥ 6.2
-- **PHP**: ≥ 8.2 
+- **PHP**: ≥ 8.0
 - **Стандарты**: WordPress Coding Standards (WPCS)
 - **Проверка**: WP Plugin Check (PCP) перед релизом
 - **Линтеры**: Используй несколько подходящих линтеров для проверки кода
