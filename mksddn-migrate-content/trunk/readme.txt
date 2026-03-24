@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.3
+Stable tag: 2.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -138,6 +138,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.4 =
+* Fixed: User merge replace mode — `resolve_remote_user_login()` uses loose `sanitize_user()` first; `force_wp_users_login_and_password()` updates `wp_users` after `wp_update_user()` so archive login and password hash stay paired (avoids old username + new password).
 
 = 2.1.3 =
 * Added: Export memory management (`ExportMemoryHelper`) with configurable min/max export memory limits in `PluginConfig` for more stable full-site exports.
