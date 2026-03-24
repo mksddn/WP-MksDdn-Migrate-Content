@@ -280,25 +280,32 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 * @return true|WP_Error
 	 */
 	private function update_existing_user( WP_User $user, array $remote, string $remote_prefix ) {
-		$userdata = array(
-			'ID'            => $user->ID,
-			'display_name'  => sanitize_text_field( $remote['row']['display_name'] ?? $user->display_name ),
-			'user_nicename' => sanitize_title( $remote['row']['user_nicename'] ?? $user->user_nicename ),
-			'user_url'      => esc_url_raw( $remote['row']['user_url'] ?? $user->user_url ),
-		);
+		$row     = $remote['row'];
+		$user_id = (int) $user->ID;
 
-		$desired_login = sanitize_user( $remote['row']['user_login'] ?? '', true );
-		if ( $desired_login ) {
-			$userdata['user_login'] = $this->ensure_unique_login_for_user( $desired_login, (int) $user->ID );
+		$desired_login = $this->resolve_remote_user_login( $row, $remote['email'] );
+		if ( '' !== $desired_login ) {
+			$desired_login = $this->ensure_unique_login_for_user( $desired_login, $user_id );
+		} else {
+			$desired_login = $user->user_login;
 		}
+
+		$userdata = array(
+			'ID'            => $user_id,
+			'user_login'    => $desired_login,
+			'display_name'  => sanitize_text_field( $row['display_name'] ?? $user->display_name ),
+			'user_nicename' => sanitize_title( $row['user_nicename'] ?? $user->user_nicename ),
+			'user_url'      => esc_url_raw( $row['user_url'] ?? $user->user_url ),
+		);
 
 		$result = wp_update_user( $userdata );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
-		$this->update_password_hash( $user->ID, $remote['row']['user_pass'] ?? '' );
-		$this->sync_user_meta( $user->ID, $remote['meta'], $remote_prefix );
+		// Core wp_update_user() uses sanitize_user( ..., true ); login can stay unchanged while we still apply password hash below.
+		$this->force_wp_users_login_and_password( $user_id, $desired_login, (string) ( $row['user_pass'] ?? '' ) );
+		$this->sync_user_meta( $user_id, $remote['meta'], $remote_prefix );
 
 		return true;
 	}
@@ -312,17 +319,28 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 */
 	private function create_new_user( array $remote, string $remote_prefix ) {
 		$email = $remote['email'];
-		$login = $this->ensure_unique_login( sanitize_user( $remote['row']['user_login'] ?? $email, true ) );
+		$row   = $remote['row'];
+
+		$base_login = $this->resolve_remote_user_login( $row, $email );
+		if ( '' === $base_login ) {
+			$local_part = preg_match( '/^([^@]+)@/', $email, $m ) ? $m[1] : '';
+			$base_login = sanitize_user( $local_part, false );
+		}
+		if ( '' === $base_login ) {
+			$base_login = 'imported-user';
+		}
+
+		$login = $this->ensure_unique_login( $base_login );
 
 		$userdata = array(
-			'user_login'    => $login,
-			'user_email'    => $email,
-			'user_pass'     => wp_generate_password( 32, true, true ),
-			'display_name'  => sanitize_text_field( $remote['row']['display_name'] ?? $login ),
-			'user_nicename' => sanitize_title( $remote['row']['user_nicename'] ?? $login ),
-			'user_url'      => esc_url_raw( $remote['row']['user_url'] ?? '' ),
-			'user_registered' => sanitize_text_field( $remote['row']['user_registered'] ?? current_time( 'mysql' ) ),
-			'user_status'   => isset( $remote['row']['user_status'] ) ? (int) $remote['row']['user_status'] : 0,
+			'user_login'      => $login,
+			'user_email'      => $email,
+			'user_pass'       => wp_generate_password( 32, true, true ),
+			'display_name'    => sanitize_text_field( $row['display_name'] ?? $login ),
+			'user_nicename'   => sanitize_title( $row['user_nicename'] ?? $login ),
+			'user_url'        => esc_url_raw( $row['user_url'] ?? '' ),
+			'user_registered' => sanitize_text_field( $row['user_registered'] ?? current_time( 'mysql' ) ),
+			'user_status'     => isset( $row['user_status'] ) ? (int) $row['user_status'] : 0,
 		);
 
 		$user_id = wp_insert_user( $userdata );
@@ -330,7 +348,7 @@ class UserMergeApplier implements UserMergeApplierInterface {
 			return $user_id;
 		}
 
-		$this->update_password_hash( (int) $user_id, $remote['row']['user_pass'] ?? '' );
+		$this->force_wp_users_login_and_password( (int) $user_id, $login, (string) ( $row['user_pass'] ?? '' ) );
 		$this->sync_user_meta( (int) $user_id, $remote['meta'], $remote_prefix );
 
 		return true;
@@ -378,23 +396,63 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	}
 
 	/**
-	 * Update password hash directly.
+	 * Read user_login from archive row. Try loose sanitize first — core wp_update_user/wp_insert_user apply strict sanitize_user() and may drop the login.
 	 *
-	 * @param int    $user_id User ID.
-	 * @param string $hash    Hash string.
-	 * @return void
+	 * @param array  $row            Users table row.
+	 * @param string $fallback_email Sanitized email (local part used if login is empty).
+	 * @return string Desired login or empty string.
 	 */
-	private function update_password_hash( int $user_id, string $hash ): void {
-		if ( '' === $hash ) {
-			return;
+	private function resolve_remote_user_login( array $row, string $fallback_email = '' ): string {
+		$raw = isset( $row['user_login'] ) ? trim( (string) $row['user_login'] ) : '';
+
+		$loose = sanitize_user( $raw, false );
+		if ( '' !== $loose ) {
+			return $loose;
 		}
 
+		$strict = sanitize_user( $raw, true );
+		if ( '' !== $strict ) {
+			return $strict;
+		}
+
+		if ( '' !== $fallback_email && preg_match( '/^([^@]+)@/', $fallback_email, $m ) ) {
+			$from_email = sanitize_user( $m[1], false );
+			if ( '' !== $from_email ) {
+				return $from_email;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Force user_login and user_pass in wp_users so they match the archive (core sanitization can leave the old login).
+	 *
+	 * @param int    $user_id   User ID.
+	 * @param string $login     Resolved unique login.
+	 * @param string $pass_hash Password hash from archive.
+	 * @return void
+	 */
+	private function force_wp_users_login_and_password( int $user_id, string $login, string $pass_hash ): void {
 		global $wpdb;
+
+		$data   = array( 'user_login' => $login );
+		$format = array( '%s' );
+
+		if ( '' !== $pass_hash ) {
+			$data['user_pass'] = $pass_hash;
+			$format[]          = '%s';
+		}
+
 		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->users,
-			array( 'user_pass' => $hash ),
-			array( 'ID' => $user_id )
+			$data,
+			array( 'ID' => $user_id ),
+			$format,
+			array( '%d' )
 		);
+
+		clean_user_cache( $user_id );
 	}
 
 	/**
