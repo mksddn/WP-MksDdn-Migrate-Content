@@ -1,10 +1,11 @@
 <?php
 /**
- * @file: FullContentExportRunner.php
- * @description: Time-sliced full-site .wpbkp builder and synchronous export wrapper.
- * @dependencies: FullDatabaseExporter, ContentCollector, ChunkJob, PluginConfig, FilesystemHelper
+ * Time-sliced full-site .wpbkp builder and synchronous export wrapper.
+ *
  * @package MksDdn_Migrate_Content
  */
+
+// phpcs:disable WordPress.Files.FileName -- Matches project file naming (PascalCase class file).
 
 namespace MksDdn\MigrateContent\Filesystem;
 
@@ -27,10 +28,26 @@ class FullContentExportRunner {
 
 	private const JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION;
 
+	/**
+	 * Database exporter instance.
+	 *
+	 * @var FullDatabaseExporter
+	 */
 	private FullDatabaseExporter $db_exporter;
 
+	/**
+	 * Content collector instance.
+	 *
+	 * @var ContentCollector
+	 */
 	private ContentCollector $collector;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param FullDatabaseExporter|null $db_exporter Database exporter.
+	 * @param ContentCollector|null     $collector   Content collector.
+	 */
 	public function __construct( ?FullDatabaseExporter $db_exporter = null, ?ContentCollector $collector = null ) {
 		$this->db_exporter = $db_exporter ?? new FullDatabaseExporter();
 		$this->collector   = $collector ?? new ContentCollector();
@@ -113,16 +130,20 @@ class FullContentExportRunner {
 	}
 
 	/**
+	 * Builds initial export state.
+	 *
+	 * @param string $payload_path Path to streaming JSON payload.
+	 * @param string $list_path    Path to NDJSON file list.
 	 * @return array<string, mixed>
 	 */
 	private function fresh_state( string $payload_path, string $list_path ): array {
 		return array(
-			'phase'        => 'db',
-			'payload_path' => $payload_path,
-			'list_path'    => $list_path,
+			'phase'         => 'db',
+			'payload_path'  => $payload_path,
+			'list_path'     => $list_path,
 			// When set, zip is built here (e.g. sys temp) and copied to target_path when done.
 			'zip_disk_path' => null,
-			'db'           => array(
+			'db'            => array(
 				'tables'         => null,
 				'ti'             => 0,
 				'row_off'        => 0,
@@ -131,22 +152,26 @@ class FullContentExportRunner {
 				'first_row'      => true,
 				'header_written' => false,
 			),
-			'fs'           => array(
-				'roots'   => null,
-				'ri'      => 0,
-				'stack'   => array(),
-				'started' => false,
+			'fs'            => array(
+				'roots'       => null,
+				'ri'          => 0,
+				'stack'       => array(),
+				'started'     => false,
 				'root_paths'  => array(),
 				'root_counts' => array(),
 			),
-			'zip'          => array(
+			'zip'           => array(
 				'add_idx' => 0,
 			),
 		);
 	}
 
 	/**
-	 * @param array<string, mixed> $state State (by ref).
+	 * Runs export work until deadline or phase completion.
+	 *
+	 * @param array<string, mixed> $state       State (by ref).
+	 * @param string               $target_path Final zip path.
+	 * @param float                $deadline    microtime( true ) deadline.
 	 * @return array<string, mixed>|WP_Error
 	 */
 	private function execute_step( array &$state, string $target_path, float $deadline ): array|WP_Error {
@@ -209,11 +234,11 @@ class FullContentExportRunner {
 					$total      = (int) max( 1, ceil( $size / $chunk_size ) );
 
 					return array(
-						'done'           => true,
-						'progress'       => 1.0,
-						'total_chunks'   => $total,
-						'chunk_size'     => $chunk_size,
-						'size'           => $size,
+						'done'         => true,
+						'progress'     => 1.0,
+						'total_chunks' => $total,
+						'chunk_size'   => $chunk_size,
+						'size'         => $size,
 					);
 				}
 				break;
@@ -230,12 +255,15 @@ class FullContentExportRunner {
 	}
 
 	/**
+	 * Estimates completion ratio for the current phase.
+	 *
 	 * @param array<string, mixed> $state State.
+	 * @return float
 	 */
 	private function estimate_progress( array $state ): float {
 		$phase = $state['phase'];
 		if ( 'db' === $phase ) {
-			$db = $state['db'];
+			$db     = $state['db'];
 			$tables = is_array( $db['tables'] ) ? $db['tables'] : array();
 			$n      = count( $tables );
 			if ( $n < 1 ) {
@@ -266,7 +294,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * @param array<string, mixed> $state State.
+	 * Streams database tables into the payload JSON file.
+	 *
+	 * @param array<string, mixed> $state    State.
+	 * @param float                $deadline microtime( true ) deadline.
+	 * @return bool|WP_Error
 	 */
 	private function phase_db( array &$state, float $deadline ): bool|WP_Error {
 		$payload_path = $state['payload_path'];
@@ -289,10 +321,11 @@ class FullContentExportRunner {
 			}
 		}
 
-		$tables = $db['tables'];
-		$row_chunk = max( 50, PluginConfig::db_row_chunk_size() );
+		$tables      = $db['tables'];
+		$row_chunk   = max( 50, PluginConfig::db_row_chunk_size() );
+		$table_count = count( $tables );
 
-		while ( $db['ti'] < count( $tables ) && microtime( true ) < $deadline ) {
+		while ( $db['ti'] < $table_count && microtime( true ) < $deadline ) {
 			$table = $tables[ $db['ti'] ];
 
 			if ( 0 === (int) $db['row_off'] && ! $db['in_rows'] ) {
@@ -344,7 +377,7 @@ class FullContentExportRunner {
 					}
 				}
 				$db['first_row'] = false;
-				$enc              = wp_json_encode( $row, self::JSON_FLAGS );
+				$enc             = wp_json_encode( $row, self::JSON_FLAGS );
 				if ( false === $enc ) {
 					return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
 				}
@@ -356,7 +389,7 @@ class FullContentExportRunner {
 			}
 		}
 
-		if ( $db['ti'] >= count( $tables ) ) {
+		if ( $db['ti'] >= $table_count ) {
 			$w = $this->payload_append( $payload_path, '}}}' );
 			if ( is_wp_error( $w ) ) {
 				return $w;
@@ -368,7 +401,12 @@ class FullContentExportRunner {
 	}
 
 	/**
+	 * Writes the opening fragment of the database payload JSON.
+	 *
 	 * Opening fragment: {"type":"full-site","database":{...,"tables":{
+	 *
+	 * @param string $payload_path Destination file path.
+	 * @return bool|WP_Error
 	 */
 	private function write_db_payload_header( string $payload_path ): bool|WP_Error {
 		global $wpdb;
@@ -402,6 +440,10 @@ class FullContentExportRunner {
 	}
 
 	/**
+	 * Appends raw data to the payload file.
+	 *
+	 * @param string $path Destination file path.
+	 * @param string $data Bytes to append.
 	 * @return bool|WP_Error
 	 */
 	private function payload_append( string $path, string $data ): bool|WP_Error {
@@ -417,7 +459,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * @param array<string, mixed> $state State.
+	 * Adds manifest and database payload to the zip, then switches to filesystem scan.
+	 *
+	 * @param array<string, mixed> $state       State.
+	 * @param string               $target_path Final zip path.
+	 * @return WP_Error|bool
 	 */
 	private function phase_zip_base( array &$state, string $target_path ): WP_Error|bool {
 		$payload_path = $state['payload_path'];
@@ -477,7 +523,9 @@ class FullContentExportRunner {
 	/**
 	 * Path where the .wpbkp zip is stored during the build (may differ from job .tmp).
 	 *
-	 * @param array<string, mixed> $state State.
+	 * @param array<string, mixed> $state       State.
+	 * @param string               $target_path Job target path.
+	 * @return string
 	 */
 	private function resolve_zip_disk_path( array $state, string $target_path ): string {
 		if ( ! empty( $state['zip_disk_path'] ) && is_string( $state['zip_disk_path'] ) ) {
@@ -488,7 +536,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * Create or truncate a zip for writing manifest + payload.
+	 * Creates or truncates a zip for writing manifest and payload.
+	 *
+	 * @param ZipArchive $zip  Zip handle.
+	 * @param string     $path Absolute path.
+	 * @return bool
 	 */
 	private function open_zip_new( ZipArchive $zip, string $path ): bool {
 		$path = wp_normalize_path( $path );
@@ -507,7 +559,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * Open existing zip for adding files (must not use default flags — that is read-only).
+	 * Opens an existing zip for adding files (default ZipArchive flags are read-only).
+	 *
+	 * @param ZipArchive $zip  Zip handle.
+	 * @param string     $path Absolute path.
+	 * @return bool
 	 */
 	private function open_zip_append( ZipArchive $zip, string $path ): bool {
 		$path = wp_normalize_path( $path );
@@ -521,6 +577,12 @@ class FullContentExportRunner {
 		return true === $result;
 	}
 
+	/**
+	 * Builds a WP_Error when ZipArchive fails to open.
+	 *
+	 * @param ZipArchive $zip Zip handle.
+	 * @return WP_Error
+	 */
 	private function zip_open_error( ZipArchive $zip ): WP_Error {
 		$detail = '';
 		if ( method_exists( $zip, 'getStatusString' ) ) {
@@ -539,9 +601,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * Copy zip from temp path to job .tmp when the build used a fallback disk path.
+	 * Copies zip from temp path to job .tmp when the build used a fallback disk path.
 	 *
-	 * @param array<string, mixed> $state State.
+	 * @param array<string, mixed> $state       State.
+	 * @param string               $target_path Job target path.
+	 * @return bool|WP_Error
 	 */
 	private function finalize_zip_to_job_path( array &$state, string $target_path ): bool|WP_Error {
 		$target_path = wp_normalize_path( $target_path );
@@ -572,7 +636,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * @param array<string, mixed> $state State.
+	 * Walks filesystem roots and writes the NDJSON file list.
+	 *
+	 * @param array<string, mixed> $state    State.
+	 * @param float                $deadline microtime( true ) deadline.
+	 * @return bool|WP_Error
 	 */
 	private function phase_fs_build( array &$state, float $deadline ): bool|WP_Error {
 		$list_path = $state['list_path'];
@@ -584,7 +652,7 @@ class FullContentExportRunner {
 		}
 
 		if ( null === $fs['roots'] ) {
-			$map = FullContentExporter::build_content_directory_map( 'files' );
+			$map   = FullContentExporter::build_content_directory_map( 'files' );
 			$roots = array();
 
 			$required_archive_roots = array(
@@ -638,7 +706,7 @@ class FullContentExportRunner {
 				}
 
 				if ( is_dir( $real_path ) ) {
-					$roots[] = array(
+					$roots[]                            = array(
 						'a' => $archive_root,
 						'r' => $real_path,
 					);
@@ -663,8 +731,8 @@ class FullContentExportRunner {
 				if ( is_wp_error( $touch ) ) {
 					return $touch;
 				}
-				$state['phase'] = 'zip_files';
-				$lines          = $this->count_lines_ndjson( $list_path );
+				$state['phase']              = 'zip_files';
+				$lines                       = $this->count_lines_ndjson( $list_path );
 				$state['zip']['total_lines'] = $lines;
 				$state['zip']['add_idx']     = 0;
 				return true;
@@ -775,6 +843,12 @@ class FullContentExportRunner {
 		return true;
 	}
 
+	/**
+	 * Whether to skip a path during filesystem scan.
+	 *
+	 * @param string $path Absolute filesystem path.
+	 * @return bool
+	 */
 	private function should_skip_fs_path( string $path ): bool {
 		$ignored = array(
 			'/mksddn-mc/',
@@ -796,6 +870,12 @@ class FullContentExportRunner {
 		return 'wpbkp' === $extension;
 	}
 
+	/**
+	 * Counts non-empty lines in an NDJSON file.
+	 *
+	 * @param string $path File path.
+	 * @return int
+	 */
 	private function count_lines_ndjson( string $path ): int {
 		if ( ! is_readable( $path ) ) {
 			return 0;
@@ -816,7 +896,12 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * @param array<string, mixed> $state State.
+	 * Adds files from the NDJSON list into the zip until deadline or EOF.
+	 *
+	 * @param array<string, mixed> $state       State.
+	 * @param string               $target_path Final zip path.
+	 * @param float                $deadline    microtime( true ) deadline.
+	 * @return bool|WP_Error
 	 */
 	private function phase_zip_files( array &$state, string $target_path, float $deadline ): bool|WP_Error {
 		$list_path = $state['list_path'];
@@ -908,7 +993,7 @@ class FullContentExportRunner {
 			$this->append_export_debug_file( $state, $zip_path );
 			FilesystemHelper::delete( $list_path );
 			$state['phase'] = 'done';
-			$finalize         = $this->finalize_zip_to_job_path( $state, $target_path );
+			$finalize       = $this->finalize_zip_to_job_path( $state, $target_path );
 			if ( is_wp_error( $finalize ) ) {
 				return $finalize;
 			}
@@ -918,10 +1003,11 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * Add internal export diagnostics for troubleshooting missing roots in archives.
+	 * Adds internal export diagnostics for troubleshooting missing roots in archives.
 	 *
-	 * @param array<string, mixed> $state Current export state.
+	 * @param array<string, mixed> $state    Current export state.
 	 * @param string               $zip_path Absolute zip path.
+	 * @return void
 	 */
 	private function append_export_debug_file( array $state, string $zip_path ): void {
 		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
@@ -933,9 +1019,9 @@ class FullContentExportRunner {
 		$debug    = array(
 			'plugin_version' => MKSDDN_MC_VERSION,
 			'generated_at'   => gmdate( 'c' ),
-			'root_paths'   => isset( $fs_state['root_paths'] ) && is_array( $fs_state['root_paths'] ) ? $fs_state['root_paths'] : array(),
-			'root_counts'  => isset( $fs_state['root_counts'] ) && is_array( $fs_state['root_counts'] ) ? $fs_state['root_counts'] : array(),
-			'zip'          => array(
+			'root_paths'     => isset( $fs_state['root_paths'] ) && is_array( $fs_state['root_paths'] ) ? $fs_state['root_paths'] : array(),
+			'root_counts'    => isset( $fs_state['root_counts'] ) && is_array( $fs_state['root_counts'] ) ? $fs_state['root_counts'] : array(),
+			'zip'            => array(
 				'add_idx'     => isset( $zip_st['add_idx'] ) ? (int) $zip_st['add_idx'] : 0,
 				'total_lines' => isset( $zip_st['total_lines'] ) ? (int) $zip_st['total_lines'] : 0,
 			),
@@ -955,7 +1041,10 @@ class FullContentExportRunner {
 	}
 
 	/**
+	 * Deletes temporary files if they exist.
+	 *
 	 * @param array<string, string> $paths Absolute paths.
+	 * @return void
 	 */
 	private function cleanup_paths( array $paths ): void {
 		foreach ( $paths as $p ) {
