@@ -419,7 +419,7 @@ class FullContentExportRunner {
 	/**
 	 * @param array<string, mixed> $state State.
 	 */
-	private function phase_zip_base( array &$state, string $target_path ): WP_Error|true {
+	private function phase_zip_base( array &$state, string $target_path ): WP_Error|bool {
 		$payload_path = $state['payload_path'];
 
 		if ( ! is_readable( $payload_path ) || filesize( $payload_path ) < 2 ) {
