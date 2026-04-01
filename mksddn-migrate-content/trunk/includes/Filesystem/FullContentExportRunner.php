@@ -268,7 +268,7 @@ class FullContentExportRunner {
 	/**
 	 * @param array<string, mixed> $state State.
 	 */
-	private function phase_db( array &$state, float $deadline ): true|WP_Error {
+	private function phase_db( array &$state, float $deadline ): bool|WP_Error {
 		$payload_path = $state['payload_path'];
 		$db           = &$state['db'];
 
@@ -370,7 +370,7 @@ class FullContentExportRunner {
 	/**
 	 * Opening fragment: {"type":"full-site","database":{...,"tables":{
 	 */
-	private function write_db_payload_header( string $payload_path ): true|WP_Error {
+	private function write_db_payload_header( string $payload_path ): bool|WP_Error {
 		global $wpdb;
 
 		$uploads = wp_upload_dir();
@@ -402,9 +402,9 @@ class FullContentExportRunner {
 	}
 
 	/**
-	 * @return true|WP_Error
+	 * @return bool|WP_Error
 	 */
-	private function payload_append( string $path, string $data ): true|WP_Error {
+	private function payload_append( string $path, string $data ): bool|WP_Error {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		if ( false === file_put_contents( $path, $data, FILE_APPEND | LOCK_EX ) ) {
 			return new WP_Error(
@@ -543,7 +543,7 @@ class FullContentExportRunner {
 	 *
 	 * @param array<string, mixed> $state State.
 	 */
-	private function finalize_zip_to_job_path( array &$state, string $target_path ): true|WP_Error {
+	private function finalize_zip_to_job_path( array &$state, string $target_path ): bool|WP_Error {
 		$target_path = wp_normalize_path( $target_path );
 
 		if ( empty( $state['zip_disk_path'] ) || ! is_string( $state['zip_disk_path'] ) ) {
@@ -574,7 +574,7 @@ class FullContentExportRunner {
 	/**
 	 * @param array<string, mixed> $state State.
 	 */
-	private function phase_fs_build( array &$state, float $deadline ): true|WP_Error {
+	private function phase_fs_build( array &$state, float $deadline ): bool|WP_Error {
 		$list_path = $state['list_path'];
 		$fs        = &$state['fs'];
 
@@ -752,9 +752,9 @@ class FullContentExportRunner {
 	 * Ensures the NDJSON parent directory exists and the list file exists (empty if missing).
 	 *
 	 * @param string $list_path Absolute path to the file list.
-	 * @return true|WP_Error
+	 * @return bool|WP_Error
 	 */
-	private function ensure_export_file_list( string $list_path ): true|WP_Error {
+	private function ensure_export_file_list( string $list_path ): bool|WP_Error {
 		$dir_result = FilesystemHelper::ensure_directory( $list_path );
 		if ( is_wp_error( $dir_result ) ) {
 			return $dir_result;
@@ -818,7 +818,7 @@ class FullContentExportRunner {
 	/**
 	 * @param array<string, mixed> $state State.
 	 */
-	private function phase_zip_files( array &$state, string $target_path, float $deadline ): true|WP_Error {
+	private function phase_zip_files( array &$state, string $target_path, float $deadline ): bool|WP_Error {
 		$list_path = $state['list_path'];
 		$idx       = (int) $state['zip']['add_idx'];
 
