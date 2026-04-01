@@ -54,7 +54,7 @@ class ChunkJob {
 	}
 
 	/**
-	 * Serialized file manifest for resumable zip (JSON array).
+	 * NDJSON file list for resumable zip (one file entry per line).
 	 *
 	 * @return string Absolute path.
 	 * @since 2.1.5

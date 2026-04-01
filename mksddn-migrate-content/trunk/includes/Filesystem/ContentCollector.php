@@ -44,56 +44,6 @@ class ContentCollector {
 	}
 
 	/**
-	 * Flat list of files to add (archive path => real path) for incremental zipping.
-	 *
-	 * @param array<string, string> $map Map of archive roots to real directories.
-	 * @return array<int, array{archive: string, real: string}>
-	 */
-	public function list_file_entries( array $map ): array {
-		$out = array();
-		foreach ( $map as $archive_root => $real_path ) {
-			if ( ! is_dir( $real_path ) ) {
-				continue;
-			}
-			$this->collect_file_paths( $real_path, $archive_root, $out );
-		}
-
-		return $out;
-	}
-
-	/**
-	 * @param array<int, array{archive: string, real: string}> $out Output list (by ref).
-	 */
-	private function collect_file_paths( string $source_dir, string $archive_root, array &$out ): void {
-		$iterator = new RecursiveIteratorIterator(
-			new RecursiveDirectoryIterator( $source_dir, RecursiveDirectoryIterator::SKIP_DOTS ),
-			RecursiveIteratorIterator::SELF_FIRST
-		);
-
-		foreach ( $iterator as $path => $info ) {
-			if ( $this->should_skip_path( $path ) ) {
-				continue;
-			}
-
-			$relative = trim( str_replace( $source_dir, '', $path ), DIRECTORY_SEPARATOR );
-			$target   = trim( $archive_root . '/' . $relative, '/' );
-
-			if ( '' === $target ) {
-				continue;
-			}
-
-			if ( $info->isDir() ) {
-				continue;
-			}
-
-			$out[] = array(
-				'archive' => $target,
-				'real'    => $path,
-			);
-		}
-	}
-
-	/**
 	 * Append directory recursively into archive.
 	 *
 	 * @param ZipArchive $zip         Archive instance.
@@ -157,13 +107,6 @@ class ContentCollector {
 	}
 
 	/**
-	 * Disable compression for already-compressed assets.
-	 *
-	 * @param ZipArchive $zip   Archive instance.
-	 * @param string     $target Archive relative path.
-	 * @param string     $path   Source path.
-	 */
-	/**
 	 * Add a single file with optional compression bypass for media types.
 	 *
 	 * @param ZipArchive $zip          Archive.
@@ -179,6 +122,13 @@ class ContentCollector {
 		return true;
 	}
 
+	/**
+	 * Store already-compressed extensions without recompression.
+	 *
+	 * @param ZipArchive $zip    Archive instance.
+	 * @param string     $target Path inside archive.
+	 * @param string     $path   Source path on disk.
+	 */
 	private function maybe_adjust_compression( ZipArchive $zip, string $target, string $path ): void {
 		if ( ! method_exists( $zip, 'setCompressionName' ) ) {
 			return;

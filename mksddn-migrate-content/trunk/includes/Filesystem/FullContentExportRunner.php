@@ -297,7 +297,10 @@ class FullContentExportRunner {
 
 			if ( 0 === (int) $db['row_off'] && ! $db['in_rows'] ) {
 				if ( ! $db['first_table'] ) {
-					$this->payload_append( $payload_path, ',' );
+					$w = $this->payload_append( $payload_path, ',' );
+					if ( is_wp_error( $w ) ) {
+						return $w;
+					}
 				}
 				$db['first_table'] = false;
 				$schema            = $this->db_exporter->get_create_table_ddl( $table );
@@ -306,7 +309,10 @@ class FullContentExportRunner {
 					return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
 				}
 				$schema_json = wp_json_encode( $schema, self::JSON_FLAGS );
-				$this->payload_append( $payload_path, $key . ':{"schema":' . $schema_json . ',"rows":[' );
+				$w           = $this->payload_append( $payload_path, $key . ':{"schema":' . $schema_json . ',"rows":[' );
+				if ( is_wp_error( $w ) ) {
+					return $w;
+				}
 				$db['in_rows']   = true;
 				$db['first_row'] = true;
 			}
@@ -316,7 +322,10 @@ class FullContentExportRunner {
 				return new WP_Error( 'mksddn_db_export', __( 'Database export failed while reading a table.', 'mksddn-migrate-content' ) );
 			}
 			if ( array() === $rows ) {
-				$this->payload_append( $payload_path, ']}' );
+				$w = $this->payload_append( $payload_path, ']}' );
+				if ( is_wp_error( $w ) ) {
+					return $w;
+				}
 				$db['in_rows']   = false;
 				$db['first_row'] = true;
 				$db['row_off']   = 0;
@@ -329,20 +338,29 @@ class FullContentExportRunner {
 					break 2;
 				}
 				if ( ! $db['first_row'] ) {
-					$this->payload_append( $payload_path, ',' );
+					$w = $this->payload_append( $payload_path, ',' );
+					if ( is_wp_error( $w ) ) {
+						return $w;
+					}
 				}
 				$db['first_row'] = false;
 				$enc              = wp_json_encode( $row, self::JSON_FLAGS );
 				if ( false === $enc ) {
 					return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
 				}
-				$this->payload_append( $payload_path, $enc );
+				$w = $this->payload_append( $payload_path, $enc );
+				if ( is_wp_error( $w ) ) {
+					return $w;
+				}
 				++$db['row_off'];
 			}
 		}
 
 		if ( $db['ti'] >= count( $tables ) ) {
-			$this->payload_append( $payload_path, '}}}' );
+			$w = $this->payload_append( $payload_path, '}}}' );
+			if ( is_wp_error( $w ) ) {
+				return $w;
+			}
 			$state['phase'] = 'zip_base';
 		}
 
@@ -383,9 +401,19 @@ class FullContentExportRunner {
 		return true;
 	}
 
-	private function payload_append( string $path, string $data ): void {
+	/**
+	 * @return true|WP_Error
+	 */
+	private function payload_append( string $path, string $data ): true|WP_Error {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-		file_put_contents( $path, $data, FILE_APPEND | LOCK_EX );
+		if ( false === file_put_contents( $path, $data, FILE_APPEND | LOCK_EX ) ) {
+			return new WP_Error(
+				'mksddn_mc_full_export_payload',
+				__( 'Failed to write full-site payload.', 'mksddn-migrate-content' )
+			);
+		}
+
+		return true;
 	}
 
 	/**
@@ -407,7 +435,6 @@ class FullContentExportRunner {
 			'plugin_version' => MKSDDN_MC_VERSION,
 			'type'           => 'full-site',
 			'created_at_gmt' => gmdate( 'c' ),
-			'export_runner_build' => '2026-04-01-fs-scan-fix',
 		);
 
 		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
@@ -897,11 +924,15 @@ class FullContentExportRunner {
 	 * @param string               $zip_path Absolute zip path.
 	 */
 	private function append_export_debug_file( array $state, string $zip_path ): void {
+		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			return;
+		}
+
 		$fs_state = isset( $state['fs'] ) && is_array( $state['fs'] ) ? $state['fs'] : array();
 		$zip_st   = isset( $state['zip'] ) && is_array( $state['zip'] ) ? $state['zip'] : array();
 		$debug    = array(
-			'build'        => '2026-04-01-fs-root-debug',
-			'generated_at' => gmdate( 'c' ),
+			'plugin_version' => MKSDDN_MC_VERSION,
+			'generated_at'   => gmdate( 'c' ),
 			'root_paths'   => isset( $fs_state['root_paths'] ) && is_array( $fs_state['root_paths'] ) ? $fs_state['root_paths'] : array(),
 			'root_counts'  => isset( $fs_state['root_counts'] ) && is_array( $fs_state['root_counts'] ) ? $fs_state['root_counts'] : array(),
 			'zip'          => array(

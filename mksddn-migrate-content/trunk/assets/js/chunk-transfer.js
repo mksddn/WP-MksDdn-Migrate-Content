@@ -140,10 +140,11 @@ function hideProgressLabel( delay = 0 ) {
 }
 
 	async function runFullExportUntilReady() {
+		const maxSteps = 20000;
 		let jobId = null;
 		let init = null;
 
-		for ( ;; ) {
+		for ( let step = 0; step < maxSteps; step++ ) {
 			const body = jobId
 				? JSON.stringify( { resumable: true, job_id: jobId } )
 				: JSON.stringify( { resumable: true } );
@@ -166,10 +167,14 @@ function hideProgressLabel( delay = 0 ) {
 			jobId = init.job_id;
 
 			if ( init.total_chunks ) {
-				break;
+				return init;
 			}
 
-			if ( init.building && typeof init.progress === 'number' ) {
+			if ( ! init.building ) {
+				throw new Error( init.message || settings.i18n.exportError || 'Export failed' );
+			}
+
+			if ( typeof init.progress === 'number' ) {
 				const pct = Math.round( init.progress * 100 );
 				setProgressLabel(
 					Math.min( 45, 5 + Math.round( pct * 0.4 ) ),
@@ -180,7 +185,7 @@ function hideProgressLabel( delay = 0 ) {
 			await yieldThread( 25 );
 		}
 
-		return init;
+		throw new Error( settings.i18n.exportError || 'Export timed out' );
 	}
 
 	async function fetchDownloadChunk( jobId, index ) {

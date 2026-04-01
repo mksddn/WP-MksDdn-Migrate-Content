@@ -697,6 +697,10 @@ msgstr ""
 msgid "Failed to encode full-site payload."
 msgstr ""
 
+#: includes/Filesystem/FullContentExportRunnerphp:412
+msgid "Failed to write full-site payload."
+msgstr ""
+
 #: includes/Archive/Extractorphp:106 includes/Admin/Services/ImportTypeDetectorphp:81
 msgid "Unable to open archive."
 msgstr ""

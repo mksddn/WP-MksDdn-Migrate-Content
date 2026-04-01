@@ -797,6 +797,10 @@ msgstr "Экспортировать выбранное"
 msgid "Failed to encode full-site payload."
 msgstr "Не удалось закодировать данные полного экспорта."
 
+#: includes/Filesystem/FullContentExportRunnerphp:412
+msgid "Failed to write full-site payload."
+msgstr "Не удалось записать данные полного экспорта."
+
 #: includes/Archive/Extractorphp:106
 #: includes/Admin/Services/ImportTypeDetectorphp:81
 msgid "Unable to open archive."

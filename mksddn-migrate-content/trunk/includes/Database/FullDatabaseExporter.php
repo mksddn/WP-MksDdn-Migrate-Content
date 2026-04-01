@@ -22,6 +22,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullDatabaseExporter {
 
 	/**
+	 * Cached table list for the current request (avoids repeated SHOW TABLES).
+	 *
+	 * @var array<int, string>|null
+	 */
+	private $table_names_cache = null;
+
+	/**
 	 * Export all tables using the current blog prefix.
 	 *
 	 * @global wpdb $wpdb WordPress DB abstraction.
@@ -31,7 +38,7 @@ class FullDatabaseExporter {
 	public function export(): array {
 		global $wpdb;
 
-		$tables = $this->detect_tables( $wpdb );
+		$tables = $this->get_table_names();
 		$uploads = wp_upload_dir();
 		$dump   = array(
 			'site_url'     => \get_option( 'siteurl' ),
@@ -71,30 +78,15 @@ class FullDatabaseExporter {
 	 * @since 2.1.5
 	 */
 	public function get_table_names(): array {
-		global $wpdb;
-
-		return $this->detect_tables( $wpdb );
-	}
-
-	/**
-	 * Row count for a table (must belong to current prefix).
-	 *
-	 * @global wpdb $wpdb
-	 * @param string $table_name Table name.
-	 * @return int
-	 * @since 2.1.5
-	 */
-	public function count_rows( string $table_name ): int {
-		global $wpdb;
-
-		if ( ! $this->is_allowed_table( $table_name ) ) {
-			return 0;
+		if ( null !== $this->table_names_cache ) {
+			return $this->table_names_cache;
 		}
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name validated against prefix list
-		$c = $wpdb->get_var( "SELECT COUNT(*) FROM `{$table_name}`" );
+		global $wpdb;
 
-		return (int) $c;
+		$this->table_names_cache = $this->detect_tables( $wpdb );
+
+		return $this->table_names_cache;
 	}
 
 	/**

@@ -278,17 +278,6 @@ class PluginConfig {
 	}
 
 	/**
-	 * Max files added to zip per resumable step (after time check).
-	 *
-	 * @return int Default 400.
-	 * @since 2.1.5
-	 */
-	public static function full_export_files_per_step(): int {
-		$n = (int) apply_filters( 'mksddn_mc_full_export_files_per_step', 400 );
-		return max( 50, min( 5000, $n ) );
-	}
-
-	/**
 	 * Max directory entries scanned per resumable step when building file list.
 	 *
 	 * @return int Default 800.

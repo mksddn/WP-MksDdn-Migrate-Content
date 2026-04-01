@@ -127,7 +127,8 @@ All key components implement interfaces:
 = Full-site export pipeline =
 * `FullContentExporter` / `FullContentExportRunner` produce the same `.wpbkp` layout as before (manifest, `payload/content.json`, filesystem tree under `files/`).
 * `POST /wp-json/mksddn/v1/chunk/download/init` — optional JSON body: `resumable` (bool). Without `resumable`, behavior matches legacy (single long request). With `resumable: true`, repeat the request with returned `job_id` until the response includes `total_chunks` for chunked download.
-* `FullDatabaseExporter` exposes table-scoped helpers for incremental row reads; `PluginConfig::full_export_step_time_limit()` caps each step duration (filter `mksddn_mc_full_export_step_time_limit`).
+* `FullDatabaseExporter` exposes table-scoped helpers for incremental row reads (table list cached per exporter instance); `PluginConfig::full_export_step_time_limit()` caps each step duration (filter `mksddn_mc_full_export_step_time_limit`); `full_export_fs_scan_per_step` controls directory scan batching.
+* `payload/export-debug.json` is written into the archive only when `WP_DEBUG` is true.
 
 = Security =
 * All admin operations check `current_user_can('manage_options')`
