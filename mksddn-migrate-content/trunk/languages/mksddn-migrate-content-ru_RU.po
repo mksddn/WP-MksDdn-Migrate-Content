@@ -572,8 +572,8 @@ msgid "Unable to allocate temporary directory."
 msgstr "Не удалось создать временный каталог."
 
 #: includes/Admin/AdminPageControllerphp:365
-msgid "Chunked download failed. Falling back to direct download."
-msgstr "Чанковая загрузка не удалась. Прямая загрузка."
+msgid "Full site export failed. Check PHP zip, disk space, and write access to the uploads directory."
+msgstr "Полный экспорт сайта не удался. Проверьте PHP zip, место на диске и права на запись в каталог uploads."
 
 #: includes/Filesystem/ThemeImporterphp:187
 msgid "No themes found in archive."
@@ -605,6 +605,14 @@ msgstr "Введите не менее 2 символов для поиска"
 msgid "Unable to create archive for full export."
 msgstr "Не удалось создать архив полного экспорта."
 
+#: includes/Filesystem/FullContentExportRunner.php:671
+msgid "Unable to write full-site file list."
+msgstr "Не удалось записать список файлов полного экспорта."
+
+#: includes/Filesystem/FullContentExportRunner.php:745
+msgid "Unable to read full-site file list."
+msgstr "Не удалось прочитать список файлов полного экспорта."
+
 #: views/admin/theme-previewphp:53
 msgid "Import themes"
 msgstr "Импортировать темы"
@@ -628,10 +636,6 @@ msgstr "Загрузка архива… %d%"
 #: views/admin/theme-export-sectionphp:15
 msgid "Export selected themes (active theme is pre-selected)."
 msgstr "Экспорт выбранных тем (активная тема выбрана по умолчанию)."
-
-#: includes/Admin/AdminPageControllerphp:371
-msgid "Falling back to classic download…"
-msgstr "Переход на обычную загрузку…"
 
 #: includes/Validation/ExportDataValidatorphp:84
 msgid "No content selected for export."

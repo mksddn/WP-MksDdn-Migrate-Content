@@ -139,17 +139,48 @@ function hideProgressLabel( delay = 0 ) {
 	}
 }
 
-	async function initDownloadJob() {
-		const response = await fetch( settings.restUrl + 'chunk/download/init', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'X-WP-Nonce': settings.nonce,
-			},
-			body: JSON.stringify( {} ),
-		} );
+	async function runFullExportUntilReady() {
+		let jobId = null;
+		let init = null;
 
-		return response.json();
+		for ( ;; ) {
+			const body = jobId
+				? JSON.stringify( { resumable: true, job_id: jobId } )
+				: JSON.stringify( { resumable: true } );
+
+			const response = await fetch( settings.restUrl + 'chunk/download/init', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': settings.nonce,
+				},
+				body,
+			} );
+
+			init = await response.json();
+
+			if ( ! response.ok || init.code ) {
+				throw new Error( init.message || 'Export failed' );
+			}
+
+			jobId = init.job_id;
+
+			if ( init.total_chunks ) {
+				break;
+			}
+
+			if ( init.building && typeof init.progress === 'number' ) {
+				const pct = Math.round( init.progress * 100 );
+				setProgressLabel(
+					Math.min( 45, 5 + Math.round( pct * 0.4 ) ),
+					settings.i18n.exportBusy
+				);
+			}
+
+			await yieldThread( 25 );
+		}
+
+		return init;
 	}
 
 	async function fetchDownloadChunk( jobId, index ) {
@@ -220,7 +251,7 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 1, settings.i18n.preparing );
 			setProgressLabel( 5, settings.i18n.exportBusy );
 
-			const init = await initDownloadJob();
+			const init = await runFullExportUntilReady();
 			const jobId = init.job_id;
 			currentJobId = jobId;
 			downloadInProgress = true;
@@ -254,13 +285,13 @@ function hideProgressLabel( delay = 0 ) {
 			hideProgressLabel( 2000 );
 		} catch ( error ) {
 			console.error( error );
-			alert( settings.i18n.downloadError );
-			setProgressLabel( 0, settings.i18n.downloadError );
+			const msg = settings.i18n.exportError || '';
+			alert( msg );
+			setProgressLabel( 0, msg );
 			hideProgressLabel( 2000 );
 			if ( currentJobId ) {
 				cancelChunkJob( currentJobId );
 			}
-			throw error;
 		} finally {
 			downloadInProgress = false;
 			currentJobId = null;
@@ -350,10 +381,6 @@ function hideProgressLabel( delay = 0 ) {
 
 			try {
 				await downloadFullSite();
-			} catch ( error ) {
-				setProgressLabel( 0, settings.i18n.exportFallback );
-				form.removeAttribute( 'data-mksddn-full-export' );
-				form.submit();
 			} finally {
 				if ( button ) {
 					button.disabled = false;

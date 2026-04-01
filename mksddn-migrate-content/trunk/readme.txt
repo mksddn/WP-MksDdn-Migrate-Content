@@ -27,7 +27,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 - Archive format with manifest, checksum, and payload folders (`content.json`, `media/`, `options/`, filesystem slices).
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
 - File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/mu-plugins`, `wp-content/themes` with filters to skip VCS/system files.
-- Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
+- Chunked upload/download JS client with live progress and auto-resume; full-site export uses time-sliced REST `init` (body `resumable: true`) to avoid gateway timeouts on large sites.
 - Server file import - select backup files directly from `wp-content/uploads/mksddn-mc/imports/` directory without browser uploads.
 - Custom `.wpbkp` drag-and-drop uploader with checksum guardrails (UI polish deferred to next milestone, functionality already complete).
 
@@ -123,6 +123,11 @@ All key components implement interfaces:
 * Memory-efficient streaming for large archives
 * `FullArchivePayload` for efficient archive payload handling
 * `ContentCollector` for filesystem content collection
+
+= Full-site export pipeline =
+* `FullContentExporter` / `FullContentExportRunner` produce the same `.wpbkp` layout as before (manifest, `payload/content.json`, filesystem tree under `files/`).
+* `POST /wp-json/mksddn/v1/chunk/download/init` — optional JSON body: `resumable` (bool). Without `resumable`, behavior matches legacy (single long request). With `resumable: true`, repeat the request with returned `job_id` until the response includes `total_chunks` for chunked download.
+* `FullDatabaseExporter` exposes table-scoped helpers for incremental row reads; `PluginConfig::full_export_step_time_limit()` caps each step duration (filter `mksddn_mc_full_export_step_time_limit`).
 
 = Security =
 * All admin operations check `current_user_can('manage_options')`

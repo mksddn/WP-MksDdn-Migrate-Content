@@ -494,7 +494,7 @@ msgid "Unable to allocate temporary directory."
 msgstr ""
 
 #: includes/Admin/AdminPageControllerphp:365
-msgid "Chunked download failed. Falling back to direct download."
+msgid "Full site export failed. Check PHP zip, disk space, and write access to the uploads directory."
 msgstr ""
 
 #: includes/Filesystem/ThemeImporterphp:187
@@ -525,6 +525,14 @@ msgstr ""
 msgid "Unable to create archive for full export."
 msgstr ""
 
+#: includes/Filesystem/FullContentExportRunner.php:671
+msgid "Unable to write full-site file list."
+msgstr ""
+
+#: includes/Filesystem/FullContentExportRunner.php:745
+msgid "Unable to read full-site file list."
+msgstr ""
+
 #: views/admin/theme-previewphp:53
 msgid "Import themes"
 msgstr ""
@@ -547,10 +555,6 @@ msgstr ""
 
 #: views/admin/theme-export-sectionphp:15
 msgid "Export selected themes (active theme is pre-selected)."
-msgstr ""
-
-#: includes/Admin/AdminPageControllerphp:371
-msgid "Falling back to classic download…"
 msgstr ""
 
 #: includes/Validation/ExportDataValidatorphp:84

@@ -64,6 +64,103 @@ class FullDatabaseExporter {
 	}
 
 	/**
+	 * List prefixed tables for the current site (for incremental export).
+	 *
+	 * @global wpdb $wpdb
+	 * @return array<int, string>
+	 * @since 2.1.5
+	 */
+	public function get_table_names(): array {
+		global $wpdb;
+
+		return $this->detect_tables( $wpdb );
+	}
+
+	/**
+	 * Row count for a table (must belong to current prefix).
+	 *
+	 * @global wpdb $wpdb
+	 * @param string $table_name Table name.
+	 * @return int
+	 * @since 2.1.5
+	 */
+	public function count_rows( string $table_name ): int {
+		global $wpdb;
+
+		if ( ! $this->is_allowed_table( $table_name ) ) {
+			return 0;
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name validated against prefix list
+		$c = $wpdb->get_var( "SELECT COUNT(*) FROM `{$table_name}`" );
+
+		return (int) $c;
+	}
+
+	/**
+	 * SHOW CREATE TABLE result for a table.
+	 *
+	 * @global wpdb $wpdb
+	 * @param string $table_name Table name.
+	 * @return string
+	 * @since 2.1.5
+	 */
+	public function get_create_table_ddl( string $table_name ): string {
+		global $wpdb;
+
+		if ( ! $this->is_allowed_table( $table_name ) ) {
+			return '';
+		}
+
+		$schema_row = $wpdb->get_row( "SHOW CREATE TABLE `{$table_name}`", ARRAY_N ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+		return is_array( $schema_row ) && isset( $schema_row[1] ) ? (string) $schema_row[1] : '';
+	}
+
+	/**
+	 * Fetch rows slice for export.
+	 *
+	 * @global wpdb $wpdb
+	 * @param string $table_name Table name.
+	 * @param int    $offset     Offset.
+	 * @param int    $limit      Limit.
+	 * @return array<int, array<string, mixed>>|null Null when the query fails.
+	 * @since 2.1.5
+	 */
+	public function fetch_rows_slice( string $table_name, int $offset, int $limit ): ?array {
+		global $wpdb;
+
+		if ( ! $this->is_allowed_table( $table_name ) || $limit < 1 ) {
+			return null;
+		}
+
+		$offset = max( 0, $offset );
+		$limit  = max( 1, $limit );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- validated table name
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM `{$table_name}` LIMIT %d OFFSET %d", $limit, $offset ), ARRAY_A );
+
+		if ( null === $rows ) {
+			return null;
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Whether the table name is in the current site's prefixed list.
+	 *
+	 * @param string $table_name Table name.
+	 * @return bool
+	 */
+	private function is_allowed_table( string $table_name ): bool {
+		$table_name = sanitize_text_field( $table_name );
+		$names      = $this->get_table_names();
+
+		return in_array( $table_name, $names, true );
+	}
+
+	/**
 	 * Find tables for current site prefix.
 	 *
 	 * @param wpdb $wpdb Database object.

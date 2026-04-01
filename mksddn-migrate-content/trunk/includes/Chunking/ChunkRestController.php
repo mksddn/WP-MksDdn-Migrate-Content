@@ -7,8 +7,10 @@
 
 namespace MksDdn\MigrateContent\Chunking;
 
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
 use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Filesystem\FullContentExportRunner;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_REST_Request;
@@ -162,9 +164,21 @@ class ChunkRestController {
 	}
 
 	public function init_download( WP_REST_Request $request ) {
-		$job    = $this->repository->create();
-		$file   = $job->get_file_path();
-		
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = array();
+		}
+
+		$resumable = ! empty( $params['resumable'] );
+		$job_id_in = isset( $params['job_id'] ) ? sanitize_text_field( (string) $params['job_id'] ) : '';
+
+		if ( $resumable ) {
+			return $this->init_download_resumable( $job_id_in );
+		}
+
+		$job = $this->repository->create();
+		$file = $job->get_file_path();
+
 		$dir_result = FilesystemHelper::ensure_directory( $file );
 		if ( is_wp_error( $dir_result ) ) {
 			$job->delete();
@@ -204,6 +218,81 @@ class ChunkRestController {
 		);
 	}
 
+	/**
+	 * Time-sliced full export (POST body: resumable true, optional job_id).
+	 *
+	 * @param string $job_id_in Existing job id or empty.
+	 * @return array|WP_Error
+	 */
+	private function init_download_resumable( string $job_id_in ) {
+		$dirs = PluginConfig::get_required_directories();
+		$dir  = trailingslashit( $dirs['jobs'] );
+
+		if ( $job_id_in !== '' ) {
+			$meta = $dir . $job_id_in . '.json';
+			if ( ! is_readable( $meta ) ) {
+				return new WP_Error(
+					'mksddn_export_job_missing',
+					__( 'Export job not found or expired.', 'mksddn-migrate-content' ),
+					array( 'status' => 400 )
+				);
+			}
+			$job = $this->repository->get( $job_id_in );
+			$data = $job->get_data();
+			if ( empty( $data['full_export'] ) ) {
+				return new WP_Error(
+					'mksddn_export_job_mismatch',
+					__( 'Invalid export job id.', 'mksddn-migrate-content' ),
+					array( 'status' => 400 )
+				);
+			}
+			if ( empty( $data['export_runner_state'] ) && isset( $data['mode'] ) && 'download' === $data['mode'] ) {
+				return new WP_Error(
+					'mksddn_export_job_ready',
+					__( 'This export job is already complete. Start a new export.', 'mksddn-migrate-content' ),
+					array( 'status' => 400 )
+				);
+			}
+		} else {
+			$job = $this->repository->create();
+			$job->update( array( 'full_export' => true ) );
+		}
+
+		$file = $job->get_file_path();
+
+		$dir_result = FilesystemHelper::ensure_directory( $file );
+		if ( is_wp_error( $dir_result ) ) {
+			$job->delete();
+			return new WP_Error( 'mksddn_dir_create', __( 'Unable to create export directory.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
+		}
+
+		$runner   = new FullContentExportRunner();
+		$deadline = microtime( true ) + PluginConfig::full_export_step_time_limit();
+		$result   = $runner->run_step_for_job( $job, $file, $deadline );
+
+		if ( is_wp_error( $result ) ) {
+			$job->delete();
+			return $result;
+		}
+
+		if ( ! empty( $result['done'] ) ) {
+			return array(
+				'job_id'       => $job->get_data()['id'],
+				'total_chunks' => (int) $result['total_chunks'],
+				'chunk_size'   => (int) $result['chunk_size'],
+				'size'         => (int) $result['size'],
+			);
+		}
+
+		return array(
+			'job_id'     => $job->get_data()['id'],
+			'resumable'  => true,
+			'building'   => true,
+			'progress'   => isset( $result['progress'] ) ? (float) $result['progress'] : 0.0,
+			'message'    => isset( $result['message'] ) ? (string) $result['message'] : '',
+		);
+	}
+
 	public function download_chunk( WP_REST_Request $request ) {
 		$job_id = sanitize_text_field( $request->get_param( 'job_id' ) );
 		$index  = absint( $request->get_param( 'index' ) );
@@ -216,6 +305,14 @@ class ChunkRestController {
 		$data  = $job->get_data();
 		$file  = $job->get_file_path();
 		$total = (int) ( $data['total_chunks'] ?? 0 );
+
+		if ( isset( $data['mode'] ) && 'export_building' === $data['mode'] ) {
+			return new WP_Error(
+				'mksddn_export_not_ready',
+				__( 'Export is still being prepared. Wait and try again.', 'mksddn-migrate-content' ),
+				array( 'status' => 400 )
+			);
+		}
 
 		if ( $total && $index >= $total ) {
 			return new WP_Error( 'mksddn_chunk_oob', __( 'Chunk index out of bounds.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
