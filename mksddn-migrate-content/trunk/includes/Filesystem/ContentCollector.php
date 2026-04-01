@@ -71,8 +71,7 @@ class ContentCollector {
 			if ( $info->isDir() ) {
 				$zip->addEmptyDir( $target . '/' );
 			} else {
-				$zip->addFile( $path, $target );
-				$this->maybe_adjust_compression( $zip, $target, $path );
+				$this->add_file_to_zip( $zip, $target, $path );
 			}
 		}
 	}
@@ -108,11 +107,27 @@ class ContentCollector {
 	}
 
 	/**
-	 * Disable compression for already-compressed assets.
+	 * Add a single file with optional compression bypass for media types.
 	 *
-	 * @param ZipArchive $zip   Archive instance.
-	 * @param string     $target Archive relative path.
-	 * @param string     $path   Source path.
+	 * @param ZipArchive $zip          Archive.
+	 * @param string     $archive_path Path inside archive.
+	 * @param string     $real_path    Absolute filesystem path.
+	 * @return bool True on success.
+	 */
+	public function add_file_to_zip( ZipArchive $zip, string $archive_path, string $real_path ): bool {
+		if ( ! $zip->addFile( $real_path, $archive_path ) ) {
+			return false;
+		}
+		$this->maybe_adjust_compression( $zip, $archive_path, $real_path );
+		return true;
+	}
+
+	/**
+	 * Store already-compressed extensions without recompression.
+	 *
+	 * @param ZipArchive $zip    Archive instance.
+	 * @param string     $target Path inside archive.
+	 * @param string     $path   Source path on disk.
 	 */
 	private function maybe_adjust_compression( ZipArchive $zip, string $target, string $path ): void {
 		if ( ! method_exists( $zip, 'setCompressionName' ) ) {

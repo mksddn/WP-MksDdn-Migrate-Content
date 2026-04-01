@@ -9,9 +9,7 @@ namespace MksDdn\MigrateContent\Filesystem;
 
 use MksDdn\MigrateContent\Database\FullDatabaseExporter;
 use MksDdn\MigrateContent\Support\ExportMemoryHelper;
-use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
-use ZipArchive;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -44,76 +42,54 @@ class FullContentExporter {
 	public function export_to( string $target_path ) {
 		$original_memory = ExportMemoryHelper::raise_for_export();
 		try {
-			$dir_result = FilesystemHelper::ensure_directory( $target_path );
-			if ( is_wp_error( $dir_result ) ) {
-				return new WP_Error( 'mksddn_zip_dir', __( 'Unable to create export directory.', 'mksddn-migrate-content' ) );
-			}
-
-			$zip = new ZipArchive();
-			if ( true !== $zip->open( $target_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
-				return new WP_Error( 'mksddn_zip_open', __( 'Unable to create archive for full export.', 'mksddn-migrate-content' ) );
-			}
-
-			$payload = array(
-				'type'     => 'full-site',
-				'database' => $this->db_exporter->export(),
-			);
-
-			$manifest = array(
-				'format_version' => 1,
-				'plugin_version' => MKSDDN_MC_VERSION,
-				'type'           => 'full-site',
-				'created_at_gmt' => gmdate( 'c' ),
-			);
-
-			$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
-			$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
-			unset( $payload );
-
-			if ( false === $manifest_json || false === $payload_json ) {
-				$zip->close();
-				return new WP_Error( 'mksddn_mc_full_export_payload', __( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ) );
-			}
-
-			$zip->addFromString( 'manifest.json', $manifest_json );
-			$zip->addFromString( 'payload/content.json', $payload_json );
-
-			$this->append_wp_content( $zip, 'files' );
-			$zip->close();
-			return $target_path;
+			$runner = new FullContentExportRunner( $this->db_exporter, $this->collector );
+			return $runner->export_synchronous( $target_path );
 		} finally {
 			ExportMemoryHelper::restore( $original_memory );
 		}
 	}
 
 	/**
-	 * Append wp-content directories to archive.
+	 * Map of archive paths to real directories for full-site file bundle.
 	 *
-	 * @param ZipArchive $zip         Archive instance.
-	 * @param string     $base_prefix Base directory inside archive.
+	 * @param string $base_prefix Prefix inside archive (e.g. files).
+	 * @return array<string, string>
 	 */
-	private function append_wp_content( ZipArchive $zip, string $base_prefix = '' ): void {
-		$this->collector->append_directories( $zip, $this->get_wp_content_paths( $base_prefix ) );
+	public function get_content_directory_map( string $base_prefix = 'files' ): array {
+		return self::build_content_directory_map( $base_prefix );
 	}
 
 	/**
-	 * Map archive targets to physical directories.
+	 * Map archive targets to physical directories (shared with incremental export).
 	 *
-	 * @param string $base_prefix Optional base folder.
+	 * @param string $base_prefix Optional base folder inside archive.
 	 * @return array<string, string>
 	 */
-	private function get_wp_content_paths( string $base_prefix = '' ): array {
+	public static function build_content_directory_map( string $base_prefix = 'files' ): array {
 		$prefix = '' === $base_prefix ? '' : trim( $base_prefix, '/' ) . '/';
 		$uploads = wp_upload_dir();
 
 		$mu_plugins_dir = defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
 
-		return array(
-			$prefix . 'wp-content/uploads'    => $uploads['basedir'],
-			$prefix . 'wp-content/plugins'    => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
-			$prefix . 'wp-content/mu-plugins' => $mu_plugins_dir,
-			$prefix . 'wp-content/themes'     => get_theme_root(),
+		// Use WP_PLUGIN_DIR — dirname( plugin_dir_path( __FILE__ ) ) is wrong when the main file
+		// sits directly under wp-content/plugins/*.php (plugin_dir_path ends with .../plugins/).
+		$plugins_dir = defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins';
+
+		$map = array(
+			$prefix . 'wp-content/uploads'    => wp_normalize_path( (string) $uploads['basedir'] ),
+			$prefix . 'wp-content/plugins'    => wp_normalize_path( (string) $plugins_dir ),
+			$prefix . 'wp-content/mu-plugins' => wp_normalize_path( (string) $mu_plugins_dir ),
+			$prefix . 'wp-content/themes'     => wp_normalize_path( (string) get_theme_root() ),
 		);
+
+		/**
+		 * Filter full-site export directory map (archive path => absolute filesystem path).
+		 *
+		 * @since 2.1.5
+		 * @param array<string, string> $map         Directory map.
+		 * @param string                $base_prefix Base prefix inside archive (e.g. files).
+		 */
+		return apply_filters( 'mksddn_mc_full_export_content_directory_map', $map, $base_prefix );
 	}
 
 }

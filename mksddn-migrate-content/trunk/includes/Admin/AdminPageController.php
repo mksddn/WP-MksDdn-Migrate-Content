@@ -362,13 +362,12 @@ class AdminPageController {
 						/* translators: %d: download progress percent. */
 						'downloading'      => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
 						'downloadComplete' => __( 'Download complete.', 'mksddn-migrate-content' ),
-						'downloadError'    => __( 'Chunked download failed. Falling back to direct download.', 'mksddn-migrate-content' ),
+						'exportError'      => __( 'Full site export failed. Check PHP zip, disk space, and write access to the uploads directory.', 'mksddn-migrate-content' ),
 						'exportReady'      => __( 'Ready for full export.', 'mksddn-migrate-content' ),
 						'exportBusy'       => __( 'Preparing archive…', 'mksddn-migrate-content' ),
 						/* translators: %d: streaming progress percent. */
 						'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
 						'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
-						'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
 					),
 				)
 			);

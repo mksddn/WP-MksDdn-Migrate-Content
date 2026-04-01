@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.4
+Stable tag: 2.1.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,7 +27,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 - Archive format with manifest, checksum, and payload folders (`content.json`, `media/`, `options/`, filesystem slices).
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
 - File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/mu-plugins`, `wp-content/themes` with filters to skip VCS/system files.
-- Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
+- Chunked upload/download JS client with live progress and auto-resume; full-site export uses time-sliced REST `init` (body `resumable: true`) to avoid gateway timeouts on large sites.
 - Server file import - select backup files directly from `wp-content/uploads/mksddn-mc/imports/` directory without browser uploads.
 - Custom `.wpbkp` drag-and-drop uploader with checksum guardrails (UI polish deferred to next milestone, functionality already complete).
 
@@ -124,6 +124,12 @@ All key components implement interfaces:
 * `FullArchivePayload` for efficient archive payload handling
 * `ContentCollector` for filesystem content collection
 
+= Full-site export pipeline =
+* `FullContentExporter` / `FullContentExportRunner` produce the same `.wpbkp` layout as before (manifest, `payload/content.json`, filesystem tree under `files/`).
+* `POST /wp-json/mksddn/v1/chunk/download/init` — optional JSON body: `resumable` (bool). Without `resumable`, behavior matches legacy (single long request). With `resumable: true`, repeat the request with returned `job_id` until the response includes `total_chunks` for chunked download.
+* `FullDatabaseExporter` exposes table-scoped helpers for incremental row reads (table list cached per exporter instance); `PluginConfig::full_export_step_time_limit()` caps each step duration (filter `mksddn_mc_full_export_step_time_limit`); `full_export_fs_scan_per_step` controls directory scan batching.
+* `payload/export-debug.json` is written into the archive only when `WP_DEBUG` is true.
+
 = Security =
 * All admin operations check `current_user_can('manage_options')`
 * Nonce verification for all forms and AJAX requests
@@ -138,6 +144,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.5 =
+* Enhanced: Full-site export — time-sliced runner, incremental database reads, resumable chunked download, clearer errors for missing/unreadable files.
+* Changed: Export step time budget in settings; removed deprecated helpers.
 
 = 2.1.4 =
 * Fixed: User merge replace mode — `resolve_remote_user_login()` uses loose `sanitize_user()` first; `force_wp_users_login_and_password()` updates `wp_users` after `wp_update_user()` so archive login and password hash stay paired (avoids old username + new password).
