@@ -136,6 +136,8 @@ class FullContentExportRunner {
 				'ri'      => 0,
 				'stack'   => array(),
 				'started' => false,
+				'root_paths'  => array(),
+				'root_counts' => array(),
 			),
 			'zip'          => array(
 				'add_idx' => 0,
@@ -163,7 +165,7 @@ class FullContentExportRunner {
 						return $err;
 					}
 					if ( 'db' === $state['phase'] ) {
-						break;
+						continue;
 					}
 					continue;
 				}
@@ -180,7 +182,7 @@ class FullContentExportRunner {
 						return $err;
 					}
 					if ( 'fs_build' === $state['phase'] ) {
-						break;
+						continue;
 					}
 					continue;
 				}
@@ -190,7 +192,7 @@ class FullContentExportRunner {
 						return $err;
 					}
 					if ( 'zip_files' === $state['phase'] ) {
-						break;
+						continue;
 					}
 					continue;
 				}
@@ -405,6 +407,7 @@ class FullContentExportRunner {
 			'plugin_version' => MKSDDN_MC_VERSION,
 			'type'           => 'full-site',
 			'created_at_gmt' => gmdate( 'c' ),
+			'export_runner_build' => '2026-04-01-fs-scan-fix',
 		);
 
 		$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
@@ -556,12 +559,64 @@ class FullContentExportRunner {
 		if ( null === $fs['roots'] ) {
 			$map = FullContentExporter::build_content_directory_map( 'files' );
 			$roots = array();
+
+			$required_archive_roots = array(
+				'files/wp-content/uploads',
+				'files/wp-content/plugins',
+				'files/wp-content/themes',
+			);
+
 			foreach ( $map as $archive_root => $real_path ) {
+				$archive_root = trim( (string) $archive_root, '/' );
+				$real_path    = wp_normalize_path( (string) $real_path );
+
+				if ( '' === $real_path ) {
+					continue;
+				}
+
+				$exists = file_exists( $real_path );
+				$is_dir = is_dir( $real_path );
+
+				if ( in_array( $archive_root, $required_archive_roots, true ) ) {
+					if ( ! $exists || ! $is_dir ) {
+						return new WP_Error(
+							'mksddn_mc_export_root_missing',
+							sprintf(
+								/* translators: 1: archive root (e.g. files/wp-content/plugins), 2: real filesystem path */
+								__( 'Required export root is unavailable: %1$s -> %2$s', 'mksddn-migrate-content' ),
+								$archive_root,
+								$real_path
+							),
+							array(
+								'archive_root' => $archive_root,
+								'path'         => $real_path,
+							)
+						);
+					}
+					if ( ! is_readable( $real_path ) ) {
+						return new WP_Error(
+							'mksddn_mc_export_root_unreadable',
+							sprintf(
+								/* translators: 1: archive root (e.g. files/wp-content/plugins), 2: real filesystem path */
+								__( 'Required export root is not readable: %1$s -> %2$s', 'mksddn-migrate-content' ),
+								$archive_root,
+								$real_path
+							),
+							array(
+								'archive_root' => $archive_root,
+								'path'         => $real_path,
+							)
+						);
+					}
+				}
+
 				if ( is_dir( $real_path ) ) {
 					$roots[] = array(
 						'a' => $archive_root,
 						'r' => $real_path,
 					);
+					$fs['root_paths'][ $archive_root ]  = $real_path;
+					$fs['root_counts'][ $archive_root ] = 0;
 				}
 			}
 			$fs['roots'] = $roots;
@@ -594,6 +649,7 @@ class FullContentExportRunner {
 				$fs['stack'][] = array(
 					'path'    => $root['r'],
 					'archive' => $root['a'],
+					'root'    => $root['a'],
 				);
 			}
 
@@ -602,9 +658,17 @@ class FullContentExportRunner {
 				continue;
 			}
 
-			$items = @scandir( $frame['path'] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$items = @scandir( $frame['path'] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- detailed error returned below
 			if ( false === $items ) {
-				continue;
+				return new WP_Error(
+					'mksddn_mc_export_scandir',
+					sprintf(
+						/* translators: %s: Absolute directory path. */
+						__( 'Cannot read directory while exporting: %s', 'mksddn-migrate-content' ),
+						$frame['path']
+					),
+					array( 'path' => $frame['path'] )
+				);
 			}
 
 			foreach ( $items as $item ) {
@@ -624,6 +688,7 @@ class FullContentExportRunner {
 					$fs['stack'][] = array(
 						'path'    => $full,
 						'archive' => $rel_archive,
+						'root'    => isset( $frame['root'] ) ? $frame['root'] : $frame['archive'],
 					);
 				} else {
 					$line = wp_json_encode(
@@ -638,11 +703,18 @@ class FullContentExportRunner {
 					}
 					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 					file_put_contents( $list_path, $line . "\n", FILE_APPEND | LOCK_EX );
-					++$count;
-					if ( $count >= $scan_max && microtime( true ) >= $deadline - 0.01 ) {
-						break 2;
+					$root = isset( $frame['root'] ) ? (string) $frame['root'] : (string) $frame['archive'];
+					if ( isset( $fs['root_counts'][ $root ] ) ) {
+						++$fs['root_counts'][ $root ];
 					}
+					++$count;
 				}
+			}
+
+			// Stop only after finishing the current directory frame, otherwise
+			// resumable scan may lose the rest of that directory between steps.
+			if ( $count >= $scan_max && microtime( true ) >= $deadline - 0.01 ) {
+				break;
 			}
 		}
 
@@ -722,7 +794,6 @@ class FullContentExportRunner {
 	private function phase_zip_files( array &$state, string $target_path, float $deadline ): true|WP_Error {
 		$list_path = $state['list_path'];
 		$idx       = (int) $state['zip']['add_idx'];
-		$per_step  = PluginConfig::full_export_files_per_step();
 
 		$zip_path = $this->resolve_zip_disk_path( $state, $target_path );
 
@@ -754,7 +825,9 @@ class FullContentExportRunner {
 		}
 
 		$added = 0;
-		while ( ! feof( $h ) && $added < $per_step && microtime( true ) < $deadline ) {
+		// Add until EOF or wall-clock deadline — do not cap at N files per call (that caused
+		// truncated archives when the outer request budget ended mid-batch).
+		while ( ! feof( $h ) && microtime( true ) < $deadline ) {
 			$line = fgets( $h ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fgets
 			if ( false === $line || '' === trim( $line ) ) {
 				break;
@@ -764,7 +837,36 @@ class FullContentExportRunner {
 				++$idx;
 				continue;
 			}
-			$this->collector->add_file_to_zip( $zip, $entry['a'], $entry['r'] );
+			if ( ! is_readable( $entry['r'] ) ) {
+				$zip->close();
+				fclose( $h ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				return new WP_Error(
+					'mksddn_mc_export_unreadable_file',
+					sprintf(
+						/* translators: %s: Absolute file path. */
+						__( 'Cannot read file while building full export: %s', 'mksddn-migrate-content' ),
+						$entry['r']
+					),
+					array( 'path' => $entry['r'] )
+				);
+			}
+			if ( ! $this->collector->add_file_to_zip( $zip, $entry['a'], $entry['r'] ) ) {
+				$zip->close();
+				fclose( $h ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				return new WP_Error(
+					'mksddn_mc_export_zip_add',
+					sprintf(
+						/* translators: 1: Source path, 2: archive path inside zip. */
+						__( 'Failed to add file to export archive: %1$s -> %2$s', 'mksddn-migrate-content' ),
+						$entry['r'],
+						$entry['a']
+					),
+					array(
+						'path'         => $entry['r'],
+						'archive_path' => $entry['a'],
+					)
+				);
+			}
 			++$idx;
 			++$added;
 		}
@@ -776,6 +878,7 @@ class FullContentExportRunner {
 		$state['zip']['add_idx'] = $idx;
 
 		if ( $eof ) {
+			$this->append_export_debug_file( $state, $zip_path );
 			FilesystemHelper::delete( $list_path );
 			$state['phase'] = 'done';
 			$finalize         = $this->finalize_zip_to_job_path( $state, $target_path );
@@ -785,6 +888,39 @@ class FullContentExportRunner {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Add internal export diagnostics for troubleshooting missing roots in archives.
+	 *
+	 * @param array<string, mixed> $state Current export state.
+	 * @param string               $zip_path Absolute zip path.
+	 */
+	private function append_export_debug_file( array $state, string $zip_path ): void {
+		$fs_state = isset( $state['fs'] ) && is_array( $state['fs'] ) ? $state['fs'] : array();
+		$zip_st   = isset( $state['zip'] ) && is_array( $state['zip'] ) ? $state['zip'] : array();
+		$debug    = array(
+			'build'        => '2026-04-01-fs-root-debug',
+			'generated_at' => gmdate( 'c' ),
+			'root_paths'   => isset( $fs_state['root_paths'] ) && is_array( $fs_state['root_paths'] ) ? $fs_state['root_paths'] : array(),
+			'root_counts'  => isset( $fs_state['root_counts'] ) && is_array( $fs_state['root_counts'] ) ? $fs_state['root_counts'] : array(),
+			'zip'          => array(
+				'add_idx'     => isset( $zip_st['add_idx'] ) ? (int) $zip_st['add_idx'] : 0,
+				'total_lines' => isset( $zip_st['total_lines'] ) ? (int) $zip_st['total_lines'] : 0,
+			),
+		);
+
+		$json = wp_json_encode( $debug, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+		if ( false === $json ) {
+			return;
+		}
+
+		$zip = new ZipArchive();
+		if ( ! $this->open_zip_append( $zip, $zip_path ) ) {
+			return;
+		}
+		$zip->addFromString( 'payload/export-debug.json', $json );
+		$zip->close();
 	}
 
 	/**

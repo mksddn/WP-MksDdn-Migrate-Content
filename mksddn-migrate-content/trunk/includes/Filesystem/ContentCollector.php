@@ -169,10 +169,14 @@ class ContentCollector {
 	 * @param ZipArchive $zip          Archive.
 	 * @param string     $archive_path Path inside archive.
 	 * @param string     $real_path    Absolute filesystem path.
+	 * @return bool True on success.
 	 */
-	public function add_file_to_zip( ZipArchive $zip, string $archive_path, string $real_path ): void {
-		$zip->addFile( $real_path, $archive_path );
+	public function add_file_to_zip( ZipArchive $zip, string $archive_path, string $real_path ): bool {
+		if ( ! $zip->addFile( $real_path, $archive_path ) ) {
+			return false;
+		}
 		$this->maybe_adjust_compression( $zip, $archive_path, $real_path );
+		return true;
 	}
 
 	private function maybe_adjust_compression( ZipArchive $zip, string $target, string $path ): void {

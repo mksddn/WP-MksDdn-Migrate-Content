@@ -71,12 +71,25 @@ class FullContentExporter {
 
 		$mu_plugins_dir = defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
 
-		return array(
-			$prefix . 'wp-content/uploads'     => $uploads['basedir'],
-			$prefix . 'wp-content/plugins'    => dirname( plugin_dir_path( MKSDDN_MC_FILE ) ),
-			$prefix . 'wp-content/mu-plugins'  => $mu_plugins_dir,
-			$prefix . 'wp-content/themes'      => get_theme_root(),
+		// Use WP_PLUGIN_DIR — dirname( plugin_dir_path( __FILE__ ) ) is wrong when the main file
+		// sits directly under wp-content/plugins/*.php (plugin_dir_path ends with .../plugins/).
+		$plugins_dir = defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins';
+
+		$map = array(
+			$prefix . 'wp-content/uploads'    => wp_normalize_path( (string) $uploads['basedir'] ),
+			$prefix . 'wp-content/plugins'    => wp_normalize_path( (string) $plugins_dir ),
+			$prefix . 'wp-content/mu-plugins' => wp_normalize_path( (string) $mu_plugins_dir ),
+			$prefix . 'wp-content/themes'     => wp_normalize_path( (string) get_theme_root() ),
 		);
+
+		/**
+		 * Filter full-site export directory map (archive path => absolute filesystem path).
+		 *
+		 * @since 2.1.5
+		 * @param array<string, string> $map         Directory map.
+		 * @param string                $base_prefix Base prefix inside archive (e.g. files).
+		 */
+		return apply_filters( 'mksddn_mc_full_export_content_directory_map', $map, $base_prefix );
 	}
 
 }
