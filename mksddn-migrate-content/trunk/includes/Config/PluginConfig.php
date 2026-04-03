@@ -267,28 +267,6 @@ class PluginConfig {
 	}
 
 	/**
-	 * Max wall-clock seconds per resumable full-export REST step (avoids gateway timeouts).
-	 *
-	 * @return float Seconds (default 20).
-	 * @since 2.1.5
-	 */
-	public static function full_export_step_time_limit(): float {
-		$seconds = apply_filters( 'mksddn_mc_full_export_step_time_limit', 20.0 );
-		return max( 5.0, min( 120.0, (float) $seconds ) );
-	}
-
-	/**
-	 * Max directory entries scanned per resumable step when building file list.
-	 *
-	 * @return int Default 800.
-	 * @since 2.1.5
-	 */
-	public static function full_export_fs_scan_per_step(): int {
-		$n = (int) apply_filters( 'mksddn_mc_full_export_fs_scan_per_step', 800 );
-		return max( 100, min( 10000, $n ) );
-	}
-
-	/**
 	 * Get all required plugin directories.
 	 *
 	 * @return array Array of directory paths.
