@@ -139,6 +139,9 @@ All key components implement interfaces:
 
 == Changelog ==
 
+= 2.1.7 =
+* Fixed: Selected content bundle import — Polylang translation links are restored when all posts from a translation group are included in the bundle (remaps `_pll_translations` to new post IDs and calls `pll_save_post_translations()`).
+
 = 2.1.6 =
 * Rollback: Codebase restored to the 2.1.4 state; supersedes 2.1.5.
 
