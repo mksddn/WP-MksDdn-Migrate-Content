@@ -99,15 +99,19 @@ class ImportHandler implements ImporterInterface {
 		// Sort items to import parent pages before child pages.
 		$items = $this->sort_items_by_parent( $items );
 
+		$post_id_map = array();
+
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
 				continue;
 			}
 
-			if ( ! $this->import_single_page( $item ) ) {
+			if ( ! $this->import_single_page( $item, $post_id_map ) ) {
 				return false;
 			}
 		}
+
+		$this->sync_polylang_translations_from_export( $items, $post_id_map );
 
 		if ( isset( $data['options'] ) && is_array( $data['options'] ) ) {
 			$this->import_bundle_options( $data['options'] );
@@ -205,11 +209,12 @@ class ImportHandler implements ImporterInterface {
 	/**
 	 * Imports a single page with ACF fields.
 	 *
-	 * @param array $data Data array containing page information.
+	 * @param array      $data           Data array containing page information.
+	 * @param array|null $post_id_map    Optional. When provided, maps source post ID (payload `ID`) to imported post ID for bundle remapping (e.g. Polylang).
 	 * @return bool True on success, false on failure.
 	 * @since 1.0.0
 	 */
-	public function import_single_page( array $data ): bool {
+	public function import_single_page( array $data, ?array &$post_id_map = null ): bool {
 		if ( ! $this->validate_page_data( $data ) ) {
 			return false;
 		}
@@ -227,14 +232,73 @@ class ImportHandler implements ImporterInterface {
 		// Assign taxonomies for all post types (including Polylang language taxonomy).
 		$this->assign_taxonomies( $post_id, $data );
 
-		$media_maps  = $this->restore_media( $data, $post_id );
-		$id_map      = $media_maps['id_map'] ?? array();
-		$url_map     = $media_maps['url_map'] ?? array();
-		$url_to_new_id = $this->build_url_to_new_id_map( $data, $id_map );
+		$media_maps      = $this->restore_media( $data, $post_id );
+		$media_id_map    = $media_maps['id_map'] ?? array();
+		$url_map         = $media_maps['url_map'] ?? array();
+		$url_to_new_id   = $this->build_url_to_new_id_map( $data, $media_id_map );
 
-		$this->import_acf_fields( $data, $post_id, $id_map, $url_map, $url_to_new_id );
+		$this->import_acf_fields( $data, $post_id, $media_id_map, $url_map, $url_to_new_id );
+
+		if ( null !== $post_id_map && isset( $data['ID'] ) ) {
+			$post_id_map[ (int) $data['ID'] ] = (int) $post_id;
+		}
 
 		return true;
+	}
+
+	/**
+	 * Remap Polylang translation groups after bundle import using exported `_pll_translations` and new post IDs.
+	 *
+	 * @param array $items      Bundle items (same order as import: parent-sorted within `import_bundle`).
+	 * @param array $old_to_new Map of source post ID => imported post ID.
+	 * @return void
+	 */
+	private function sync_polylang_translations_from_export( array $items, array $old_to_new ): void {
+		if ( ! function_exists( 'pll_save_post_translations' ) || empty( $old_to_new ) ) {
+			return;
+		}
+
+		$seen = array();
+
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || ! isset( $item['meta'] ) || ! is_array( $item['meta'] ) ) {
+				continue;
+			}
+
+			if ( ! array_key_exists( '_pll_translations', $item['meta'] ) || empty( $item['meta']['_pll_translations'] ) ) {
+				continue;
+			}
+
+			$raw          = $item['meta']['_pll_translations'];
+			$translations = is_array( $raw ) ? $raw : maybe_unserialize( $raw );
+
+			if ( ! is_array( $translations ) ) {
+				continue;
+			}
+
+			$new_map = array();
+			foreach ( $translations as $lang => $old_id ) {
+				$old_id = (int) $old_id;
+				if ( $old_id > 0 && isset( $old_to_new[ $old_id ] ) ) {
+					$lang_key            = is_string( $lang ) ? $lang : (string) $lang;
+					$new_map[ $lang_key ] = (int) $old_to_new[ $old_id ];
+				}
+			}
+
+			// Polylang needs at least two posts in the group to link translations.
+			if ( count( $new_map ) < 2 ) {
+				continue;
+			}
+
+			ksort( $new_map );
+			$sig = wp_json_encode( $new_map );
+			if ( isset( $seen[ $sig ] ) ) {
+				continue;
+			}
+			$seen[ $sig ] = true;
+
+			pll_save_post_translations( $new_map );
+		}
 	}
 
 	/**

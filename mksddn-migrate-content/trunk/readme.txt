@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.6
+Stable tag: 2.1.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -54,6 +54,9 @@ The JS client splits files into 5–10 MB chunks (auto-tuned by server limits)
 = How do I import a backup file from the server? =
 You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
+= What is cleaned up when the plugin is deactivated? =
+Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
+
 = Can I merge users without overwriting existing accounts? =
 Yes. The user merge dialog shows archive/current rows with conflict indicators. You can keep current roles, replace metadata, or skip entire accounts.
 
@@ -100,6 +103,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `UserDiffBuilder` - builds user difference comparison
 * `UserMergeApplier` - applies user merge operations
 * `ThemePreviewStore` - stores pending theme import previews
+* `DeactivationCleanup` - clears temporary upload state and service directories when the plugin is deactivated
 
 = Contracts (Interfaces) =
 All key components implement interfaces:
@@ -138,6 +142,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.7 =
+* Added: On plugin deactivation, `DeactivationCleanup` removes chunk job files, theme import backups under `wp-content/mksddn-mc/theme-backups/`, import lock and related transients, and clears theme preview data; optional filter `mksddn_mc_deactivation_clear_imports` may empty the server imports directory; action `mksddn_mc_deactivation_cleanup` runs after the default steps.
+* Fixed: Selected content import — Polylang translation links when the bundle includes every post in a group (`_pll_translations` remapped, `pll_save_post_translations()`).
 
 = 2.1.6 =
 * Rollback: Codebase restored to the 2.1.4 state; supersedes 2.1.5.

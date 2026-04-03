@@ -9,7 +9,7 @@
 Plugin Name: MksDdn Migrate Content
 Plugin URI: https://github.com/mksddn/WP-MksDdn-Migrate-Content
 Description: Export and import single pages (and more) with metadata and media.
-Version: 2.1.6
+Version: 2.1.7
 Author: mksddn
 Author URI: https://github.com/mksddn
 Text Domain: mksddn-migrate-content
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constants.
-define( 'MKSDDN_MC_VERSION', '2.1.6' );
+define( 'MKSDDN_MC_VERSION', '2.1.7' );
 define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -66,6 +66,16 @@ register_activation_hook(
 					error_log( 'MksDdn Migrate Content activation error: ' . $result->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				}
 			}
+		}
+	}
+);
+
+register_deactivation_hook(
+	__FILE__,
+	static function (): void {
+		require_once MKSDDN_MC_DIR . 'includes/autoload.php';
+		if ( class_exists( '\MksDdn\MigrateContent\Support\DeactivationCleanup' ) ) {
+			\MksDdn\MigrateContent\Support\DeactivationCleanup::run();
 		}
 	}
 );

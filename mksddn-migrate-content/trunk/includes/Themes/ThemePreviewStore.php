@@ -76,6 +76,23 @@ class ThemePreviewStore implements ThemePreviewStoreInterface {
 	}
 
 	/**
+	 * Remove all theme preview entries, temp files, and the index (plugin deactivation).
+	 *
+	 * @return void
+	 * @since 2.1.7
+	 */
+	public function purge_all(): void {
+		$index = $this->get_index();
+		foreach ( $index as $entry_id => $entry ) {
+			if ( is_array( $entry ) ) {
+				$this->cleanup_entry( $entry );
+			}
+			delete_transient( $this->build_key( (string) $entry_id ) );
+		}
+		delete_option( self::INDEX_OPTION );
+	}
+
+	/**
 	 * Build transient key for ID.
 	 *
 	 * @param string $id Preview ID.
