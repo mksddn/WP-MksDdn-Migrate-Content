@@ -249,7 +249,7 @@ class ImportHandler implements ImporterInterface {
 	/**
 	 * Remap Polylang translation groups after bundle import using exported `_pll_translations` and new post IDs.
 	 *
-	 * @param array $items      Bundle items (original payload order).
+	 * @param array $items      Bundle items (same order as import: parent-sorted within `import_bundle`).
 	 * @param array $old_to_new Map of source post ID => imported post ID.
 	 * @return void
 	 */
@@ -261,7 +261,11 @@ class ImportHandler implements ImporterInterface {
 		$seen = array();
 
 		foreach ( $items as $item ) {
-			if ( ! is_array( $item ) || empty( $item['meta']['_pll_translations'] ) ) {
+			if ( ! is_array( $item ) || ! isset( $item['meta'] ) || ! is_array( $item['meta'] ) ) {
+				continue;
+			}
+
+			if ( ! array_key_exists( '_pll_translations', $item['meta'] ) || empty( $item['meta']['_pll_translations'] ) ) {
 				continue;
 			}
 
