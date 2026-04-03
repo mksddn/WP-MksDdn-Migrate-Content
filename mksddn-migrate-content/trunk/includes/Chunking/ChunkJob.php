@@ -43,39 +43,9 @@ class ChunkJob {
 		return $this->dir . $this->id . '.tmp';
 	}
 
-	/**
-	 * Temporary JSON payload while building resumable full-site export.
-	 *
-	 * @return string Absolute path.
-	 * @since 2.1.5
-	 */
-	public function get_export_payload_temp_path(): string {
-		return $this->dir . $this->id . '-export-payload.json';
-	}
-
-	/**
-	 * NDJSON file list for resumable zip (one file entry per line).
-	 *
-	 * @return string Absolute path.
-	 * @since 2.1.5
-	 */
-	public function get_export_file_list_path(): string {
-		return $this->dir . $this->id . '-export-files.json';
-	}
-
 	public function delete(): void {
-		$runner = $this->data['export_runner_state'] ?? null;
-		if ( is_array( $runner ) && ! empty( $runner['zip_disk_path'] ) && is_string( $runner['zip_disk_path'] ) ) {
-			$alt = $runner['zip_disk_path'];
-			if ( $alt !== $this->get_file_path() && file_exists( $alt ) ) {
-				FilesystemHelper::delete( $alt );
-			}
-		}
-
 		FilesystemHelper::delete( $this->dir . $this->id . '.json' );
 		FilesystemHelper::delete( $this->get_file_path() );
-		FilesystemHelper::delete( $this->get_export_payload_temp_path() );
-		FilesystemHelper::delete( $this->get_export_file_list_path() );
 	}
 
 	private function load(): void {
