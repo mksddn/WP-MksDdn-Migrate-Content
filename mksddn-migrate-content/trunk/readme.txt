@@ -144,8 +144,8 @@ All key components implement interfaces:
 == Changelog ==
 
 = 2.1.7 =
-* Added: On plugin deactivation, `DeactivationCleanup` removes chunk job files, theme import backups under `wp-content/mksddn-mc/theme-backups/`, import lock and related transients; optional filter `mksddn_mc_deactivation_clear_imports` clears the server imports directory.
-* Fixed: Selected content bundle import — Polylang translation links are restored when all posts from a translation group are included in the bundle (remaps `_pll_translations` to new post IDs and calls `pll_save_post_translations()`).
+* Added: On plugin deactivation, `DeactivationCleanup` removes chunk job files, theme import backups under `wp-content/mksddn-mc/theme-backups/`, import lock and related transients, and clears theme preview data; optional filter `mksddn_mc_deactivation_clear_imports` may empty the server imports directory; action `mksddn_mc_deactivation_cleanup` runs after the default steps.
+* Fixed: Selected content import — Polylang translation links when the bundle includes every post in a group (`_pll_translations` remapped, `pll_save_post_translations()`).
 
 = 2.1.6 =
 * Rollback: Codebase restored to the 2.1.4 state; supersedes 2.1.5.
