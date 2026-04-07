@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.7
+Stable tag: 2.1.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -142,6 +142,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.8 =
+* Fixed: Bundle import — Polylang translation groups from `taxonomies.post_translations` (remap + `pll_save_post_translations()`); skip assigning `post_translations` terms on import.
+* Fixed: Selected content import — ACF: field keys, `pll_set_post_language` before save, scoped `meta` fallback when `update_field` leaves empty values, cleanup of stray group subfield meta.
 
 = 2.1.7 =
 * Added: On plugin deactivation, `DeactivationCleanup` removes chunk job files, theme import backups under `wp-content/mksddn-mc/theme-backups/`, import lock and related transients, and clears theme preview data; optional filter `mksddn_mc_deactivation_clear_imports` may empty the server imports directory; action `mksddn_mc_deactivation_cleanup` runs after the default steps.
