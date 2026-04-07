@@ -229,6 +229,9 @@ class ImportHandler implements ImporterInterface {
 			return false;
 		}
 
+		// Ensure Polylang language context is set before ACF updates.
+		$this->set_polylang_language_from_payload( (int) $post_id, $data );
+
 		// Assign taxonomies for all post types (including Polylang language taxonomy).
 		$this->assign_taxonomies( $post_id, $data );
 
@@ -247,7 +250,8 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
-	 * Remap Polylang translation groups after bundle import using exported `_pll_translations` and new post IDs.
+	 * Remap Polylang translation groups after bundle import using exported `_pll_translations`
+	 * or `taxonomies.post_translations` term descriptions (Polylang 3.x), remapped to new post IDs.
 	 *
 	 * @param array $items      Bundle items (same order as import: parent-sorted within `import_bundle`).
 	 * @param array $old_to_new Map of source post ID => imported post ID.
@@ -261,29 +265,16 @@ class ImportHandler implements ImporterInterface {
 		$seen = array();
 
 		foreach ( $items as $item ) {
-			if ( ! is_array( $item ) || ! isset( $item['meta'] ) || ! is_array( $item['meta'] ) ) {
+			if ( ! is_array( $item ) ) {
 				continue;
 			}
 
-			if ( ! array_key_exists( '_pll_translations', $item['meta'] ) || empty( $item['meta']['_pll_translations'] ) ) {
+			$translations_old = $this->get_exported_polylang_old_id_map( $item );
+			if ( empty( $translations_old ) ) {
 				continue;
 			}
 
-			$raw          = $item['meta']['_pll_translations'];
-			$translations = is_array( $raw ) ? $raw : maybe_unserialize( $raw );
-
-			if ( ! is_array( $translations ) ) {
-				continue;
-			}
-
-			$new_map = array();
-			foreach ( $translations as $lang => $old_id ) {
-				$old_id = (int) $old_id;
-				if ( $old_id > 0 && isset( $old_to_new[ $old_id ] ) ) {
-					$lang_key            = is_string( $lang ) ? $lang : (string) $lang;
-					$new_map[ $lang_key ] = (int) $old_to_new[ $old_id ];
-				}
-			}
+			$new_map = $this->remap_polylang_old_map_to_new_ids( $translations_old, $old_to_new );
 
 			// Polylang needs at least two posts in the group to link translations.
 			if ( count( $new_map ) < 2 ) {
@@ -298,6 +289,113 @@ class ImportHandler implements ImporterInterface {
 			$seen[ $sig ] = true;
 
 			pll_save_post_translations( $new_map );
+		}
+	}
+
+	/**
+	 * Build lang => source post ID map from meta._pll_translations or post_translations taxonomy terms.
+	 *
+	 * @param array $item Bundle item.
+	 * @return array<string,int> Language slug => old post ID.
+	 */
+	private function get_exported_polylang_old_id_map( array $item ): array {
+		if ( isset( $item['meta'] ) && is_array( $item['meta'] ) && array_key_exists( '_pll_translations', $item['meta'] ) ) {
+			$raw = $item['meta']['_pll_translations'];
+			if ( '' !== $raw && null !== $raw ) {
+				$translations = is_array( $raw ) ? $raw : maybe_unserialize( $raw );
+				if ( is_array( $translations ) && ! empty( $translations ) ) {
+					return $this->normalize_polylang_lang_to_id_map( $translations );
+				}
+			}
+		}
+
+		if ( empty( $item['taxonomies']['post_translations'] ) || ! is_array( $item['taxonomies']['post_translations'] ) ) {
+			return array();
+		}
+
+		$merged = array();
+		foreach ( $item['taxonomies']['post_translations'] as $term_data ) {
+			if ( ! is_array( $term_data ) || ! array_key_exists( 'description', $term_data ) ) {
+				continue;
+			}
+			$desc = $term_data['description'];
+			$parsed = is_array( $desc ) ? $desc : maybe_unserialize( (string) $desc );
+			if ( ! is_array( $parsed ) ) {
+				continue;
+			}
+			$merged = array_merge( $merged, $this->normalize_polylang_lang_to_id_map( $parsed ) );
+		}
+
+		return $merged;
+	}
+
+	/**
+	 * Normalize Polylang translation map keys/values to lang string => positive int post ID.
+	 *
+	 * @param array $raw Raw map from meta or term description.
+	 * @return array<string,int>
+	 */
+	private function normalize_polylang_lang_to_id_map( array $raw ): array {
+		$out = array();
+		foreach ( $raw as $lang => $old_id ) {
+			$old_id = (int) $old_id;
+			if ( $old_id <= 0 ) {
+				continue;
+			}
+			$lang_key            = is_string( $lang ) ? $lang : (string) $lang;
+			$out[ $lang_key ] = $old_id;
+		}
+		return $out;
+	}
+
+	/**
+	 * Remap source post IDs to imported IDs for pll_save_post_translations().
+	 *
+	 * @param array<string,int> $translations_old Language => source post ID.
+	 * @param array<int,int>    $old_to_new       Source post ID => imported post ID.
+	 * @return array<string,int>
+	 */
+	private function remap_polylang_old_map_to_new_ids( array $translations_old, array $old_to_new ): array {
+		$new_map = array();
+		foreach ( $translations_old as $lang => $old_id ) {
+			$old_id = (int) $old_id;
+			if ( $old_id > 0 && isset( $old_to_new[ $old_id ] ) ) {
+				$lang_key              = is_string( $lang ) ? $lang : (string) $lang;
+				$new_map[ $lang_key ] = (int) $old_to_new[ $old_id ];
+			}
+		}
+		return $new_map;
+	}
+
+	/**
+	 * Set Polylang post language from exported taxonomy payload.
+	 *
+	 * @param int   $post_id Target post ID.
+	 * @param array $data    Bundle item payload.
+	 * @return void
+	 */
+	private function set_polylang_language_from_payload( int $post_id, array $data ): void {
+		if ( $post_id <= 0 || ! function_exists( 'pll_set_post_language' ) ) {
+			return;
+		}
+
+		$language_terms = $data['taxonomies']['language'] ?? array();
+		if ( ! is_array( $language_terms ) ) {
+			return;
+		}
+
+		foreach ( $language_terms as $term_data ) {
+			if ( ! is_array( $term_data ) ) {
+				continue;
+			}
+
+			$lang_slug = isset( $term_data['slug'] ) ? sanitize_key( (string) $term_data['slug'] ) : '';
+			if ( '' === $lang_slug ) {
+				continue;
+			}
+
+			pll_set_post_language( $post_id, $lang_slug );
+			return;
 		}
 	}
 
@@ -446,6 +544,12 @@ class ImportHandler implements ImporterInterface {
 				continue;
 			}
 
+			// Polylang manages translation groups via pll_save_post_translations(); assigning
+			// exported post_translations terms here would attach stale source IDs and break sync.
+			if ( 'post_translations' === $taxonomy ) {
+				continue;
+			}
+
 			$term_ids = array();
 			foreach ( $terms as $term_data ) {
 				$term = wp_insert_term(
@@ -526,10 +630,171 @@ class ImportHandler implements ImporterInterface {
 			return;
 		}
 
-		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
-			$value = $this->remap_media_values( $field_value, $id_map, $url_map, $url_to_new_id );
-			update_field( sanitize_text_field( $field_name ), $value, $post_id );
+		$post_id_int = (int) $post_id;
+		$top_level_field_names = array();
+		foreach ( array_keys( $data['acf_fields'] ) as $acf_field_name ) {
+			$top_level_field_names[] = sanitize_text_field( (string) $acf_field_name );
 		}
+
+		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
+			$name          = sanitize_text_field( (string) $field_name );
+			$value         = $this->remap_media_values( $field_value, $id_map, $url_map, $url_to_new_id );
+			$field_selector = $this->acf_resolve_field_selector( $name, $post_id_int );
+			update_field( $field_selector, $value, $post_id_int );
+			$this->acf_cleanup_leaked_group_subfield_meta( $name, $post_id_int, $top_level_field_names );
+
+			if ( $this->acf_is_value_missing_after_import( $name, $value, $post_id_int ) ) {
+				$this->acf_import_meta_fallback_from_payload( $data['meta'] ?? array(), $name, $post_id_int, $id_map, $url_map, $url_to_new_id );
+			}
+		}
+	}
+
+	/**
+	 * Resolve ACF field selector (prefer field key when duplicate names or Polylang/SCF contexts).
+	 *
+	 * @param string $field_name Sanitized field name from payload.
+	 * @param int    $post_id    Target post ID.
+	 * @return string Field key or name for update_field().
+	 */
+	private function acf_resolve_field_selector( string $field_name, int $post_id ): string {
+		if ( ! function_exists( 'get_field_object' ) || $post_id <= 0 ) {
+			return $field_name;
+		}
+
+		$object = get_field_object( $field_name, $post_id, false, false );
+		if ( is_array( $object ) && ! empty( $object['key'] ) && is_string( $object['key'] ) ) {
+			return $object['key'];
+		}
+
+		return $field_name;
+	}
+
+	/**
+	 * Remove leaked flat meta keys for group subfields from previous imports.
+	 *
+	 * @param string $field_name             Group field name.
+	 * @param int    $post_id                Target post ID.
+	 * @param array  $top_level_field_names  Root ACF field names from payload.
+	 * @return void
+	 */
+	private function acf_cleanup_leaked_group_subfield_meta( string $field_name, int $post_id, array $top_level_field_names ): void {
+		if ( $post_id <= 0 || ! function_exists( 'get_field_object' ) ) {
+			return;
+		}
+
+		$object = get_field_object( $field_name, $post_id, false, false );
+		if ( ! is_array( $object ) || ( $object['type'] ?? '' ) !== 'group' || empty( $object['sub_fields'] ) || ! is_array( $object['sub_fields'] ) ) {
+			return;
+		}
+
+		foreach ( $object['sub_fields'] as $sub_field ) {
+			if ( ! is_array( $sub_field ) || empty( $sub_field['name'] ) || ! is_string( $sub_field['name'] ) ) {
+				continue;
+			}
+
+			$sub_name = sanitize_text_field( $sub_field['name'] );
+			if ( '' === $sub_name || in_array( $sub_name, $top_level_field_names, true ) ) {
+				continue;
+			}
+
+			delete_post_meta( $post_id, $sub_name );
+			delete_post_meta( $post_id, '_' . $sub_name );
+		}
+	}
+
+	/**
+	 * Detect when ACF still returns an empty value after import.
+	 *
+	 * @param string $field_name Field name from payload.
+	 * @param mixed  $expected   Imported payload value.
+	 * @param int    $post_id    Target post ID.
+	 * @return bool
+	 */
+	private function acf_is_value_missing_after_import( string $field_name, mixed $expected, int $post_id ): bool {
+		if ( $post_id <= 0 || ! function_exists( 'get_field' ) ) {
+			return false;
+		}
+
+		if ( ! $this->acf_has_meaningful_value( $expected ) ) {
+			return false;
+		}
+
+		$stored = get_field( $field_name, $post_id, false );
+		return ! $this->acf_has_meaningful_value( $stored );
+	}
+
+	/**
+	 * Import ACF meta keys for a single field directly from payload meta.
+	 *
+	 * Used as a fallback when update_field() succeeds for some groups but one group remains empty.
+	 *
+	 * @param array  $meta          Full payload meta array.
+	 * @param string $field_name    Target field/group name.
+	 * @param int    $post_id       Target post ID.
+	 * @param array  $id_map        Original attachment ID => new ID.
+	 * @param array  $url_map       Original URL => new URL.
+	 * @param array  $url_to_new_id Original URL => new attachment ID.
+	 * @return void
+	 */
+	private function acf_import_meta_fallback_from_payload( array $meta, string $field_name, int $post_id, array $id_map, array $url_map, array $url_to_new_id ): void {
+		if ( $post_id <= 0 || empty( $meta ) ) {
+			return;
+		}
+
+		$prefix = $field_name . '_';
+
+		foreach ( $meta as $raw_key => $values ) {
+			$meta_key = sanitize_text_field( (string) $raw_key );
+
+			$is_target_key = (
+				$field_name === $meta_key
+				|| '_' . $field_name === $meta_key
+				|| str_starts_with( $meta_key, $prefix )
+				|| str_starts_with( $meta_key, '_' . $prefix )
+			);
+
+			if ( ! $is_target_key ) {
+				continue;
+			}
+
+			delete_post_meta( $post_id, $meta_key );
+
+			if ( is_array( $values ) ) {
+				foreach ( $values as $value ) {
+					$value = maybe_unserialize( $value );
+					$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
+					add_post_meta( $post_id, $meta_key, $value );
+				}
+				continue;
+			}
+
+			$value = maybe_unserialize( $values );
+			$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
+			update_post_meta( $post_id, $meta_key, $value );
+		}
+	}
+
+	/**
+	 * Check whether a value is non-empty for import verification.
+	 *
+	 * @param mixed $value Value to inspect.
+	 * @return bool
+	 */
+	private function acf_has_meaningful_value( mixed $value ): bool {
+		if ( is_array( $value ) ) {
+			foreach ( $value as $item ) {
+				if ( $this->acf_has_meaningful_value( $item ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		if ( is_string( $value ) ) {
+			return '' !== trim( $value );
+		}
+
+		return null !== $value && false !== $value && '' !== $value;
 	}
 
 	/**
