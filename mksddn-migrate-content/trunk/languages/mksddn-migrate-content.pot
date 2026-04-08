@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: MksDdn Migrate Content\n"
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/issues\n"
-"POT-Creation-Date: 2026-02-21 05:54+0000\n"
+"POT-Creation-Date: 2026-04-08 12:00+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -677,10 +677,6 @@ msgstr ""
 msgid "New user"
 msgstr ""
 
-#: views/admin/unified-import-formphp:14
-msgid "Upload or select a backup file (.wpbkp or .json). The system will automatically detect the import type."
-msgstr ""
-
 #: includes/Chunking/ChunkRestControllerphp:232
 msgid "Unable to read chunk."
 msgstr ""
@@ -1030,15 +1026,51 @@ msgid "Unable to open archive for import."
 msgstr ""
 
 #: views/admin/unified-import-form.php
-msgid "Preflight only (dry run)"
+msgid "Upload or select a backup file (.wpbkp or .json). First run preflight; then start the import from the report without uploading again."
 msgstr ""
 
 #: views/admin/unified-import-form.php
-msgid "Analyze the file without changing the database or files."
+msgid "This step only analyzes the file. No database or file changes are made yet."
 msgstr ""
 
 #: views/admin/unified-import-form.php
-msgid "Run preflight check"
+msgid "Run preflight"
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Preflight session expired or invalid. Run preflight again."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Staged import file is missing. Run preflight again."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Unable to prepare import storage. Check uploads directory permissions."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Invalid preflight session."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Could not create directory for the next import step."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Could not stash import file for the next step."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php
+msgid "Invalid file source."
+msgstr ""
+
+#: includes/Admin/Services/SelectedContentImportService.php
+msgid "Invalid preflight file path."
+msgstr ""
+
+#: includes/Admin/Services/SelectedContentImportService.php
+msgid "Preflight staged file is not readable."
 msgstr ""
 
 #: views/admin/preflight-report.php
@@ -1102,7 +1134,11 @@ msgid "Errors"
 msgstr ""
 
 #: views/admin/preflight-report.php
-msgid "Clear report"
+msgid "Start import"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Dismiss report"
 msgstr ""
 
 #: includes/Admin/AdminPageController.php
@@ -1122,7 +1158,7 @@ msgid "Archive includes media files; real import will write uploads."
 msgstr ""
 
 #: includes/Admin/Services/ImportPreflightService.php
-msgid "Uncheck \"Preflight only\" and submit again with the same file to run the real import."
+msgid "Use “Start import” below to run the real import with the same file (no upload needed)."
 msgstr ""
 
 #: includes/Admin/Services/ImportPreflightService.php
@@ -1138,7 +1174,7 @@ msgid "Full import will replace database content and files from the archive."
 msgstr ""
 
 #: includes/Admin/Services/ImportPreflightService.php
-msgid "Uncheck \"Preflight only\" and submit again; theme import will show its confirmation step."
+msgid "Use “Start import” below; theme import will show its confirmation step."
 msgstr ""
 
 #: includes/Admin/Services/ImportPreflightService.php

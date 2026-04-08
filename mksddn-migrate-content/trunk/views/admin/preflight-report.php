@@ -225,7 +225,6 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
 			<input type="hidden" name="action" value="mksddn_mc_unified_import">
 			<input type="hidden" name="preflight_report_id" value="<?php echo esc_attr( $preflight_report_id ); ?>">
-			<p class="description"><?php esc_html_e( 'Step 2: start the real import using the same file (no upload needed).', 'mksddn-migrate-content' ); ?></p>
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Start import', 'mksddn-migrate-content' ); ?></button>
 		</form>
 	<?php endif; ?>
