@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.8
+Stable tag: 2.1.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -142,6 +142,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.1.9 =
+* Fixed: Selected content import — ACF nested groups: removed post-import deletion of bare subfield meta keys (could break groups such as `info_cards`); meta fallback no longer restores an empty root `{$field}` row when nested `{$field}_*` keys exist in the export payload.
 
 = 2.1.8 =
 * Fixed: Bundle import — Polylang translation groups from `taxonomies.post_translations` (remap + `pll_save_post_translations()`); skip assigning `post_translations` terms on import.
