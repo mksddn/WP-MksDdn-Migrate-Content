@@ -1028,3 +1028,167 @@ msgstr ""
 #: includes/Filesystem/FullContentImporterphp:160 includes/Filesystem/ThemeImporterphp:116
 msgid "Unable to open archive for import."
 msgstr ""
+
+#: views/admin/unified-import-form.php
+msgid "Preflight only (dry run)"
+msgstr ""
+
+#: views/admin/unified-import-form.php
+msgid "Analyze the file without changing the database or files."
+msgstr ""
+
+#: views/admin/unified-import-form.php
+msgid "Run preflight check"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Preflight report (no changes were made)"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Detected type: %1$s · Source: %2$s"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Payload type: %s"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Media files in archive: %d"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Slug overlap with existing content: %d"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Users in archive: %d"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Potential user email conflicts: %d"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Themes in archive: %d"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Already installed themes (may be replaced): %s"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Slug check"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Slug"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Post type"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Existing post ID"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Warnings"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Errors"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Clear report"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php
+msgid "Preflight report expired or not found. Run preflight again."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Payload has no slug; the importer may generate one at run time."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Some slugs already exist on this site; existing posts may be updated."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Archive includes media files; real import will write uploads."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Uncheck \"Preflight only\" and submit again with the same file to run the real import."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Archive contains WordPress users; you may see a merge step during real import."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Some user emails may conflict with existing accounts."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Full import will replace database content and files from the archive."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Uncheck \"Preflight only\" and submit again; theme import will show its confirmation step."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "These theme directories already exist; replace mode would remove them before import."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Fix the issues above, then try again."
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Full site"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Theme archive"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Selected content"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Browser upload"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Server file"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Chunked upload"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "File: %s"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Size: %s"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Post"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Bundle (multiple items)"
+msgstr ""
+
+#: views/admin/preflight-report.php
+msgid "Theme slugs: %s"
+msgstr ""

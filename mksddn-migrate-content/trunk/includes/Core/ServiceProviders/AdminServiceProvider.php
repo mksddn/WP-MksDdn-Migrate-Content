@@ -16,7 +16,9 @@ use MksDdn\MigrateContent\Admin\Handlers\UserMergeRequestHandler;
 use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportFileValidator;
 use MksDdn\MigrateContent\Admin\Services\ImportPayloadPreparer;
+use MksDdn\MigrateContent\Admin\Services\ImportPreflightService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
+use MksDdn\MigrateContent\Admin\Services\PreflightReportStore;
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
 use MksDdn\MigrateContent\Admin\Services\ProgressService;
 use MksDdn\MigrateContent\Admin\Services\ResponseHandler;
@@ -107,6 +109,22 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
+			PreflightReportStore::class,
+			static function (): PreflightReportStore {
+				return new PreflightReportStore();
+			}
+		);
+
+		$container->register(
+			ImportPreflightService::class,
+			function ( ServiceContainer $container ): ImportPreflightService {
+				return new ImportPreflightService(
+					$container->get( ImportPayloadPreparer::class )
+				);
+			}
+		);
+
+		$container->register(
 			ServerBackupScanner::class,
 			function ( ServiceContainer $container ) {
 				return new ServerBackupScanner();
@@ -189,7 +207,9 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( ImportTypeDetector::class ),
 					$container->get( ServerBackupScanner::class ),
 					$container->get( ThemePreviewStoreInterface::class ),
-					$container->get( ResponseHandler::class )
+					$container->get( ResponseHandler::class ),
+					$container->get( ImportPreflightService::class ),
+					$container->get( PreflightReportStore::class )
 				);
 			}
 		);

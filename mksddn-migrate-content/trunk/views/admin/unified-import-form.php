@@ -27,6 +27,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 			?>
 		</p>
 	</div>
+<?php if ( ! empty( $preflight_report ) ) : ?>
+	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/preflight-report.php', array( 'preflight_report' => $preflight_report ) ); ?>
+<?php endif; ?>
 <?php if ( $pending_user_preview ) : ?>
 	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
 <?php elseif ( $pending_theme_preview ) : ?>
@@ -64,8 +67,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<div class="mksddn-mc-server-file-notice notice notice-error" style="display: none; margin-top: 0.5rem;"></div>
 				</div>
 			</div>
+
+			<div class="mksddn-mc-field">
+				<label>
+					<input type="checkbox" name="dry_run" id="mksddn-mc-dry-run" value="1">
+					<?php esc_html_e( 'Preflight only (dry run)', 'mksddn-migrate-content' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'Analyze the file without changing the database or files.', 'mksddn-migrate-content' ); ?></p>
+			</div>
 			
-			<button type="submit" class="button button-primary"><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></button>
+			<button type="submit" class="button button-primary" id="mksddn-mc-unified-import-submit" data-default-label="<?php esc_attr_e( 'Import', 'mksddn-migrate-content' ); ?>" data-preflight-label="<?php esc_attr_e( 'Run preflight check', 'mksddn-migrate-content' ); ?>"><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></button>
 		</form>
 	<?php endif; ?>
 </section>

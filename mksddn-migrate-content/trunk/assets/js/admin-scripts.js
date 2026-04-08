@@ -253,10 +253,30 @@
 		});
 	}
 
+	/**
+	 * Toggle unified import submit label when dry-run is checked.
+	 */
+	function initUnifiedImportDryRun() {
+		var form = document.getElementById('mksddn-mc-unified-import-form');
+		var cb = document.getElementById('mksddn-mc-dry-run');
+		var btn = document.getElementById('mksddn-mc-unified-import-submit');
+		if (!form || !cb || !btn) {
+			return;
+		}
+		var defLabel = btn.getAttribute('data-default-label') || btn.textContent;
+		var preLabel = btn.getAttribute('data-preflight-label') || defLabel;
+		function sync() {
+			btn.textContent = cb.checked ? preLabel : defLabel;
+		}
+		cb.addEventListener('change', sync);
+		sync();
+	}
+
 	// Initialize progress bar and select search when DOM is ready.
 	function init() {
 		window.mksddnMcProgress = initProgressBar();
 		initSelectSearch();
+		initUnifiedImportDryRun();
 	}
 
 	if (document.readyState === 'loading') {

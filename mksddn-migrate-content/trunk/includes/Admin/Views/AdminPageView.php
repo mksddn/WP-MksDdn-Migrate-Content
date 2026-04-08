@@ -90,15 +90,17 @@ class AdminPageView {
 	 *
 	 * @param array|null $pending_user_preview Pending user preview data.
 	 * @param array|null $pending_theme_preview Pending theme preview data.
+	 * @param array|null $preflight_report     Preflight (dry-run) report.
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function render_import_sections( ?array $pending_user_preview = null, ?array $pending_theme_preview = null ): void {
+	public function render_import_sections( ?array $pending_user_preview = null, ?array $pending_theme_preview = null, ?array $preflight_report = null ): void {
 		$this->renderer->render(
 			'admin/unified-import-form.php',
 			array(
 				'pending_user_preview'  => $pending_user_preview,
 				'pending_theme_preview' => $pending_theme_preview,
+				'preflight_report'      => $preflight_report,
 			)
 		);
 	}

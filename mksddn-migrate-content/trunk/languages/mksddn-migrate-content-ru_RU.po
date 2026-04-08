@@ -4,14 +4,14 @@ msgstr ""
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/"
 "issues\n"
 "POT-Creation-Date: 2026-02-21 05:54+0000\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Domain: mksddn-migrate-content\n"
 "PO-Revision-Date: 2026-02-21 05:54+0000\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ru_RU\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: mksddn-migrate-content\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
@@ -69,8 +69,8 @@ msgid ""
 "For large files, it is recommended to upload them via FTP/SFTP to the %s "
 "directory and then use the \"Select from server\" option."
 msgstr ""
-"Для больших файлов загрузите их по FTP/SFTP в каталог %s и выберите "
-"«Выбрать с сервера»."
+"Для больших файлов загрузите их по FTP/SFTP в каталог %s и выберите «Выбрать "
+"с сервера»."
 
 #: includes/Chunking/ChunkRestControllerphp:135
 msgid "Missing chunk data."
@@ -97,7 +97,8 @@ msgid ""
 ".json skips media files and is best for quick edits. .wpbkp packs media + "
 "checksum."
 msgstr ""
-".json без медиа, удобен для правок. .wpbkp включает медиа и контрольную сумму."
+".json без медиа, удобен для правок. .wpbkp включает медиа и контрольную "
+"сумму."
 
 #: includes/Validation/FileValidatorphp:93
 msgid "Invalid file type detected."
@@ -255,7 +256,8 @@ msgstr "Файлы резервных копий не найдены"
 
 #: includes/Admin/Services/ImportFileValidatorphp:81
 msgid "Invalid file type. Upload a .wpbkp archive created by this plugin."
-msgstr "Недопустимый тип файла. Загрузите .wpbkp архив, созданный этим плагином."
+msgstr ""
+"Недопустимый тип файла. Загрузите .wpbkp архив, созданный этим плагином."
 
 #: includes/Admin/Handlers/ExportRequestHandlerphp:125
 #: includes/Filesystem/ThemeExporterphp:56
@@ -299,7 +301,8 @@ msgid ""
 "Archives (.wpbkp) include media and integrity checks. JSON imports skip "
 "media restoration."
 msgstr ""
-"Архивы (.wpbkp) включают медиа и проверку целостности. JSON не восстанавливает медиа."
+"Архивы (.wpbkp) включают медиа и проверку целостности. JSON не "
+"восстанавливает медиа."
 
 #: views/admin/unified-import-formphp:54
 msgid "Upload .wpbkp or .json file:"
@@ -468,8 +471,9 @@ msgid ""
 "is active, the site may be temporarily unavailable until import completes. "
 "Consider switching to a safe theme or using Merge."
 msgstr ""
-"«Заменить» удаляет каталог темы перед импортом. Если тема активна, сайт может "
-"быть временно недоступен. Рекомендуется переключиться на другую тему или «Объединить»."
+"«Заменить» удаляет каталог темы перед импортом. Если тема активна, сайт "
+"может быть временно недоступен. Рекомендуется переключиться на другую тему "
+"или «Объединить»."
 
 #: views/admin/user-previewphp:100
 msgid "Will be created"
@@ -779,7 +783,8 @@ msgid ""
 "Upload or select a backup file (.wpbkp or .json). The system will "
 "automatically detect the import type."
 msgstr ""
-"Загрузите или выберите файл резервной копии (.wpbkp или .json). Тип импорта определится автоматически."
+"Загрузите или выберите файл резервной копии (.wpbkp или .json). Тип импорта "
+"определится автоматически."
 
 #: includes/Chunking/ChunkRestControllerphp:232
 msgid "Unable to read chunk."
@@ -838,15 +843,15 @@ msgstr "Ошибка загрузки записей"
 msgid ""
 "An import operation appears to be running or was interrupted. Lock age: %s "
 "minutes."
-msgstr ""
-"Похоже, импорт выполняется или был прерван. Блокировка: %s мин."
+msgstr "Похоже, импорт выполняется или был прерван. Блокировка: %s мин."
 
 #: views/admin/theme-previewphp:47
 msgid ""
 "Combine files from archive with existing theme. Files from archive will "
 "overwrite existing files."
 msgstr ""
-"Добавить файлы из архива к текущей теме. Файлы из архива перезапишут существующие."
+"Добавить файлы из архива к текущей теме. Файлы из архива перезапишут "
+"существующие."
 
 #: includes/Archive/Extractorphp:56
 #: includes/Admin/Services/ImportTypeDetectorphp:93
@@ -995,7 +1000,8 @@ msgid ""
 "Pick one or many entries (pages, posts, CPT) and export them with or without "
 "media."
 msgstr ""
-"Выберите одну или несколько записей (страницы, записи, CPT) и экспортируйте с медиа или без."
+"Выберите одну или несколько записей (страницы, записи, CPT) и экспортируйте "
+"с медиа или без."
 
 #: views/admin/user-previewphp:43 views/admin/user-previewphp:91
 msgid "Conflict handling"
@@ -1075,7 +1081,8 @@ msgid ""
 "Pick which users from the archive should be added or overwrite existing "
 "accounts on this site."
 msgstr ""
-"Выберите, каких пользователей из архива добавить или перезаписать на этом сайте."
+"Выберите, каких пользователей из архива добавить или перезаписать на этом "
+"сайте."
 
 #: views/admin/selected-export-cardphp:40
 msgid "Search entries"
@@ -1149,3 +1156,193 @@ msgstr "Задача чанковой загрузки не найдена."
 #: includes/Filesystem/ThemeImporterphp:116
 msgid "Unable to open archive for import."
 msgstr "Не удалось открыть архив для импорта."
+
+#: views/admin/unified-import-form.php
+msgid "Preflight only (dry run)"
+msgstr "Только проверка (dry run)"
+
+#: views/admin/unified-import-form.php
+msgid "Analyze the file without changing the database or files."
+msgstr "Проанализировать файл без изменения базы данных и файлов на сервере."
+
+#: views/admin/unified-import-form.php
+msgid "Run preflight check"
+msgstr "Запустить проверку"
+
+#: views/admin/preflight-report.php
+msgid "Preflight report (no changes were made)"
+msgstr "Отчёт проверки (изменения не вносились)"
+
+#: views/admin/preflight-report.php
+msgid "Detected type: %1$s · Source: %2$s"
+msgstr "Обнаруженный тип: %1$s · Источник: %2$s"
+
+#: views/admin/preflight-report.php
+msgid "Payload type: %s"
+msgstr "Тип данных: %s"
+
+#: views/admin/preflight-report.php
+msgid "Media files in archive: %d"
+msgstr "Файлов медиа в архиве: %d"
+
+#: views/admin/preflight-report.php
+msgid "Slug overlap with existing content: %d"
+msgstr "Пересечений slug с существующим контентом: %d"
+
+#: views/admin/preflight-report.php
+msgid "Users in archive: %d"
+msgstr "Пользователей в архиве: %d"
+
+#: views/admin/preflight-report.php
+msgid "Potential user email conflicts: %d"
+msgstr "Возможных конфликтов email пользователей: %d"
+
+#: views/admin/preflight-report.php
+msgid "Themes in archive: %d"
+msgstr "Тем в архиве: %d"
+
+#: views/admin/preflight-report.php
+msgid "Already installed themes (may be replaced): %s"
+msgstr "Уже установленные темы (могут быть заменены): %s"
+
+#: views/admin/preflight-report.php
+msgid "Slug check"
+msgstr "Проверка slug"
+
+#: views/admin/preflight-report.php
+msgid "Slug"
+msgstr "Ярлык"
+
+#: views/admin/preflight-report.php
+msgid "Post type"
+msgstr "Тип записи"
+
+#: views/admin/preflight-report.php
+msgid "Existing post ID"
+msgstr "ID существующей записи"
+
+#: views/admin/preflight-report.php
+msgid "Warnings"
+msgstr "Предупреждения"
+
+#: views/admin/preflight-report.php
+msgid "Errors"
+msgstr "Ошибки"
+
+#: views/admin/preflight-report.php
+msgid "Clear report"
+msgstr "Сбросить отчёт"
+
+#: includes/Admin/AdminPageController.php
+msgid "Preflight report expired or not found. Run preflight again."
+msgstr ""
+"Срок действия отчёта проверки истёк или отчёт не найден. Запустите проверку "
+"снова."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Payload has no slug; the importer may generate one at run time."
+msgstr ""
+"В данных нет slug; при импорте он может быть сгенерирован автоматически."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Some slugs already exist on this site; existing posts may be updated."
+msgstr ""
+"Некоторые slug уже есть на этом сайте; существующие записи могут быть "
+"обновлены."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Archive includes media files; real import will write uploads."
+msgstr ""
+"В архиве есть медиафайлы; при реальном импорте файлы будут записаны в "
+"каталог загрузок."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid ""
+"Uncheck \"Preflight only\" and submit again with the same file to run the "
+"real import."
+msgstr ""
+"Снимите флажок «Только проверка» и снова отправьте форму с тем же файлом, "
+"чтобы выполнить реальный импорт."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid ""
+"Archive contains WordPress users; you may see a merge step during real "
+"import."
+msgstr ""
+"В архиве есть пользователи WordPress; при реальном импорте может появиться "
+"шаг объединения учётных записей."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Some user emails may conflict with existing accounts."
+msgstr ""
+"Некоторые адреса email могут конфликтовать с уже существующими учётными "
+"записями."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Full import will replace database content and files from the archive."
+msgstr ""
+"Полный импорт заменит содержимое базы данных и файлы данными из архива."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid ""
+"Uncheck \"Preflight only\" and submit again; theme import will show its "
+"confirmation step."
+msgstr ""
+"Снимите флажок «Только проверка» и отправьте форму снова; импорт темы "
+"откроет шаг подтверждения."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid ""
+"These theme directories already exist; replace mode would remove them before "
+"import."
+msgstr ""
+"Эти каталоги тем уже существуют; в режиме замены они будут удалены перед "
+"импортом."
+
+#: includes/Admin/Services/ImportPreflightService.php
+msgid "Fix the issues above, then try again."
+msgstr "Устраните указанные проблемы и повторите попытку."
+
+#: views/admin/preflight-report.php
+msgid "Full site"
+msgstr "Полный сайт"
+
+#: views/admin/preflight-report.php
+msgid "Theme archive"
+msgstr "Архив тем"
+
+#: views/admin/preflight-report.php
+msgid "Selected content"
+msgstr "Выбранный контент"
+
+#: views/admin/preflight-report.php
+msgid "Browser upload"
+msgstr "Загрузка из браузера"
+
+#: views/admin/preflight-report.php
+msgid "Server file"
+msgstr "Файл на сервере"
+
+#: views/admin/preflight-report.php
+msgid "Chunked upload"
+msgstr "Чанковая загрузка"
+
+#: views/admin/preflight-report.php
+msgid "File: %s"
+msgstr "Файл: %s"
+
+#: views/admin/preflight-report.php
+msgid "Size: %s"
+msgstr "Размер: %s"
+
+#: views/admin/preflight-report.php
+msgid "Post"
+msgstr "Запись"
+
+#: views/admin/preflight-report.php
+msgid "Bundle (multiple items)"
+msgstr "Пакет (несколько элементов)"
+
+#: views/admin/preflight-report.php
+msgid "Theme slugs: %s"
+msgstr "Каталоги тем: %s"

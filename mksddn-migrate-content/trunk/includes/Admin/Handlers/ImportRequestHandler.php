@@ -2,7 +2,7 @@
 /**
  * @file: ImportRequestHandler.php
  * @description: Handler for import request operations
- * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator
+ * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator (dry_run in unified flow)
  * @created: 2024-12-15
  */
 
@@ -137,9 +137,11 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 
 		// Extract request data.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$dry_run = isset( $_POST['dry_run'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['dry_run'] ) );
 		$request_data = array(
 			'chunk_job_id' => isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '',
 			'server_file'  => isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '',
+			'dry_run'      => $dry_run,
 		);
 
 		// Process unified import through orchestrator.

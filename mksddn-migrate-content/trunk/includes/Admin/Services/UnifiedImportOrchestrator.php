@@ -2,7 +2,7 @@
 /**
  * @file: UnifiedImportOrchestrator.php
  * @description: Orchestrates unified import with automatic type detection and routing
- * @dependencies: SelectedContentImportService, FullSiteImportService, ImportTypeDetector, ServerBackupScanner, ChunkJobRepository, Themes\ThemePreviewStore, Admin\Services\ResponseHandler
+ * @dependencies: SelectedContentImportService, FullSiteImportService, ImportTypeDetector, ServerBackupScanner, ChunkJobRepository, Themes\ThemePreviewStore, ResponseHandler, ImportPreflightService, PreflightReportStore
  * @created: 2026-01-25
  */
 
@@ -58,6 +58,20 @@ class UnifiedImportOrchestrator {
 	private ResponseHandler $response_handler;
 
 	/**
+	 * Preflight (dry-run) analyzer.
+	 *
+	 * @var ImportPreflightService
+	 */
+	private ImportPreflightService $preflight_service;
+
+	/**
+	 * Preflight report storage.
+	 *
+	 * @var PreflightReportStore
+	 */
+	private PreflightReportStore $preflight_report_store;
+
+	/**
 	 * Import type detector.
 	 *
 	 * @var ImportTypeDetector
@@ -80,6 +94,8 @@ class UnifiedImportOrchestrator {
 	 * @param ServerBackupScanner|null         $server_scanner           Server backup scanner.
 	 * @param ThemePreviewStoreInterface|null  $theme_preview_store      Theme preview store.
 	 * @param ResponseHandler|null             $response_handler         Response handler.
+	 * @param ImportPreflightService|null      $preflight_service        Preflight analyzer.
+	 * @param PreflightReportStore|null        $preflight_report_store   Preflight report store.
 	 * @since 2.0.0
 	 */
 	public function __construct(
@@ -88,7 +104,9 @@ class UnifiedImportOrchestrator {
 		?ImportTypeDetector $type_detector = null,
 		?ServerBackupScanner $server_scanner = null,
 		?ThemePreviewStoreInterface $theme_preview_store = null,
-		?ResponseHandler $response_handler = null
+		?ResponseHandler $response_handler = null,
+		?ImportPreflightService $preflight_service = null,
+		?PreflightReportStore $preflight_report_store = null
 	) {
 		$this->selected_import_service = $selected_import_service ?? new SelectedContentImportService();
 		$this->full_import_service      = $full_import_service ?? new FullSiteImportService();
@@ -96,12 +114,14 @@ class UnifiedImportOrchestrator {
 		$this->server_scanner           = $server_scanner ?? new ServerBackupScanner();
 		$this->theme_preview_store      = $theme_preview_store ?? new ThemePreviewStore();
 		$this->response_handler         = $response_handler ?? new ResponseHandler();
+		$this->preflight_service        = $preflight_service ?? new ImportPreflightService();
+		$this->preflight_report_store   = $preflight_report_store ?? new PreflightReportStore();
 	}
 
 	/**
 	 * Process unified import request.
 	 *
-	 * @param array $request_data Request data (chunk_job_id, server_file, or uploaded file in $_FILES).
+	 * @param array $request_data Request data (chunk_job_id, server_file, dry_run, or uploaded file in $_FILES).
 	 * @return void
 	 * @since 2.0.0
 	 */
@@ -133,6 +153,11 @@ class UnifiedImportOrchestrator {
 
 		if ( is_wp_error( $import_type ) ) {
 			wp_die( esc_html( $import_type->get_error_message() ) );
+		}
+
+		if ( ! empty( $request_data['dry_run'] ) ) {
+			$this->run_preflight( $file_info, $import_type );
+			return;
 		}
 
 		// Route to appropriate service.
@@ -384,5 +409,18 @@ class UnifiedImportOrchestrator {
 		$result['cleanup']   = true;
 
 		return $result;
+	}
+
+	/**
+	 * Run dry-run preflight and redirect with report id.
+	 *
+	 * @param array  $file_info   Resolved file info.
+	 * @param string $import_type Detected import type.
+	 * @return void
+	 */
+	private function run_preflight( array $file_info, string $import_type ): void {
+		$report    = $this->preflight_service->analyze( $file_info, $import_type );
+		$report_id = $this->preflight_report_store->save( (int) get_current_user_id(), $report );
+		$this->response_handler->redirect_to_preflight_report( $report_id );
 	}
 }
