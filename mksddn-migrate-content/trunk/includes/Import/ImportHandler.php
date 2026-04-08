@@ -631,17 +631,12 @@ class ImportHandler implements ImporterInterface {
 		}
 
 		$post_id_int = (int) $post_id;
-		$top_level_field_names = array();
-		foreach ( array_keys( $data['acf_fields'] ) as $acf_field_name ) {
-			$top_level_field_names[] = sanitize_text_field( (string) $acf_field_name );
-		}
 
 		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
 			$name          = sanitize_text_field( (string) $field_name );
 			$value         = $this->remap_media_values( $field_value, $id_map, $url_map, $url_to_new_id );
 			$field_selector = $this->acf_resolve_field_selector( $name, $post_id_int );
 			update_field( $field_selector, $value, $post_id_int );
-			$this->acf_cleanup_leaked_group_subfield_meta( $name, $post_id_int, $top_level_field_names );
 
 			if ( $this->acf_is_value_missing_after_import( $name, $value, $post_id_int ) ) {
 				$this->acf_import_meta_fallback_from_payload( $data['meta'] ?? array(), $name, $post_id_int, $id_map, $url_map, $url_to_new_id );
@@ -667,39 +662,6 @@ class ImportHandler implements ImporterInterface {
 		}
 
 		return $field_name;
-	}
-
-	/**
-	 * Remove leaked flat meta keys for group subfields from previous imports.
-	 *
-	 * @param string $field_name             Group field name.
-	 * @param int    $post_id                Target post ID.
-	 * @param array  $top_level_field_names  Root ACF field names from payload.
-	 * @return void
-	 */
-	private function acf_cleanup_leaked_group_subfield_meta( string $field_name, int $post_id, array $top_level_field_names ): void {
-		if ( $post_id <= 0 || ! function_exists( 'get_field_object' ) ) {
-			return;
-		}
-
-		$object = get_field_object( $field_name, $post_id, false, false );
-		if ( ! is_array( $object ) || ( $object['type'] ?? '' ) !== 'group' || empty( $object['sub_fields'] ) || ! is_array( $object['sub_fields'] ) ) {
-			return;
-		}
-
-		foreach ( $object['sub_fields'] as $sub_field ) {
-			if ( ! is_array( $sub_field ) || empty( $sub_field['name'] ) || ! is_string( $sub_field['name'] ) ) {
-				continue;
-			}
-
-			$sub_name = sanitize_text_field( $sub_field['name'] );
-			if ( '' === $sub_name || in_array( $sub_name, $top_level_field_names, true ) ) {
-				continue;
-			}
-
-			delete_post_meta( $post_id, $sub_name );
-			delete_post_meta( $post_id, '_' . $sub_name );
-		}
 	}
 
 	/**
@@ -741,7 +703,20 @@ class ImportHandler implements ImporterInterface {
 			return;
 		}
 
-		$prefix = $field_name . '_';
+		$prefix          = $field_name . '_';
+		$prefix_pattern  = '/^' . preg_quote( $field_name, '/' ) . '_[^_]+_/';
+		$has_nested_leaf = false;
+		foreach ( $meta as $raw_key => $values ) {
+			$mk = sanitize_text_field( (string) $raw_key );
+			if ( ! preg_match( $prefix_pattern, $mk ) && ! preg_match( '/^_' . preg_quote( $prefix, '/' ) . '/', $mk ) ) {
+				continue;
+			}
+			$first = is_array( $values ) && array() !== $values ? reset( $values ) : $values;
+			if ( null !== $first && '' !== $first && array() !== $first ) {
+				$has_nested_leaf = true;
+				break;
+			}
+		}
 
 		foreach ( $meta as $raw_key => $values ) {
 			$meta_key = sanitize_text_field( (string) $raw_key );
@@ -755,6 +730,14 @@ class ImportHandler implements ImporterInterface {
 
 			if ( ! $is_target_key ) {
 				continue;
+			}
+
+			// ACF often stores an empty root meta row while leaf keys use "{$field_name}_..."; writing '' breaks nested groups.
+			if ( $has_nested_leaf && $field_name === $meta_key ) {
+				$first_val = is_array( $values ) && array() !== $values ? reset( $values ) : $values;
+				if ( null === $first_val || '' === $first_val || array() === $first_val ) {
+					continue;
+				}
 			}
 
 			delete_post_meta( $post_id, $meta_key );
