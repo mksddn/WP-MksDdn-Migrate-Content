@@ -295,8 +295,13 @@ class SelectedContentImportService {
 	 * @return bool
 	 */
 	private function has_preflight_staged_request(): bool {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
-		return isset( $_POST['preflight_staged_path'] ) && is_string( $_POST['preflight_staged_path'] ) && '' !== trim( (string) $_POST['preflight_staged_path'] );
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce verified in import() before this runs.
+		if ( ! isset( $_POST['preflight_staged_path'] ) ) {
+			return false;
+		}
+		$path = sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) );
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		return '' !== trim( $path );
 	}
 
 	/**

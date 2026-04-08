@@ -4,15 +4,15 @@
  *
  * @package MksDdn\MigrateContent
  *
- * @var array|null $preflight_report    Preflight report payload when returning from step 1.
- * @var string     $preflight_report_id Report id for step 2 (import) form.
+ * @var array|null $mksddn_mc_preflight_report    Preflight report payload when returning from step 1.
+ * @var string     $mksddn_mc_preflight_report_id Report id for step 2 (import) form.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$preflight_report_id = isset( $preflight_report_id ) ? (string) $preflight_report_id : '';
+$mksddn_mc_preflight_report_id = isset( $mksddn_mc_preflight_report_id ) ? (string) $mksddn_mc_preflight_report_id : '';
 ?>
 <section class="mksddn-mc-section">
 	<h2><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></h2>
@@ -32,22 +32,22 @@ $preflight_report_id = isset( $preflight_report_id ) ? (string) $preflight_repor
 			?>
 		</p>
 	</div>
-<?php if ( ! empty( $preflight_report ) ) : ?>
+<?php if ( ! empty( $mksddn_mc_preflight_report ) ) : ?>
 	<?php
 	\MksDdn\MigrateContent\Core\View\ViewRenderer::render_template(
 		'admin/preflight-report.php',
 		array(
-			'preflight_report'    => $preflight_report,
-			'preflight_report_id' => $preflight_report_id,
+			'mksddn_mc_preflight_report'    => $mksddn_mc_preflight_report,
+			'mksddn_mc_preflight_report_id' => $mksddn_mc_preflight_report_id,
 		)
 	);
 	?>
 <?php endif; ?>
-<?php if ( $pending_user_preview ) : ?>
-	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
-<?php elseif ( $pending_theme_preview ) : ?>
-	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/theme-preview.php', array( 'preview' => $pending_theme_preview ) ); ?>
-<?php elseif ( empty( $preflight_report ) ) : ?>
+<?php if ( $mksddn_mc_pending_user_preview ) : ?>
+	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $mksddn_mc_pending_user_preview ) ); ?>
+<?php elseif ( $mksddn_mc_pending_theme_preview ) : ?>
+	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/theme-preview.php', array( 'preview' => $mksddn_mc_pending_theme_preview ) ); ?>
+<?php elseif ( empty( $mksddn_mc_preflight_report ) ) : ?>
 		<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="mksddn-mc-unified-import-form" data-mksddn-unified-import="true">
 			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
 			<input type="hidden" name="action" value="mksddn_mc_unified_import">

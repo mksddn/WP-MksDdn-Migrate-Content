@@ -105,10 +105,10 @@ class AdminPageView {
 		$this->renderer->render(
 			'admin/unified-import-form.php',
 			array(
-				'pending_user_preview'  => $pending_user_preview,
-				'pending_theme_preview' => $pending_theme_preview,
-				'preflight_report'      => $preflight_report,
-				'preflight_report_id'   => $preflight_report_id,
+				'mksddn_mc_pending_user_preview'  => $pending_user_preview,
+				'mksddn_mc_pending_theme_preview' => $pending_theme_preview,
+				'mksddn_mc_preflight_report'      => $preflight_report,
+				'mksddn_mc_preflight_report_id'   => $preflight_report_id,
 			)
 		);
 	}
