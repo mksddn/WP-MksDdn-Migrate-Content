@@ -121,7 +121,7 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Process unified import request.
 	 *
-	 * @param array $request_data Request data (chunk_job_id, server_file, dry_run, or uploaded file in $_FILES).
+	 * @param array $request_data Request data (preflight_report_id, chunk_job_id, server_file, or uploaded file in $_FILES).
 	 * @return void
 	 * @since 2.0.0
 	 */
@@ -141,8 +141,15 @@ class UnifiedImportOrchestrator {
 			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
 		}
 
-		// Resolve file source.
-		$file_info = $this->resolve_file_source( $request_data );
+		$preflight_report_id = isset( $request_data['preflight_report_id'] )
+			? sanitize_text_field( (string) $request_data['preflight_report_id'] )
+			: '';
+
+		if ( '' !== $preflight_report_id ) {
+			$file_info = $this->resolve_preflight_import( $preflight_report_id );
+		} else {
+			$file_info = $this->resolve_file_source( $request_data );
+		}
 
 		if ( is_wp_error( $file_info ) ) {
 			wp_die( esc_html( $file_info->get_error_message() ) );
@@ -155,12 +162,13 @@ class UnifiedImportOrchestrator {
 			wp_die( esc_html( $import_type->get_error_message() ) );
 		}
 
-		if ( ! empty( $request_data['dry_run'] ) ) {
+		// First step (no preflight id): always run analysis and redirect to the report.
+		if ( '' === $preflight_report_id ) {
 			$this->run_preflight( $file_info, $import_type );
 			return;
 		}
 
-		// Route to appropriate service.
+		// Second step: run the real import using the same file reference from preflight.
 		if ( 'full' === $import_type ) {
 			$this->route_to_full_import( $file_info );
 		} elseif ( 'themes' === $import_type ) {
@@ -279,6 +287,145 @@ class UnifiedImportOrchestrator {
 	}
 
 	/**
+	 * Resolve file from a completed preflight session (second import step).
+	 *
+	 * @param string $report_id Preflight report id.
+	 * @return array|WP_Error File info or error.
+	 */
+	private function resolve_preflight_import( string $report_id ): array|WP_Error {
+		$bucket = $this->preflight_report_store->get_bucket_for_user( $report_id, (int) get_current_user_id() );
+		if ( ! $bucket || empty( $bucket['import_handle'] ) ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$h  = $bucket['import_handle'];
+		$st = isset( $h['source_type'] ) ? sanitize_key( (string) $h['source_type'] ) : '';
+
+		if ( 'chunked' === $st ) {
+			$jid = isset( $h['chunk_job_id'] ) ? sanitize_text_field( (string) $h['chunk_job_id'] ) : '';
+			return '' !== $jid ? $this->resolve_chunked_file( $jid ) : new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		if ( 'server' === $st ) {
+			$sf = isset( $h['server_file'] ) ? sanitize_text_field( (string) $h['server_file'] ) : '';
+			return '' !== $sf ? $this->resolve_server_file( $sf ) : new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		if ( 'staged' === $st ) {
+			$path = isset( $h['staged_path'] ) ? (string) $h['staged_path'] : '';
+			if ( '' === $path || ! file_exists( $path ) ) {
+				return new WP_Error(
+					'mksddn_mc_staged_missing',
+					__( 'Staged import file is missing. Run preflight again.', 'mksddn-migrate-content' )
+				);
+			}
+
+			$ext = isset( $h['extension'] ) ? strtolower( (string) $h['extension'] ) : '';
+			$name = isset( $h['original_name'] ) ? (string) $h['original_name'] : basename( $path );
+
+			return array(
+				'path'      => $path,
+				'extension' => $ext,
+				'name'      => $name,
+				'source'    => 'staged',
+			);
+		}
+
+		return new WP_Error(
+			'mksddn_mc_preflight_invalid',
+			__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+		);
+	}
+
+	/**
+	 * Build persistent import handle after preflight (so the next step does not re-upload).
+	 *
+	 * @param array  $file_info Resolved file info from the first request.
+	 * @param string $report_id Report id (directory name for staged browser uploads).
+	 * @return array|WP_Error
+	 */
+	private function build_import_handle( array $file_info, string $report_id ): array|WP_Error {
+		if ( 'chunked' === $file_info['source'] ) {
+			return array(
+				'source_type'   => 'chunked',
+				'chunk_job_id'  => $file_info['chunk_job_id'],
+				'extension'     => 'wpbkp',
+				'original_name' => $file_info['name'],
+			);
+		}
+
+		if ( 'server' === $file_info['source'] ) {
+			return array(
+				'source_type'   => 'server',
+				'server_file'   => $file_info['server_file'],
+				'extension'     => $file_info['extension'],
+				'original_name' => $file_info['name'],
+			);
+		}
+
+		if ( 'upload' === $file_info['source'] ) {
+			$uploads = wp_upload_dir();
+			if ( ! empty( $uploads['error'] ) ) {
+				return new WP_Error(
+					'mksddn_mc_upload_dir',
+					__( 'Unable to prepare import storage. Check uploads directory permissions.', 'mksddn-migrate-content' )
+				);
+			}
+
+			$safe_id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $report_id );
+			if ( '' === $safe_id ) {
+				return new WP_Error( 'mksddn_mc_preflight_invalid', __( 'Invalid preflight session.', 'mksddn-migrate-content' ) );
+			}
+
+			$dir = trailingslashit( $uploads['basedir'] ) . 'mksddn-mc/preflight/' . $safe_id;
+			if ( ! wp_mkdir_p( $dir ) ) {
+				return new WP_Error(
+					'mksddn_mc_stage_mkdir',
+					__( 'Could not create directory for the next import step.', 'mksddn-migrate-content' )
+				);
+			}
+
+			$basename = sanitize_file_name( $file_info['name'] );
+			$dest     = $dir . '/' . wp_unique_filename( $dir, $basename );
+
+			if ( ! FilesystemHelper::copy( $file_info['path'], $dest, true ) ) {
+				return new WP_Error(
+					'mksddn_mc_stage_copy',
+					__( 'Could not stash import file for the next step.', 'mksddn-migrate-content' )
+				);
+			}
+
+			return array(
+				'source_type'   => 'staged',
+				'staged_path'   => $dest,
+				'extension'     => $file_info['extension'],
+				'original_name' => $file_info['name'],
+			);
+		}
+
+		return new WP_Error( 'mksddn_mc_unknown_source', __( 'Invalid file source.', 'mksddn-migrate-content' ) );
+	}
+
+	/**
+	 * MIME type hint for synthetic $_FILES entries.
+	 *
+	 * @param string $extension File extension (wpbkp or json).
+	 * @return string
+	 */
+	private function mime_for_import_file( string $extension ): string {
+		return 'json' === strtolower( $extension ) ? 'application/json' : 'application/zip';
+	}
+
+	/**
 	 * Prepare file for import service.
 	 *
 	 * @param array  $file_info File information.
@@ -294,6 +441,11 @@ class UnifiedImportOrchestrator {
 		} elseif ( 'server' === $file_info['source'] ) {
 			$_POST['server_file'] = $file_info['server_file'];
 			$_REQUEST['_wpnonce'] = wp_create_nonce( $nonce_action );
+		} elseif ( 'staged' === $file_info['source'] ) {
+			$_POST['preflight_staged_path'] = $file_info['path'];
+			$_POST['preflight_staged_name'] = $file_info['name'];
+			$_POST['preflight_staged_ext']  = $file_info['extension'];
+			$_REQUEST['_wpnonce']           = wp_create_nonce( $nonce_action );
 		} else {
 			$temp = wp_tempnam( 'mksddn-unified-import-' );
 			if ( ! $temp ) {
@@ -309,7 +461,7 @@ class UnifiedImportOrchestrator {
 				'tmp_name' => $temp,
 				'size'     => filesize( $temp ),
 				'error'    => UPLOAD_ERR_OK,
-				'type'     => 'application/zip',
+				'type'     => $this->mime_for_import_file( $file_info['extension'] ?? '' ),
 			);
 			$_REQUEST['_wpnonce'] = wp_create_nonce( $nonce_action );
 		}
@@ -344,8 +496,13 @@ class UnifiedImportOrchestrator {
 			// For server files, set server_file in POST.
 			$_POST['server_file'] = $file_info['server_file'];
 			$_REQUEST['_wpnonce'] = wp_create_nonce( 'import_single_page_nonce' );
+		} elseif ( 'staged' === $file_info['source'] ) {
+			$_POST['preflight_staged_path'] = $file_info['path'];
+			$_POST['preflight_staged_name'] = $file_info['name'];
+			$_POST['preflight_staged_ext']  = $file_info['extension'];
+			$_REQUEST['_wpnonce']           = wp_create_nonce( 'import_single_page_nonce' );
 		} else {
-			// For uploaded files, file is already in $_FILES['import_file'], just set nonce.
+			// For direct HTTP uploads, file is already in $_FILES['import_file'].
 			$_REQUEST['_wpnonce'] = wp_create_nonce( 'import_single_page_nonce' );
 		}
 
@@ -396,6 +553,11 @@ class UnifiedImportOrchestrator {
 			return $result;
 		}
 
+		if ( 'staged' === $file_info['source'] ) {
+			$result['file_path'] = $file_info['path'];
+			return $result;
+		}
+
 		$temp = wp_tempnam( 'mksddn-theme-preview-' );
 		if ( ! $temp ) {
 			return new WP_Error( 'mksddn_mc_temp_unavailable', __( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
@@ -412,7 +574,7 @@ class UnifiedImportOrchestrator {
 	}
 
 	/**
-	 * Run dry-run preflight and redirect with report id.
+	 * Run preflight analysis, persist import handle for step two, redirect with report id.
 	 *
 	 * @param array  $file_info   Resolved file info.
 	 * @param string $import_type Detected import type.
@@ -420,7 +582,14 @@ class UnifiedImportOrchestrator {
 	 */
 	private function run_preflight( array $file_info, string $import_type ): void {
 		$report    = $this->preflight_service->analyze( $file_info, $import_type );
-		$report_id = $this->preflight_report_store->save( (int) get_current_user_id(), $report );
+		$report_id = wp_generate_password( 24, false, false );
+		$handle    = $this->build_import_handle( $file_info, $report_id );
+
+		if ( is_wp_error( $handle ) ) {
+			wp_die( esc_html( $handle->get_error_message() ) );
+		}
+
+		$this->preflight_report_store->save( (int) get_current_user_id(), $report, $handle, $report_id );
 		$this->response_handler->redirect_to_preflight_report( $report_id );
 	}
 }

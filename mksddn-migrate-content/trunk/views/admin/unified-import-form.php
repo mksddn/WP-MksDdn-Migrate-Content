@@ -3,15 +3,20 @@
  * Unified import form template.
  *
  * @package MksDdn\MigrateContent
+ *
+ * @var array|null $preflight_report    Preflight report payload when returning from step 1.
+ * @var string     $preflight_report_id Report id for step 2 (import) form.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+$preflight_report_id = isset( $preflight_report_id ) ? (string) $preflight_report_id : '';
 ?>
 <section class="mksddn-mc-section">
 	<h2><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></h2>
-	<p><?php esc_html_e( 'Upload or select a backup file (.wpbkp or .json). The system will automatically detect the import type.', 'mksddn-migrate-content' ); ?></p>
+	<p><?php esc_html_e( 'Upload or select a backup file (.wpbkp or .json). First run preflight; then start the import from the report without uploading again.', 'mksddn-migrate-content' ); ?></p>
 	<?php
 	$mksddn_mc_imports_dir = wp_upload_dir();
 	?>
@@ -28,13 +33,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</p>
 	</div>
 <?php if ( ! empty( $preflight_report ) ) : ?>
-	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/preflight-report.php', array( 'preflight_report' => $preflight_report ) ); ?>
+	<?php
+	\MksDdn\MigrateContent\Core\View\ViewRenderer::render_template(
+		'admin/preflight-report.php',
+		array(
+			'preflight_report'    => $preflight_report,
+			'preflight_report_id' => $preflight_report_id,
+		)
+	);
+	?>
 <?php endif; ?>
 <?php if ( $pending_user_preview ) : ?>
 	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/user-preview.php', array( 'preview' => $pending_user_preview ) ); ?>
 <?php elseif ( $pending_theme_preview ) : ?>
 	<?php \MksDdn\MigrateContent\Core\View\ViewRenderer::render_template( 'admin/theme-preview.php', array( 'preview' => $pending_theme_preview ) ); ?>
-<?php else : ?>
+<?php elseif ( empty( $preflight_report ) ) : ?>
 		<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="mksddn-mc-unified-import-form" data-mksddn-unified-import="true">
 			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
 			<input type="hidden" name="action" value="mksddn_mc_unified_import">
@@ -68,15 +81,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 				</div>
 			</div>
 
-			<div class="mksddn-mc-field">
-				<label>
-					<input type="checkbox" name="dry_run" id="mksddn-mc-dry-run" value="1">
-					<?php esc_html_e( 'Preflight only (dry run)', 'mksddn-migrate-content' ); ?>
-				</label>
-				<p class="description"><?php esc_html_e( 'Analyze the file without changing the database or files.', 'mksddn-migrate-content' ); ?></p>
-			</div>
-			
-			<button type="submit" class="button button-primary" id="mksddn-mc-unified-import-submit" data-default-label="<?php esc_attr_e( 'Import', 'mksddn-migrate-content' ); ?>" data-preflight-label="<?php esc_attr_e( 'Run preflight check', 'mksddn-migrate-content' ); ?>"><?php esc_html_e( 'Import', 'mksddn-migrate-content' ); ?></button>
+			<p class="description"><?php esc_html_e( 'This step only analyzes the file. No database or file changes are made yet.', 'mksddn-migrate-content' ); ?></p>
+
+			<button type="submit" class="button button-primary" id="mksddn-mc-unified-import-submit"><?php esc_html_e( 'Run preflight', 'mksddn-migrate-content' ); ?></button>
 		</form>
 	<?php endif; ?>
 </section>

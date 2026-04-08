@@ -4,12 +4,15 @@
  *
  * @package MksDdn\MigrateContent
  *
- * @var array $preflight_report Normalized preflight report.
+ * @var array  $preflight_report    Normalized preflight report.
+ * @var string $preflight_report_id Id for the follow-up import request.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+$preflight_report_id = isset( $preflight_report_id ) ? (string) $preflight_report_id : '';
 
 $status = isset( $preflight_report['status'] ) ? sanitize_key( (string) $preflight_report['status'] ) : 'ok';
 $notice_class = 'notice-info';
@@ -217,7 +220,17 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 		<p><?php echo esc_html( $next_step ); ?></p>
 	<?php endif; ?>
 
+	<?php if ( '' !== $preflight_report_id ) : ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mksddn-mc-preflight-import-form" style="margin: 1rem 0;">
+			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
+			<input type="hidden" name="action" value="mksddn_mc_unified_import">
+			<input type="hidden" name="preflight_report_id" value="<?php echo esc_attr( $preflight_report_id ); ?>">
+			<p class="description"><?php esc_html_e( 'Step 2: start the real import using the same file (no upload needed).', 'mksddn-migrate-content' ); ?></p>
+			<button type="submit" class="button button-primary"><?php esc_html_e( 'Start import', 'mksddn-migrate-content' ); ?></button>
+		</form>
+	<?php endif; ?>
+
 	<p>
-		<a class="button" href="<?php echo esc_url( $import_page_url ); ?>"><?php esc_html_e( 'Clear report', 'mksddn-migrate-content' ); ?></a>
+		<a class="button" href="<?php echo esc_url( $import_page_url ); ?>"><?php esc_html_e( 'Dismiss report', 'mksddn-migrate-content' ); ?></a>
 	</p>
 </div>

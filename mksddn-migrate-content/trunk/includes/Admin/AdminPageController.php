@@ -240,16 +240,16 @@ class AdminPageController {
 
 		$pending_user_preview = $this->maybe_load_user_preview();
 		$pending_theme_preview = $this->maybe_load_theme_preview();
-		$preflight_report      = null;
+		$preflight_context = null;
 		if ( ! $pending_user_preview && ! $pending_theme_preview ) {
-			$preflight_report = $this->maybe_load_preflight_report();
+			$preflight_context = $this->maybe_load_preflight_report();
 		}
 		$this->render_lock_warning();
 		$this->notifications->render_status_notices();
 		$this->progress->render_container();
 
 		$this->view->render_styles();
-		$this->view->render_import_sections( $pending_user_preview, $pending_theme_preview, $preflight_report );
+		$this->view->render_import_sections( $pending_user_preview, $pending_theme_preview, $preflight_context );
 
 		echo '</div>';
 		$this->progress->render_javascript();
@@ -438,7 +438,7 @@ class AdminPageController {
 	/**
 	 * Load preflight report when query args are present.
 	 *
-	 * @return array|null Report data or null.
+	 * @return array|null Keys: report, report_id; or null.
 	 * @since 2.2.0
 	 */
 	private function maybe_load_preflight_report(): ?array {
@@ -455,13 +455,16 @@ class AdminPageController {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'mksddn-migrate-content' ) );
 		}
 
-		$report = $this->preflight_report_store->get_for_user( $report_id, (int) get_current_user_id() );
-		if ( ! $report ) {
+		$bucket = $this->preflight_report_store->get_bucket_for_user( $report_id, (int) get_current_user_id() );
+		if ( ! $bucket || empty( $bucket['report'] ) ) {
 			$this->notifications->show_inline_notice( 'error', __( 'Preflight report expired or not found. Run preflight again.', 'mksddn-migrate-content' ) );
 			return null;
 		}
 
-		return $report;
+		return array(
+			'report'    => $bucket['report'],
+			'report_id' => $report_id,
+		);
 	}
 
 	/**

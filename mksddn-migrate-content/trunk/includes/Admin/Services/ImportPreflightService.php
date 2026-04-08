@@ -184,7 +184,7 @@ class ImportPreflightService {
 			'estimated_changes'   => array(
 				'slug_conflicts' => $slug_conflicts,
 			),
-			'next_step'           => __( 'Uncheck "Preflight only" and submit again with the same file to run the real import.', 'mksddn-migrate-content' ),
+			'next_step'           => __( 'Use “Start import” below to run the real import with the same file (no upload needed).', 'mksddn-migrate-content' ),
 		);
 	}
 
@@ -237,7 +237,7 @@ class ImportPreflightService {
 				'incoming_users' => $incoming,
 				'user_conflicts' => $conflicts,
 			),
-			'next_step'         => __( 'Uncheck "Preflight only" and submit again with the same file to run the real import.', 'mksddn-migrate-content' ),
+			'next_step'         => __( 'Use “Start import” below to run the real import with the same file (no upload needed).', 'mksddn-migrate-content' ),
 		);
 	}
 
@@ -290,7 +290,7 @@ class ImportPreflightService {
 			'estimated_changes' => array(
 				'theme_slugs' => $slugs,
 			),
-			'next_step'         => __( 'Uncheck "Preflight only" and submit again; theme import will show its confirmation step.', 'mksddn-migrate-content' ),
+			'next_step'         => __( 'Use “Start import” below; theme import will show its confirmation step.', 'mksddn-migrate-content' ),
 		);
 	}
 
