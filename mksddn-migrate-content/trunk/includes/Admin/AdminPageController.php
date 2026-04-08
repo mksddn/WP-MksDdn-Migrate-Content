@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
+use MksDdn\MigrateContent\Admin\Services\PreflightReportStore;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
 use MksDdn\MigrateContent\Config\PluginConfig;
@@ -104,6 +105,13 @@ class AdminPageController {
 	private ServerBackupScanner $server_scanner;
 
 	/**
+	 * Preflight report store.
+	 *
+	 * @var PreflightReportStore
+	 */
+	private PreflightReportStore $preflight_report_store;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ServiceContainer $container Service container.
@@ -120,6 +128,7 @@ class AdminPageController {
 		$this->preview_store     = $container->get( UserPreviewStoreInterface::class );
 		$this->theme_preview_store = $container->get( ThemePreviewStoreInterface::class );
 		$this->server_scanner    = $container->get( ServerBackupScanner::class );
+		$this->preflight_report_store = $container->get( PreflightReportStore::class );
 	}
 
 	/**
@@ -231,12 +240,16 @@ class AdminPageController {
 
 		$pending_user_preview = $this->maybe_load_user_preview();
 		$pending_theme_preview = $this->maybe_load_theme_preview();
+		$preflight_context = null;
+		if ( ! $pending_user_preview && ! $pending_theme_preview ) {
+			$preflight_context = $this->maybe_load_preflight_report();
+		}
 		$this->render_lock_warning();
 		$this->notifications->render_status_notices();
 		$this->progress->render_container();
 
 		$this->view->render_styles();
-		$this->view->render_import_sections( $pending_user_preview, $pending_theme_preview );
+		$this->view->render_import_sections( $pending_user_preview, $pending_theme_preview, $preflight_context );
 
 		echo '</div>';
 		$this->progress->render_javascript();
@@ -419,6 +432,38 @@ class AdminPageController {
 			'id'            => $preview_id,
 			'original_name' => $preview['original_name'] ?? '',
 			'summary'       => $summary,
+		);
+	}
+
+	/**
+	 * Load preflight report when query args are present.
+	 *
+	 * @return array|null Keys: report, report_id; or null.
+	 * @since 2.2.0
+	 */
+	private function maybe_load_preflight_report(): ?array {
+		if ( empty( $_GET['mksddn_mc_preflight'] ) ) {
+			return null;
+		}
+
+		$report_id = sanitize_text_field( wp_unslash( $_GET['mksddn_mc_preflight'] ) );
+		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'mksddn_mc_preflight_' . $report_id ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'mksddn-migrate-content' ) );
+		}
+
+		$bucket = $this->preflight_report_store->get_bucket_for_user( $report_id, (int) get_current_user_id() );
+		if ( ! $bucket || empty( $bucket['report'] ) ) {
+			$this->notifications->show_inline_notice( 'error', __( 'Preflight report expired or not found. Run preflight again.', 'mksddn-migrate-content' ) );
+			return null;
+		}
+
+		return array(
+			'report'    => $bucket['report'],
+			'report_id' => $report_id,
 		);
 	}
 

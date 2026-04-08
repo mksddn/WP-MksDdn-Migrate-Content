@@ -90,15 +90,25 @@ class AdminPageView {
 	 *
 	 * @param array|null $pending_user_preview Pending user preview data.
 	 * @param array|null $pending_theme_preview Pending theme preview data.
+	 * @param array|null $preflight_context      Keys: report, report_id; or null.
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function render_import_sections( ?array $pending_user_preview = null, ?array $pending_theme_preview = null ): void {
+	public function render_import_sections( ?array $pending_user_preview = null, ?array $pending_theme_preview = null, ?array $preflight_context = null ): void {
+		$preflight_report    = null;
+		$preflight_report_id = '';
+		if ( is_array( $preflight_context ) ) {
+			$preflight_report    = isset( $preflight_context['report'] ) ? $preflight_context['report'] : null;
+			$preflight_report_id = isset( $preflight_context['report_id'] ) ? (string) $preflight_context['report_id'] : '';
+		}
+
 		$this->renderer->render(
 			'admin/unified-import-form.php',
 			array(
-				'pending_user_preview'  => $pending_user_preview,
-				'pending_theme_preview' => $pending_theme_preview,
+				'mksddn_mc_pending_user_preview'  => $pending_user_preview,
+				'mksddn_mc_pending_theme_preview' => $pending_theme_preview,
+				'mksddn_mc_preflight_report'      => $preflight_report,
+				'mksddn_mc_preflight_report_id'   => $preflight_report_id,
 			)
 		);
 	}

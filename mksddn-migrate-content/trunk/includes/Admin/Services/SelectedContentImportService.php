@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Support\ImportLock;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
+use MksDdn\MigrateContent\Support\PreflightStagingPath;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -181,6 +182,39 @@ class SelectedContentImportService {
 						'mime'      => MimeTypeHelper::detect( $file_info['path'], $file_info['extension'] ),
 					);
 				}
+			} elseif ( $this->has_preflight_staged_request() ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+				$raw_path = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
+				if ( ! PreflightStagingPath::is_allowed_path( $raw_path ) ) {
+					$this->notifications->redirect_with_notice( 'error', __( 'Invalid preflight file path.', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				$real_path = realpath( $raw_path );
+				if ( false === $real_path || ! is_readable( $real_path ) ) {
+					$this->notifications->redirect_with_notice( 'error', __( 'Preflight staged file is not readable.', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+				$name = isset( $_POST['preflight_staged_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['preflight_staged_name'] ) ) : basename( $real_path );
+				$extension = strtolower( pathinfo( $real_path, PATHINFO_EXTENSION ) );
+				if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+					// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+					$extension = isset( $_POST['preflight_staged_ext'] ) ? strtolower( sanitize_key( wp_unslash( (string) $_POST['preflight_staged_ext'] ) ) ) : '';
+				}
+				if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+					$this->notifications->redirect_with_notice( 'error', __( 'Unsupported file extension.', 'mksddn-migrate-content' ) );
+					return;
+				}
+
+				$file_data = array(
+					'name'      => $name,
+					'path'      => $real_path,
+					'size'      => filesize( $real_path ),
+					'extension' => $extension,
+					'mime'      => MimeTypeHelper::detect( $real_path, $extension ),
+				);
 			}
 
 			// If no file data was set (from chunk or server file), check for uploaded file.
@@ -253,6 +287,21 @@ class SelectedContentImportService {
 				$lock->release( $lock_token );
 			}
 		}
+	}
+
+	/**
+	 * Whether the request carries a preflight-staged file path (unified import step 2).
+	 *
+	 * @return bool
+	 */
+	private function has_preflight_staged_request(): bool {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce verified in import() before this runs.
+		if ( ! isset( $_POST['preflight_staged_path'] ) ) {
+			return false;
+		}
+		$path = sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) );
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		return '' !== trim( $path );
 	}
 
 	/**

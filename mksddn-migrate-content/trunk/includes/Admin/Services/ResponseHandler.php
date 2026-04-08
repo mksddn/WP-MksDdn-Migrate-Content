@@ -104,5 +104,25 @@ class ResponseHandler {
 	public function redirect_with_theme_status( string $status, ?string $message = null ): void {
 		$this->notifications->redirect_with_theme_status( $status, $message );
 	}
+
+	/**
+	 * Redirect to import page with preflight report id.
+	 *
+	 * @param string $report_id Preflight report id.
+	 * @return void
+	 * @since 2.2.0
+	 */
+	public function redirect_to_preflight_report( string $report_id ): void {
+		$base = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
+		$url  = add_query_arg(
+			array(
+				'mksddn_mc_preflight' => rawurlencode( $report_id ),
+				'_wpnonce'             => wp_create_nonce( 'mksddn_mc_preflight_' . $report_id ),
+			),
+			$base
+		);
+		wp_safe_redirect( $url );
+		exit;
+	}
 }
 

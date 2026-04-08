@@ -138,8 +138,9 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 		// Extract request data.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 		$request_data = array(
-			'chunk_job_id' => isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '',
-			'server_file'  => isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '',
+			'preflight_report_id' => isset( $_POST['preflight_report_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_report_id'] ) ) : '',
+			'chunk_job_id'        => isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '',
+			'server_file'         => isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '',
 		);
 
 		// Process unified import through orchestrator.

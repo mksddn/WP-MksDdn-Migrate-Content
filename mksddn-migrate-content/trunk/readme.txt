@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.1.9
+Stable tag: 2.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,6 +21,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
 * **Integrity & safety** – `.wpbkp` archives ship with manifests and checksums; imports verify capabilities, nonces, and disk space before touching data.
+* **Import preflight** – unified import is a two-step flow: run preflight (read-only report), then start the real import from the report without uploading the file again (browser uploads are staged server-side between steps).
 
 = Feature Highlights =
 
@@ -63,6 +64,9 @@ Yes. The user merge dialog shows archive/current rows with conflict indicators. 
 = Does it touch production files directly? =
 Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports back up theme directories before replace and restore them if extraction fails.
 
+= How does unified import preflight work? =
+Step 1 runs file detection and read-only analysis (payload parsing, user diff scan for full-site archives, theme list scan) and stores a short-lived report on the Import page. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked and server picks are referenced from the preflight session). Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
+
 == Screenshots ==
 
 1. Export dashboard with “Full Site” and “Selected Content” cards.
@@ -91,7 +95,9 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `SelectedContentImportService` - handles selected content imports
 * `FullSiteImportService` - manages full site imports
 * `ThemeImportService` - handles theme archive imports
-* `UnifiedImportOrchestrator` - orchestrates unified import with automatic type detection and routing
+* `UnifiedImportOrchestrator` - orchestrates unified import with automatic type detection; step 1 is always preflight, step 2 runs the real import using a stored file reference
+* `ImportPreflightService` - read-only analysis for unified import preflight
+* `PreflightReportStore` - short-lived transient storage for preflight reports and follow-up import handles (staged browser uploads under `wp-content/uploads/mksddn-mc/preflight/`, or chunk/server identifiers)
 * `ImportTypeDetector` - detects import type (full site or selected content) from archive file
 * `ImportFileValidator` - validates uploaded files
 * `ImportPayloadPreparer` - prepares import payloads
@@ -142,6 +148,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.2.0 =
+* Added: Unified import preflight — mandatory first step with read-only analysis and inline report (`ImportPreflightService`, `PreflightReportStore`); second step runs import without re-uploading (staged copy for browser uploads).
 
 = 2.1.9 =
 * Fixed: Selected content import — ACF nested groups: removed post-import deletion of bare subfield meta keys (could break groups such as `info_cards`); meta fallback no longer restores an empty root `{$field}` row when nested `{$field}_*` keys exist in the export payload.
