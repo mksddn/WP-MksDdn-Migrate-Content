@@ -55,8 +55,7 @@ class ResponseHandler {
 			),
 			$base
 		);
-		wp_safe_redirect( $url );
-		exit;
+		$this->notifications->safe_redirect_exit( $url );
 	}
 
 	/**
@@ -77,8 +76,7 @@ class ResponseHandler {
 			$base
 		);
 
-		wp_safe_redirect( $url );
-		exit;
+		$this->notifications->safe_redirect_exit( $url );
 	}
 
 	/**
@@ -121,8 +119,7 @@ class ResponseHandler {
 			),
 			$base
 		);
-		wp_safe_redirect( $url );
-		exit;
+		$this->notifications->safe_redirect_exit( $url );
 	}
 }
 

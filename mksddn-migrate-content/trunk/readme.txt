@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.2.0
+Stable tag: 2.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -148,6 +148,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.2.1 =
+* Fixed: Admin redirects after import — `NotificationService::safe_redirect_exit()` validates URLs like `wp_safe_redirect()` but skips the `wp_redirect` filter to avoid Query Monitor fatals when its hook collector runs during redirects after a full database import.
 
 = 2.2.0 =
 * Added: Unified import preflight — mandatory first step with read-only analysis and inline report (`ImportPreflightService`, `PreflightReportStore`); second step runs import without re-uploading (staged copy for browser uploads).
