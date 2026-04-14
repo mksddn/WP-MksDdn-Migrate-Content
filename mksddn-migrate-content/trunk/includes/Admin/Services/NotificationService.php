@@ -86,6 +86,51 @@ class NotificationService implements NotificationServiceInterface {
 	}
 
 	/**
+	 * Same validation as wp_safe_redirect(), then send Location without the `wp_redirect` filter.
+	 *
+	 * Query Monitor hooks `wp_redirect` and may fatal when inspecting $wp_filter if entries are
+	 * not WP_Hook instances (seen after full database import in the same request).
+	 *
+	 * @param string $location      Target URL.
+	 * @param int    $status        HTTP status code.
+	 * @param string $x_redirect_by X-Redirect-By header value.
+	 * @return void
+	 */
+	public function safe_redirect_exit( string $location, int $status = 302, string $x_redirect_by = 'WordPress' ): void {
+		global $is_IIS;
+
+		$location = wp_sanitize_redirect( $location );
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core redirect hooks (wp_safe_redirect/wp_redirect); names are defined by WordPress.
+		$fallback = apply_filters( 'wp_safe_redirect_fallback', admin_url(), $status );
+		$location = wp_validate_redirect( $location, $fallback );
+
+		$status = (int) apply_filters( 'wp_redirect_status', $status, $location );
+
+		if ( ! $location ) {
+			return;
+		}
+
+		if ( $status < 300 || $status > 399 ) {
+			wp_die( esc_html__( 'HTTP redirect status code must be a redirection code, 3xx.', 'mksddn-migrate-content' ) );
+		}
+
+		$location = wp_sanitize_redirect( $location );
+
+		if ( ! $is_IIS && 'cgi-fcgi' !== PHP_SAPI ) {
+			status_header( $status );
+		}
+
+		$x_redirect_by = apply_filters( 'x_redirect_by', $x_redirect_by, $status, $location );
+		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		if ( is_string( $x_redirect_by ) ) {
+			header( 'X-Redirect-By: ' . $x_redirect_by );
+		}
+
+		header( 'Location: ' . $location, true, $status );
+		exit;
+	}
+
+	/**
 	 * Show inline notice.
 	 *
 	 * @param string $type    Notice type: error|success|warning|info.
@@ -131,8 +176,7 @@ class NotificationService implements NotificationServiceInterface {
 				$args['mksddn_mc_notice_message'] = $message;
 			}
 
-			wp_safe_redirect( add_query_arg( $args, $base ) );
-			exit;
+			$this->safe_redirect_exit( add_query_arg( $args, $base ) );
 		}
 
 		// Fallback if headers already sent - use JavaScript redirect.
@@ -176,8 +220,7 @@ class NotificationService implements NotificationServiceInterface {
 				$base
 			);
 
-			wp_safe_redirect( $url );
-			exit;
+			$this->safe_redirect_exit( $url );
 		}
 
 		// Fallback if headers already sent - use JavaScript redirect.
@@ -217,8 +260,7 @@ class NotificationService implements NotificationServiceInterface {
 		);
 
 		if ( ! headers_sent() ) {
-			wp_safe_redirect( $url );
-			exit;
+			$this->safe_redirect_exit( $url );
 		}
 
 		printf( '<script>window.location.href = %s;</script>', wp_json_encode( esc_url_raw( $url ) ) );
@@ -256,8 +298,7 @@ class NotificationService implements NotificationServiceInterface {
 				$base
 			);
 
-			wp_safe_redirect( $url );
-			exit;
+			$this->safe_redirect_exit( $url );
 		}
 
 		// Fallback if headers already sent - use JavaScript redirect.
