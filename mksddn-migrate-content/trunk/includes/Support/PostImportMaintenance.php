@@ -141,6 +141,7 @@ class PostImportMaintenance {
 		 *
 		 * @since 2.2.2
 		 */
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party LiteSpeed Cache hook name is defined by the plugin.
 		do_action( 'litespeed_purge_all' );
 
 		/**
