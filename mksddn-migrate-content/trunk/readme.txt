@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.2.1
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -153,6 +153,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.3.0 =
+* Enhanced: Export flow now has stricter payload checks, clearer validation errors, and safer type handling to make large exports more predictable.
+* Added: Full-site import maintenance now applies a stronger runtime lock/503 gate and expanded post-import cache cleanup hooks for common cache stacks.
+* Improved: Export file-system checks now validate directory writability more reliably before writing artifacts.
 
 = 2.2.1 =
 * Fixed: Admin redirects after import — `NotificationService::safe_redirect_exit()` validates URLs like `wp_safe_redirect()` but skips the `wp_redirect` filter to avoid Query Monitor fatals when its hook collector runs during redirects after a full database import.
