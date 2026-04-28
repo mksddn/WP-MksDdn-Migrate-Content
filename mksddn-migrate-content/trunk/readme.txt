@@ -56,7 +56,10 @@ The JS client splits files into 5–10 MB chunks (auto-tuned by server limits)
 You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = What is cleaned up when the plugin is deactivated? =
-Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
+Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
+
+= How are caches and maintenance mode handled during import? =
+Full-site import flushes the WordPress object cache, clears stale `alloptions` / rewrite rule runtime state, and best-effort purges common page-cache plugins (WP Rocket, LiteSpeed via hook, W3 Total Cache, WP Super Cache, Autoptimize). Edge CDN or host HTML caches are not purged automatically: hook `mksddn_mc_post_import_cache_purge` (and related actions in code) to integrate your stack. While a full-site import holds the import lock, public front-end and REST requests may receive HTTP 503. The plugin writes both a runtime lock outside the database and WordPress core `.maintenance` file, so parallel requests are blocked even if `wp_options` is being replaced. WP-CLI, cron, and logged-in administrators with `manage_options` are not blocked by the plugin-level gate. If the PHP process fatals after the database was partially written, an emergency cache purge runs on shutdown when possible. Selected content import avoids a global flush and only runs `clean_post_cache()` on posts that were imported or updated, then fires `mksddn_mc_selected_import_completed` with their IDs.
 
 = Can I merge users without overwriting existing accounts? =
 Yes. The user merge dialog shows archive/current rows with conflict indicators. You can keep current roles, replace metadata, or skip entire accounts.
@@ -110,6 +113,8 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `UserMergeApplier` - applies user merge operations
 * `ThemePreviewStore` - stores pending theme import previews
 * `DeactivationCleanup` - clears temporary upload state and service directories when the plugin is deactivated
+* `PostImportMaintenance` - centralizes cache/rewrite cleanup after full import and emergency purge if the database was partially updated; integrates page-cache plugins via best-effort function calls and hooks
+* `FullImportMaintenance` - file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
 
 = Contracts (Interfaces) =
 All key components implement interfaces:

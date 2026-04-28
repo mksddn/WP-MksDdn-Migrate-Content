@@ -13,7 +13,9 @@ use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Filesystem\FullContentImporter;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\FullImportMaintenance;
 use MksDdn\MigrateContent\Support\ImportLock;
+use MksDdn\MigrateContent\Support\PostImportMaintenance;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
@@ -219,6 +221,7 @@ class FullSiteImportService {
 		$message    = null;
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
+		$site_url_restored = false;
 
 		try {
 			$lock_token = $lock->acquire();
@@ -227,11 +230,38 @@ class FullSiteImportService {
 				return;
 			}
 
-			// Register shutdown function to ensure lock is released even on fatal errors.
+			FullImportMaintenance::activate();
+
 			register_shutdown_function(
-				function() use ( $lock, &$lock_token ) {
+				static function () use ( $lock, &$lock_token, $importer, $site_guard, &$site_url_restored ) {
+					FullImportMaintenance::deactivate();
 					if ( $lock_token ) {
 						$lock->release( $lock_token );
+					}
+
+					$last = error_get_last();
+					if ( ! is_array( $last ) || ! isset( $last['type'] ) ) {
+						return;
+					}
+
+					$fatal_types = array(
+						E_ERROR,
+						E_PARSE,
+						E_CORE_ERROR,
+						E_COMPILE_ERROR,
+						E_USER_ERROR,
+						E_RECOVERABLE_ERROR,
+					);
+					if ( ! in_array( (int) $last['type'], $fatal_types, true ) ) {
+						return;
+					}
+
+					if ( $importer->was_database_mutated() ) {
+						if ( ! $site_url_restored ) {
+							$site_guard->restore();
+							$site_url_restored = true;
+						}
+						PostImportMaintenance::run_after_database_mutation( 'shutdown_fatal' );
 					}
 				}
 			);
@@ -245,12 +275,21 @@ class FullSiteImportService {
 			if ( is_wp_error( $result ) ) {
 				$status  = 'error';
 				$message = $result->get_error_message();
+				if ( $importer->was_database_mutated() ) {
+					$site_guard->restore();
+					$site_url_restored = true;
+					PostImportMaintenance::run_after_database_mutation( 'import_wp_error' );
+				}
 			} else {
+				$site_url_restored = true;
 				$this->normalize_plugin_storage();
 				$this->run_post_import_maintenance();
 			}
 		} finally {
-			$site_guard->restore();
+			FullImportMaintenance::deactivate();
+			if ( ! $site_url_restored ) {
+				$site_guard->restore();
+			}
 			$this->cleanup( $temp, $cleanup, $job );
 			if ( $lock_token ) {
 				$lock->release( $lock_token );
@@ -481,13 +520,11 @@ class FullSiteImportService {
 	private function run_post_import_maintenance(): void {
 		$this->log( 'Running post-import maintenance.' );
 
-		// Flush cache to avoid stale data after database replacement.
-		if ( function_exists( 'wp_cache_flush' ) ) {
-			wp_cache_flush();
-		}
+		$maintenance = new PostImportMaintenance();
+		$maintenance->run_after_full_import();
 
 		$this->maybe_reactivate_plugins();
-		$this->run_woocommerce_maintenance();
+		$maintenance->run_woocommerce_maintenance();
 
 		/**
 		 * Fires after a successful full import completes.
@@ -579,25 +616,6 @@ class FullSiteImportService {
 		}
 
 		return false;
-	}
-
-	/**
-	 * Run WooCommerce maintenance tasks if available.
-	 *
-	 * @return void
-	 * @since 2.1.0
-	 */
-	private function run_woocommerce_maintenance(): void {
-		if ( function_exists( 'wc_delete_product_transients' ) ) {
-			wc_delete_product_transients();
-		}
-		if ( class_exists( '\WC_Install' ) ) {
-			\WC_Install::check_version();
-			\WC_Install::update_db_version();
-		}
-		if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
-			wc_update_product_lookup_tables();
-		}
 	}
 
 	/**
