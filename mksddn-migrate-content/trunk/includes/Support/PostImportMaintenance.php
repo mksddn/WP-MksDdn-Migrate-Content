@@ -64,17 +64,23 @@ class PostImportMaintenance {
 	/**
 	 * Invalidate WordPress object cache (persistent drop-ins included when supported).
 	 *
+	 * Calls `wp_cache_flush()` first, then flushes critical cache groups when the drop-in
+	 * supports `flush_group` (WordPress 6.1+). Some persistent backends omit invalidation on
+	 * direct TRUNCATE/INSERT; bumping posts/terms last_changed and clearing `post-queries`
+	 * reduces stale WP_Query caches in admin screens.
+	 *
 	 * @return void
 	 */
 	public function purge_object_cache(): void {
-		$flush_ok = null;
 		if ( function_exists( 'wp_cache_flush' ) ) {
 			$flush_ok = wp_cache_flush();
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && false === $flush_ok ) {
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				error_log( 'MksDdn Migrate: wp_cache_flush() returned false.' );
+				error_log( 'MksDdn Migrate: wp_cache_flush() returned false after full import maintenance.' );
 			}
 		}
+
+		$this->flush_critical_object_cache_groups();
 
 		if ( function_exists( 'wp_cache_delete' ) ) {
 			wp_cache_delete( 'alloptions', 'options' );
@@ -88,6 +94,10 @@ class PostImportMaintenance {
 			wp_cache_set_terms_last_changed();
 		}
 
+		if ( function_exists( 'wp_cache_set_comments_last_changed' ) ) {
+			wp_cache_set_comments_last_changed();
+		}
+
 		/**
 		 * Fires after object cache purge during post-import maintenance.
 		 *
@@ -96,6 +106,83 @@ class PostImportMaintenance {
 		 * @param string $context Maintenance context.
 		 */
 		do_action( 'mksddn_mc_post_import_object_cache_purged', $this->context );
+	}
+
+	/**
+	 * Best-effort per-group flush when supported (fallback if global flush is ineffective).
+	 *
+	 * @return void
+	 */
+	private function flush_critical_object_cache_groups(): void {
+		if ( ! function_exists( 'wp_cache_flush_group' ) ) {
+			$this->log_object_cache_diagnostic(
+				'wp_cache_flush_group() not available; using global wp_cache_flush() and last_changed only.'
+			);
+			return;
+		}
+
+		if ( function_exists( 'wp_cache_supports' ) && ! wp_cache_supports( 'flush_group' ) ) {
+			$this->log_object_cache_diagnostic(
+				'Object cache does not support flush_group; ensure drop-in clears cache after DB restore or flush Redis/Memcached manually.'
+			);
+			return;
+		}
+
+		$groups = array(
+			'posts',
+			'post-queries',
+			'post_meta',
+			'terms',
+			'term-queries',
+			'term_meta',
+			'options',
+			'users',
+			'user_meta',
+			'comment-queries',
+			'comment',
+			'counts',
+		);
+
+		/**
+		 * Filter cache groups flushed after full import object cache purge.
+		 *
+		 * Use to add multisite/global groups or hosting-specific keys.
+		 *
+		 * @since 2.3.1
+		 *
+		 * @param string[] $groups  Group names passed to wp_cache_flush_group().
+		 * @param string   $context Maintenance context (e.g. full_success).
+		 */
+		$groups = apply_filters( 'mksddn_mc_post_import_object_cache_flush_groups', $groups, $this->context );
+
+		if ( ! is_array( $groups ) ) {
+			return;
+		}
+
+		foreach ( array_unique( array_filter( array_map( 'strval', $groups ) ) ) as $group ) {
+			$group = sanitize_key( $group );
+			if ( '' === $group ) {
+				continue;
+			}
+
+			$ok = wp_cache_flush_group( $group );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && false === $ok ) {
+				$this->log_object_cache_diagnostic( sprintf( 'wp_cache_flush_group( %s ) returned false.', $group ) );
+			}
+		}
+	}
+
+	/**
+	 * Emit a single WP_DEBUG diagnostic for object-cache behavior.
+	 *
+	 * @param string $message Human-readable explanation.
+	 * @return void
+	 */
+	private function log_object_cache_diagnostic( string $message ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'MksDdn Migrate [object cache]: ' . $message );
+		}
 	}
 
 	/**
