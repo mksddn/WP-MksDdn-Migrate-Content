@@ -66,7 +66,7 @@ class FullContentExporter {
 				$this->discard_archive( $target_path );
 				return new WP_Error(
 					'mksddn_zip_open',
-					__( 'Unable to create archive for full export. Check that the server temp directory is writable and has free disk space.', 'mksddn-migrate-content' ),
+					__( 'Unable to create archive for full export.', 'mksddn-migrate-content' ),
 					array( 'hint' => $this->get_disk_hint_message() )
 				);
 			}
@@ -92,7 +92,7 @@ class FullContentExporter {
 				$this->discard_archive( $target_path );
 				return new WP_Error(
 					'mksddn_mc_full_export_payload',
-					__( 'Failed to encode full-site payload. The database may be too large for this export method — try increasing PHP memory_limit or use a host-level backup.', 'mksddn-migrate-content' ),
+					__( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ),
 					array( 'hint' => $this->get_memory_hint_message() )
 				);
 			}
@@ -112,12 +112,23 @@ class FullContentExporter {
 				$this->discard_archive( $target_path );
 				return new WP_Error(
 					'mksddn_zip_add_payload',
-					__( 'Could not write database payload into the export archive. The dump may exceed available memory or disk space.', 'mksddn-migrate-content' ),
+					__( 'Could not write database payload into the export archive.', 'mksddn-migrate-content' ),
 					array( 'hint' => $this->get_disk_memory_hint() )
 				);
 			}
 
-			$this->append_wp_content( $zip, 'files' );
+			$content_result = $this->append_wp_content( $zip, 'files' );
+			if ( is_wp_error( $content_result ) ) {
+				$zip->close();
+				$this->discard_archive( $target_path );
+				$content_result->add_data(
+					array(
+						'status' => 500,
+						'hint'   => $this->get_source_file_hint_message(),
+					)
+				);
+				return $content_result;
+			}
 
 			if ( ! $zip->close() ) {
 				$this->discard_archive( $target_path );
@@ -133,7 +144,6 @@ class FullContentExporter {
 						$status
 					);
 				}
-				$message .= ' ' . $this->get_disk_hint_message();
 
 				return new WP_Error(
 					'mksddn_zip_close',
@@ -158,7 +168,7 @@ class FullContentExporter {
 				$this->discard_archive( $target_path );
 				return new WP_Error(
 					'mksddn_zip_empty',
-					__( 'Export file is empty after writing. This often means the disk or hosting quota is full, or the temp directory is not writable.', 'mksddn-migrate-content' ),
+					__( 'Export file is empty after writing.', 'mksddn-migrate-content' ),
 					array( 'hint' => $this->get_disk_hint_message() )
 				);
 			}
@@ -188,6 +198,15 @@ class FullContentExporter {
 	}
 
 	/**
+	 * Short hint for source file access issues (translated).
+	 *
+	 * @return string
+	 */
+	private function get_source_file_hint_message(): string {
+		return __( 'Check file permissions and make sure files are not being changed while the export is running.', 'mksddn-migrate-content' );
+	}
+
+	/**
 	 * Combined disk + memory hint.
 	 *
 	 * @return string
@@ -212,9 +231,10 @@ class FullContentExporter {
 	 *
 	 * @param ZipArchive $zip         Archive instance.
 	 * @param string     $base_prefix Base directory inside archive.
+	 * @return array<string,int>|WP_Error Archive write stats or error.
 	 */
-	private function append_wp_content( ZipArchive $zip, string $base_prefix = '' ): void {
-		$this->collector->append_directories( $zip, $this->get_wp_content_paths( $base_prefix ) );
+	private function append_wp_content( ZipArchive $zip, string $base_prefix = '' ): array|WP_Error {
+		return $this->collector->append_directories( $zip, $this->get_wp_content_paths( $base_prefix ) );
 	}
 
 	/**
