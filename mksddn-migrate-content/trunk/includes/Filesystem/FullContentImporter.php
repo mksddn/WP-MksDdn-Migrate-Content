@@ -27,6 +27,7 @@ class FullContentImporter {
 
 	private FullDatabaseImporter $db_importer;
 	private bool $database_imported = false;
+	private bool $merge_touched_database = false;
 	private array $user_merge_summary = array();
 
 	/**
@@ -139,6 +140,8 @@ class FullContentImporter {
 	 * @since 1.0.0
 	 */
 	private function perform_import( string $archive_path, ?SiteUrlGuard $url_guard = null, array $options = array() ) {
+		$this->database_imported      = false;
+		$this->merge_touched_database = false;
 		$this->log( sprintf( 'import_from() called with archive_path: %s', $archive_path ) );
 		$this->log( sprintf( 'Options: %s', wp_json_encode( $options ) ) );
 
@@ -204,6 +207,15 @@ class FullContentImporter {
 	 */
 	public function get_user_merge_summary(): array {
 		return $this->user_merge_summary;
+	}
+
+	/**
+	 * Whether database rows were modified during this import run (main import or user merge).
+	 *
+	 * @return bool
+	 */
+	public function was_database_mutated(): bool {
+		return $this->db_importer->was_database_mutated() || $this->merge_touched_database;
 	}
 
 	private function is_allowed_path( string $path, array $allowed ): bool {
@@ -508,6 +520,7 @@ class FullContentImporter {
 
 		// Only merge users if we actually extracted them (has_selected_users was true).
 		if ( $needs_merge && isset( $user_applier ) && $merge_enabled && ! empty( $remote_snapshot['users'] ) ) {
+			$this->merge_touched_database = true;
 			$merge_result = $user_applier->merge( $remote_snapshot['users'], $merge_plan, $remote_snapshot['prefix'] ?? '' );
 			unset( $remote_snapshot, $user_applier ); // Free snapshot data and user applier.
 			if ( is_wp_error( $merge_result ) ) {

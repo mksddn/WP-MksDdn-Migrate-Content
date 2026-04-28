@@ -8,6 +8,10 @@
  *
  * Usage:
  *   php tools/make-pot.php [sourceDir] [outputFile] [textDomain]
+ *
+ * Compiling .mo: always pass an explicit output path, e.g.:
+ *   msgfmt -o languages/mksddn-migrate-content-ru_RU.mo languages/mksddn-migrate-content-ru_RU.po
+ * Never run bare `msgfmt` — it writes junk `messages.mo` in the current directory.
  */
 
 namespace MksDdn\MigrateContent\Tools;

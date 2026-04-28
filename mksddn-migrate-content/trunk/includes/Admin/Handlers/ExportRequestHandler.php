@@ -96,7 +96,7 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 		$result   = $exporter->export_to( $temp );
 
 		if ( is_wp_error( $result ) ) {
-			wp_die( esc_html( $result->get_error_message() ) );
+			$this->wp_die_export_error( $result );
 		}
 
 		$filename = FilenameBuilder::build( 'full-site', 'wpbkp' );
@@ -134,7 +134,7 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 		$result   = $exporter->export_themes( $selected_themes, $temp );
 
 		if ( is_wp_error( $result ) ) {
-			wp_die( esc_html( $result->get_error_message() ) );
+			$this->wp_die_export_error( $result );
 		}
 
 		$filename = FilenameBuilder::build( 'themes', 'wpbkp' );
@@ -155,11 +155,30 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 			wp_die( esc_html__( 'Export file not found.', 'mksddn-migrate-content' ) );
 		}
 
+		if ( ! is_readable( $path ) ) {
+			if ( $delete_after && file_exists( $path ) ) {
+				FilesystemHelper::delete( $path );
+			}
+			wp_die( esc_html__( 'Export file exists but is not readable.', 'mksddn-migrate-content' ) );
+		}
+
+		$filesize = filesize( $path );
+		if ( false === $filesize || $filesize <= 0 ) {
+			if ( $delete_after && file_exists( $path ) ) {
+				FilesystemHelper::delete( $path );
+			}
+			wp_die(
+				esc_html__(
+					'Export file is empty or could not be measured. Check free disk space, hosting quota, and PHP temp directory.',
+					'mksddn-migrate-content'
+				)
+			);
+		}
+
 		while ( ob_get_level() ) {
 			ob_end_clean();
 		}
 
-		$filesize = filesize( $path );
 		nocache_headers();
 		header( 'Content-Type: application/octet-stream' );
 		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
@@ -177,6 +196,21 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 			FilesystemHelper::delete( $path );
 		}
 		exit;
+	}
+
+	/**
+	 * Exit with a full error message and optional data hint.
+	 *
+	 * @param WP_Error $error Export error.
+	 */
+	private function wp_die_export_error( WP_Error $error ): void {
+		$message = $error->get_error_message();
+		$data    = $error->get_error_data();
+		if ( is_array( $data ) && isset( $data['hint'] ) && is_string( $data['hint'] ) && '' !== $data['hint'] ) {
+			$message .= ' ' . $data['hint'];
+		}
+
+		wp_die( esc_html( $message ) );
 	}
 
 	/**

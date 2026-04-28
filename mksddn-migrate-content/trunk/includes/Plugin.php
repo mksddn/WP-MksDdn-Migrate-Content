@@ -10,6 +10,7 @@ namespace MksDdn\MigrateContent;
 use MksDdn\MigrateContent\Admin\AdminPageController;
 use MksDdn\MigrateContent\Chunking\ChunkRestController;
 use MksDdn\MigrateContent\Core\ServiceContainerFactory;
+use MksDdn\MigrateContent\Support\FullImportMaintenance;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -44,6 +45,7 @@ class Plugin {
 	 * @since 1.0.0
 	 */
 	public function register(): void {
+		add_action( 'init', array( FullImportMaintenance::class, 'maybe_block_public_requests' ), 0 );
 		add_action( 'init', array( $this, 'boot' ) );
 	}
 

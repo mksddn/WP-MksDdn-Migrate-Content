@@ -1,4 +1,4 @@
-# WordPress плагин - MksDdn Forms Handler
+# WordPress плагин - MksDdn Migrate Content
 # Исключения для GitHub репозитория
 
 # Системные файлы
@@ -37,6 +37,9 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
+# gettext — default output of `msgfmt` without `-o` (not used; plugin uses trunk/languages/mksddn-migrate-content-*.mo)
+messages.mo
+
 # PHP
 # vendor/
 composer.lock
@@ -56,10 +59,10 @@ wp-content/wp-cache-config.php
 
 # Плагин специфичные
 # Исключаем файлы разработки, но оставляем структуру плагина
-mksddn-forms-handler/tests/coverage/
-mksddn-forms-handler/tests/reports/
-mksddn-forms-handler/assets/build/
-mksddn-forms-handler/assets/dist/
+mksddn-migrate-content/tests/coverage/
+mksddn-migrate-content/tests/reports/
+mksddn-migrate-content/assets/build/
+mksddn-migrate-content/assets/dist/
 
 # Конфигурационные файлы с секретами
 *.env
@@ -69,8 +72,8 @@ mksddn-forms-handler/assets/dist/
 .env.production.local
 
 # Временные файлы плагина
-mksddn-forms-handler/temp/
-mksddn-forms-handler/cache/
+mksddn-migrate-content/temp/
+mksddn-migrate-content/cache/
 
 # Файлы сборки (если используются)
 *.zip

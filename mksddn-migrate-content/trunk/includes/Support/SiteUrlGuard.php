@@ -34,11 +34,7 @@ class SiteUrlGuard {
 	public function restore(): void {
 		$this->apply_value( 'siteurl', $this->siteurl );
 		$this->apply_value( 'home', $this->home );
-		$this->maybe_cleanup_cache();
-
-		if ( function_exists( 'wp_cache_flush' ) ) {
-			wp_cache_flush();
-		}
+		( new PostImportMaintenance() )->purge_rewrite_and_runtime_state();
 	}
 
 	private function apply_value( string $option, string $original ): void {
@@ -84,10 +80,6 @@ class SiteUrlGuard {
 		$path      = $path ? '/' . trim( $path, '/' ) : '';
 
 		return rtrim( sprintf( '%s://%s%s', $scheme, $host, $path ), '/' );
-	}
-
-	private function maybe_cleanup_cache(): void {
-		delete_option( 'rewrite_rules' );
 	}
 }
 

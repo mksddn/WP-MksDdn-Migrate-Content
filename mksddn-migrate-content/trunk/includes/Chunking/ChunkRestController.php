@@ -176,13 +176,19 @@ class ChunkRestController {
 
 		if ( is_wp_error( $result ) ) {
 			$job->delete();
-			return $result;
+			return $this->prepare_export_rest_error( $result );
 		}
 
 		$size = filesize( $file );
 		if ( false === $size || 0 === $size ) {
 			$job->delete();
-			return new WP_Error( 'mksddn_chunk_size', __( 'Export file is empty or cannot be read.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
+			return new WP_Error(
+				'mksddn_chunk_size',
+				__( 'Export file is empty or cannot be read.', 'mksddn-migrate-content' )
+				. ' '
+				. __( 'Check free disk space, hosting quota, and PHP temp directory (sys_temp_dir / upload_tmp_dir).', 'mksddn-migrate-content' ),
+				array( 'status' => 500 )
+			);
 		}
 
 		$total_chunks = (int) max( 1, ceil( $size / $this->chunk_size ) );
@@ -267,6 +273,34 @@ class ChunkRestController {
 
 		$job = $this->repository->get( $job_id );
 		return $job->get_data();
+	}
+
+	/**
+	 * Ensure REST error responses include HTTP status and full user-facing message (with hint).
+	 *
+	 * @param WP_Error $error Export error from FullContentExporter or related.
+	 * @return WP_Error
+	 */
+	private function prepare_export_rest_error( WP_Error $error ): WP_Error {
+		$code    = $error->get_error_code();
+		$message = $error->get_error_message();
+		$data    = $error->get_error_data();
+
+		if ( ! is_array( $data ) ) {
+			$data = array();
+		}
+
+		if ( ! isset( $data['status'] ) || ! is_numeric( $data['status'] ) ) {
+			$data['status'] = 500;
+		} else {
+			$data['status'] = (int) $data['status'];
+		}
+
+		if ( ! empty( $data['hint'] ) && is_string( $data['hint'] ) ) {
+			$message .= ' ' . $data['hint'];
+		}
+
+		return new WP_Error( $code, $message, $data );
 	}
 
 }

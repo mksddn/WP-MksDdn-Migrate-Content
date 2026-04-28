@@ -24,6 +24,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullDatabaseImporter {
 
 	/**
+	 * True after first successful TRUNCATE or INSERT batch in the current import() run.
+	 *
+	 * @var bool
+	 */
+	private bool $database_mutated = false;
+
+	/**
 	 * Apply dump onto current database.
 	 *
 	 * @param array<string, mixed> $dump Database dump array with tables data.
@@ -31,6 +38,8 @@ class FullDatabaseImporter {
 	 * @since 1.0.0
 	 */
 	public function import( array $dump ) {
+		$this->database_mutated = false;
+
 		if ( empty( $dump['tables'] ) || ! is_array( $dump['tables'] ) ) {
 			return new WP_Error( 'mksddn_db_empty', __( 'Database dump is empty or invalid.', 'mksddn-migrate-content' ) );
 		}
@@ -148,6 +157,7 @@ class FullDatabaseImporter {
 					/* translators: %s: database table name. */
 					return new WP_Error( 'mksddn_db_truncate_failed', sprintf( __( 'Unable to truncate table %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
 				}
+				$this->mark_database_mutated();
 			} else {
 				$this->log( sprintf( 'Skipping truncation of protected table: %s (preserving current users)', $table_name ) );
 			}
@@ -233,6 +243,7 @@ class FullDatabaseImporter {
 						/* translators: %s: database table name. */
 						return new WP_Error( 'mksddn_db_insert_failed', sprintf( __( 'Failed to insert rows into %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
 					}
+					$this->mark_database_mutated();
 				}
 				unset( $batch_rows );
 
@@ -331,6 +342,24 @@ class FullDatabaseImporter {
 		} finally {
 			$this->restore_cache_behavior();
 		}
+	}
+
+	/**
+	 * Whether the last import() started mutating table data (TRUNCATE or INSERT).
+	 *
+	 * @return bool
+	 */
+	public function was_database_mutated(): bool {
+		return $this->database_mutated;
+	}
+
+	/**
+	 * Mark that database content was modified.
+	 *
+	 * @return void
+	 */
+	private function mark_database_mutated(): void {
+		$this->database_mutated = true;
 	}
 
 	/**

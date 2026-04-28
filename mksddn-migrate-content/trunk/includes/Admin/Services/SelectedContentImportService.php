@@ -268,6 +268,8 @@ class SelectedContentImportService {
 			$import_result = $this->process_import( $import_handler, $payload_type, $payload );
 
 			if ( $import_result ) {
+				$import_handler->purge_selected_import_caches();
+
 				// Get import details for redirect.
 				// For bundle, don't pass slug/title as it contains multiple items.
 				if ( 'bundle' === $payload_type ) {
@@ -318,7 +320,7 @@ class SelectedContentImportService {
 			return $import_handler->import_bundle( $data );
 		}
 
-		return $import_handler->import_single_page( $data );
+		return false !== $import_handler->import_single_page( $data );
 	}
 }
 

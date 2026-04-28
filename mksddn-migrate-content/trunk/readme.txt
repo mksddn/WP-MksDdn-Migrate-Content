@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.2.1
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,7 +56,13 @@ The JS client splits files into 5–10 MB chunks (auto-tuned by server limits)
 You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = What is cleaned up when the plugin is deactivated? =
-Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
+Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
+
+= How are caches and maintenance mode handled during import? =
+Full-site import calls `wp_cache_flush()`, then clears core query-related object-cache groups (`posts`, `post-queries`, and related groups) via `wp_cache_flush_group()` when the drop-in reports support (`wp_cache_supports('flush_group')`; WordPress 6.1+). It also bumps posts/terms/comments `last_changed` where available and deletes cached `alloptions` / `notoptions` keys—this reduces stale cached post lists after raw `TRUNCATE`/`INSERT` restores when a persistent Redis/Memcached drop-in behaves imperfectly on global flush. Use the `mksddn_mc_post_import_object_cache_flush_groups` filter (see `Support\PostImportMaintenance`) if your hosting uses extra cache groups or multisite/global keys. Rewrite rule runtime state is cleared, then common page/HTML cache plugins are purged best-effort (WP Rocket, LiteSpeed via hook, W3 Total Cache, WP Super Cache, Autoptimize). Edge CDN or host HTML caches are not purged automatically: hook `mksddn_mc_post_import_cache_purge` (and related actions in code) to integrate your stack. While a full-site import holds the import lock, public front-end and REST requests may receive HTTP 503. The plugin writes both a runtime lock outside the database and WordPress core `.maintenance` file, so parallel requests are blocked even if `wp_options` is being replaced. WP-CLI, cron, and logged-in administrators with `manage_options` are not blocked by the plugin-level gate. If the PHP process fatals after the database was partially written, an emergency cache purge runs on shutdown when possible. Selected content import avoids a global flush and only runs `clean_post_cache()` on posts that were imported or updated, then fires `mksddn_mc_selected_import_completed` with their IDs.
+
+= How can I verify object cache handling after a full-site import? =
+On a staging copy with `WP_DEBUG` and `WP_DEBUG_LOG` enabled, run a full-site import and confirm the log does not show repeated `MksDdn Migrate [object cache]: wp_cache_flush_group(` failures. Then open admin list tables for custom post types (e.g. form submissions) and front-end forms: rows should load without PHP errors, and new submissions should save normally. On production with Redis/Memcached, you can also compare behaviour before/after a manual object-cache flush from your cache plugin—if symptoms only clear after manual flush, use the filter above or contact the host about drop-in flush support.
 
 = Can I merge users without overwriting existing accounts? =
 Yes. The user merge dialog shows archive/current rows with conflict indicators. You can keep current roles, replace metadata, or skip entire accounts.
@@ -110,6 +116,8 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `UserMergeApplier` - applies user merge operations
 * `ThemePreviewStore` - stores pending theme import previews
 * `DeactivationCleanup` - clears temporary upload state and service directories when the plugin is deactivated
+* `PostImportMaintenance` - centralizes cache/rewrite cleanup after full import and emergency purge if the database was partially updated; performs global flush plus targeted `wp_cache_flush_group()` when supported, bumps posts/terms/comments last_changed hooks, exposes `mksddn_mc_post_import_object_cache_flush_groups` filter, integrates page-cache plugins via best-effort function calls and hooks
+* `FullImportMaintenance` - file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
 
 = Contracts (Interfaces) =
 All key components implement interfaces:
@@ -148,6 +156,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.3.0 =
+* Enhanced: Export flow now has stricter payload checks, clearer validation errors, and safer type handling to make large exports more predictable.
+* Added: Full-site import maintenance now applies a stronger runtime lock/503 gate and expanded post-import cache cleanup hooks for common cache stacks.
+* Improved: Export file-system checks now validate directory writability more reliably before writing artifacts.
 
 = 2.2.1 =
 * Fixed: Admin redirects after import — `NotificationService::safe_redirect_exit()` validates URLs like `wp_safe_redirect()` but skips the `wp_redirect` filter to avoid Query Monitor fatals when its hook collector runs during redirects after a full database import.

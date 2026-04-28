@@ -55,6 +55,13 @@ class ImportHandler implements ImporterInterface {
 	private $media_file_loader = null;
 
 	/**
+	 * Post IDs imported or updated in the current request (for selected import cache flush).
+	 *
+	 * @var int[]
+	 */
+	private array $imported_post_ids = array();
+
+	/**
 	 * Constructor.
 	 *
 	 * @param AttachmentRestorer|null            $media_restorer   Optional media restorer.
@@ -94,6 +101,8 @@ class ImportHandler implements ImporterInterface {
 	 * @since 1.0.0
 	 */
 	public function import_bundle( array $data ): bool {
+		$this->imported_post_ids = array();
+
 		$items = isset( $data['items'] ) && is_array( $data['items'] ) ? $data['items'] : array();
 
 		// Sort items to import parent pages before child pages.
@@ -106,7 +115,7 @@ class ImportHandler implements ImporterInterface {
 				continue;
 			}
 
-			if ( ! $this->import_single_page( $item, $post_id_map ) ) {
+			if ( false === $this->import_single_page( $item, $post_id_map ) ) {
 				return false;
 			}
 		}
@@ -211,10 +220,10 @@ class ImportHandler implements ImporterInterface {
 	 *
 	 * @param array      $data           Data array containing page information.
 	 * @param array|null $post_id_map    Optional. When provided, maps source post ID (payload `ID`) to imported post ID for bundle remapping (e.g. Polylang).
-	 * @return bool True on success, false on failure.
+	 * @return int|false Post ID on success, false on failure.
 	 * @since 1.0.0
 	 */
-	public function import_single_page( array $data, ?array &$post_id_map = null ): bool {
+	public function import_single_page( array $data, ?array &$post_id_map = null ): int|false {
 		if ( ! $this->validate_page_data( $data ) ) {
 			return false;
 		}
@@ -229,8 +238,10 @@ class ImportHandler implements ImporterInterface {
 			return false;
 		}
 
+		$post_id = (int) $post_id;
+
 		// Ensure Polylang language context is set before ACF updates.
-		$this->set_polylang_language_from_payload( (int) $post_id, $data );
+		$this->set_polylang_language_from_payload( $post_id, $data );
 
 		// Assign taxonomies for all post types (including Polylang language taxonomy).
 		$this->assign_taxonomies( $post_id, $data );
@@ -243,10 +254,45 @@ class ImportHandler implements ImporterInterface {
 		$this->import_acf_fields( $data, $post_id, $media_id_map, $url_map, $url_to_new_id );
 
 		if ( null !== $post_id_map && isset( $data['ID'] ) ) {
-			$post_id_map[ (int) $data['ID'] ] = (int) $post_id;
+			$post_id_map[ (int) $data['ID'] ] = $post_id;
 		}
 
-		return true;
+		$this->imported_post_ids[] = $post_id;
+
+		return $post_id;
+	}
+
+	/**
+	 * Flush object cache entries for posts touched during selected import (no global flush).
+	 *
+	 * @return void
+	 */
+	public function purge_selected_import_caches(): void {
+		$ids = array_values( array_unique( array_filter( array_map( 'absint', $this->imported_post_ids ) ) ) );
+		if ( empty( $ids ) ) {
+			return;
+		}
+
+		foreach ( $ids as $post_id ) {
+			if ( $post_id > 0 && function_exists( 'clean_post_cache' ) ) {
+				clean_post_cache( $post_id );
+			}
+		}
+
+		if ( function_exists( 'wp_cache_set_posts_last_changed' ) ) {
+			wp_cache_set_posts_last_changed();
+		}
+
+		/**
+		 * Fires after selected content import flushed per-post caches.
+		 *
+		 * @since 2.2.2
+		 *
+		 * @param int[] $ids Imported or updated post IDs.
+		 */
+		do_action( 'mksddn_mc_selected_import_completed', $ids );
+
+		$this->imported_post_ids = array();
 	}
 
 	/**
