@@ -37,6 +37,9 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
+# gettext — default output of `msgfmt` without `-o` (not used; plugin uses trunk/languages/mksddn-migrate-content-*.mo)
+messages.mo
+
 # PHP
 # vendor/
 composer.lock

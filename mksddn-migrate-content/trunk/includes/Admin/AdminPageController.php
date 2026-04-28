@@ -382,6 +382,12 @@ class AdminPageController {
 						'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
 						'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
 						'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
+						'exportUnknownError' => __( 'Full site export failed.', 'mksddn-migrate-content' ),
+						'exportInvalidResponse' => __( 'The server returned an invalid response during export.', 'mksddn-migrate-content' ),
+						'exportHttpError'  => __( 'Export request failed.', 'mksddn-migrate-content' ),
+						'exportInvalidInit' => __( 'Invalid export response from server.', 'mksddn-migrate-content' ),
+						'exportChunkError' => __( 'Chunk download failed.', 'mksddn-migrate-content' ),
+						'exportInvalidChunk' => __( 'Invalid chunk data from server.', 'mksddn-migrate-content' ),
 					),
 				)
 			);

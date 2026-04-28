@@ -77,6 +77,49 @@
 		return Math.max( min, Math.min( max, value ) );
 	}
 
+	/**
+	 * @param {string} message User-visible message.
+	 * @returns {Error}
+	 */
+	function createExportFailure( message ) {
+		const err = new Error(
+			message ||
+			( settings.i18n && settings.i18n.exportUnknownError ) ||
+			'Export failed.'
+		);
+		err.name = 'MksddnExportFailure';
+		return err;
+	}
+
+	/**
+	 * @param {*} data Parsed JSON body.
+	 * @returns {boolean}
+	 */
+	function isRestErrorPayload( data ) {
+		return Boolean(
+			data &&
+			typeof data === 'object' &&
+			typeof data.code === 'string' &&
+			data.code.length > 0 &&
+			typeof data.message === 'string'
+		);
+	}
+
+	/**
+	 * @param {Response} response Fetch response.
+	 * @returns {Promise<Object>}
+	 */
+	async function parseJsonResponse( response ) {
+		try {
+			return await response.json();
+		} catch ( e ) {
+			throw createExportFailure(
+				( settings.i18n && settings.i18n.exportInvalidResponse ) ||
+					( 'Invalid server response (' + response.status + ').' )
+			);
+		}
+	}
+
 	function formatBytes( bytes ) {
 		if ( bytes >= BYTES_MB ) {
 			return `${ ( bytes / BYTES_MB ).toFixed( 1 ) } MB`;
@@ -139,30 +182,6 @@ function hideProgressLabel( delay = 0 ) {
 	}
 }
 
-	async function initDownloadJob() {
-		const response = await fetch( settings.restUrl + 'chunk/download/init', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'X-WP-Nonce': settings.nonce,
-			},
-			body: JSON.stringify( {} ),
-		} );
-
-		return response.json();
-	}
-
-	async function fetchDownloadChunk( jobId, index ) {
-		const response = await fetch(
-			`${ settings.restUrl }chunk/download?job_id=${ jobId }&index=${ index }`,
-			{
-				headers: { 'X-WP-Nonce': settings.nonce },
-			}
-		);
-
-		return response.json();
-	}
-
 	function base64ToUint8( base64 ) {
 		const binary = atob( base64 );
 		const len = binary.length;
@@ -216,26 +235,73 @@ function hideProgressLabel( delay = 0 ) {
 	}
 
 	async function downloadFullSite() {
+		let jobId = null;
 		try {
 			setProgressLabel( 1, settings.i18n.preparing );
 			setProgressLabel( 5, settings.i18n.exportBusy );
 
-			const init = await initDownloadJob();
-			const jobId = init.job_id;
+			const initResponse = await fetch( settings.restUrl + 'chunk/download/init', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': settings.nonce,
+				},
+				body: JSON.stringify( {} ),
+			} );
+
+			const init = await parseJsonResponse( initResponse );
+
+			if ( ! initResponse.ok || isRestErrorPayload( init ) ) {
+				throw createExportFailure(
+					isRestErrorPayload( init )
+						? init.message
+						: ( ( settings.i18n && settings.i18n.exportHttpError ) || 'Export request failed.' ) +
+								' (' + initResponse.status + ')'
+				);
+			}
+
+			if ( ! init.job_id || ! init.total_chunks ) {
+				throw createExportFailure(
+					( settings.i18n && settings.i18n.exportInvalidInit ) || 'Invalid export response from server.'
+				);
+			}
+
+			jobId = init.job_id;
 			currentJobId = jobId;
 			downloadInProgress = true;
-			const totalChunks = init.total_chunks || 0;
+			const totalChunks = init.total_chunks;
 			const parts = [];
 
 			for ( let i = 0; i < totalChunks; i++ ) {
-				const { chunk } = await fetchDownloadChunk( jobId, i );
-				parts.push( base64ToUint8( chunk ) );
+				const chunkResponse = await fetch(
+					`${ settings.restUrl }chunk/download?job_id=${ encodeURIComponent( jobId ) }&index=${ i }`,
+					{
+						headers: { 'X-WP-Nonce': settings.nonce },
+					}
+				);
+				const payload = await parseJsonResponse( chunkResponse );
 
-					const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
-				setProgressLabel(
-						percent,
-						settings.i18n.downloading.replace( '%d', percent )
+				if ( ! chunkResponse.ok || isRestErrorPayload( payload ) ) {
+					throw createExportFailure(
+						isRestErrorPayload( payload )
+							? payload.message
+							: ( settings.i18n && settings.i18n.exportChunkError ) || 'Chunk download failed.'
 					);
+				}
+
+				if ( typeof payload.chunk !== 'string' ) {
+					throw createExportFailure(
+						( settings.i18n && settings.i18n.exportInvalidChunk ) || 'Invalid chunk data from server.'
+					);
+				}
+
+				parts.push( base64ToUint8( payload.chunk ) );
+
+				const percent = Math.min( 100, Math.round( ( ( i + 1 ) / totalChunks ) * 100 ) );
+				setProgressLabel(
+					percent,
+					settings.i18n.downloading.replace( '%d', percent )
+				);
 			}
 
 			const blob = new Blob( parts, { type: 'application/octet-stream' } );
@@ -253,12 +319,8 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 100, settings.i18n.exportDone );
 			hideProgressLabel( 2000 );
 		} catch ( error ) {
-			console.error( error );
-			alert( settings.i18n.downloadError );
-			setProgressLabel( 0, settings.i18n.downloadError );
-			hideProgressLabel( 2000 );
-			if ( currentJobId ) {
-				cancelChunkJob( currentJobId );
+			if ( jobId ) {
+				cancelChunkJob( jobId );
 			}
 			throw error;
 		} finally {
@@ -351,9 +413,16 @@ function hideProgressLabel( delay = 0 ) {
 			try {
 				await downloadFullSite();
 			} catch ( error ) {
-				setProgressLabel( 0, settings.i18n.exportFallback );
-				form.removeAttribute( 'data-mksddn-full-export' );
-				form.submit();
+				if ( error && error.name === 'MksddnExportFailure' ) {
+					window.alert( error.message );
+					setProgressLabel( 0, error.message );
+					hideProgressLabel( 4000 );
+				} else {
+					console.error( error );
+					setProgressLabel( 0, settings.i18n.exportFallback );
+					form.removeAttribute( 'data-mksddn-full-export' );
+					form.submit();
+				}
 			} finally {
 				if ( button ) {
 					button.disabled = false;
