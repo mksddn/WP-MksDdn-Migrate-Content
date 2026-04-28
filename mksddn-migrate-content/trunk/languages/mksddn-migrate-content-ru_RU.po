@@ -307,12 +307,11 @@ msgstr "Недопустимый тип файла. Загрузите .wpbkp а
 msgid ""
 "Pack the database and wp-content (uploads, plugins, mu-plugins, themes) into a .wpbkp archive. Large sites need free "
 "disk space in the PHP temp directory and may run for several minutes. Chunked download is used when available; direct "
-"download is used only for client or transport fallback, while archive build errors are shown with details."
+"download is used only for client or transport fallback."
 msgstr ""
 "Собирает базу данных и wp-content (uploads, плагины, mu-plugins, темы) в архив .wpbkp. Для крупных сайтов нужно "
 "свободное место во временном каталоге PHP; экспорт может занять несколько минут. Чанковое скачивание используется "
-"при доступности; прямое скачивание включается только при клиентских или транспортных сбоях, а ошибки сборки архива "
-"показываются с деталями."
+"при доступности; прямое скачивание включается только при клиентских или транспортных сбоях."
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:125 includes/Filesystem/ThemeExporter.php:56
 msgid "No themes selected for export."
