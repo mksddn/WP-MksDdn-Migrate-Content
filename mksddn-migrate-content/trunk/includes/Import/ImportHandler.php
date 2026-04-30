@@ -216,9 +216,9 @@ class ImportHandler implements ImporterInterface {
 		return $sorted;
 	}
 	/**
-	 * Imports a single page with ACF fields.
+	 * Imports a single post-like entity with ACF fields.
 	 *
-	 * @param array      $data           Data array containing page information.
+	 * @param array      $data           Data array containing post information.
 	 * @param array|null $post_id_map    Optional. When provided, maps source post ID (payload `ID`) to imported post ID for bundle remapping (e.g. Polylang).
 	 * @return int|false Post ID on success, false on failure.
 	 * @since 1.0.0
@@ -228,7 +228,11 @@ class ImportHandler implements ImporterInterface {
 			return false;
 		}
 
-		$post_type = in_array( $data['type'] ?? 'page', array( 'post', 'page' ), true ) ? $data['type'] : 'page';
+		$post_type = $this->resolve_import_post_type( $data );
+		if ( false === $post_type ) {
+			return false;
+		}
+
 		$existing  = $this->wp_functions->get_page_by_path( $data['slug'], 'OBJECT', $post_type );
 		$post_data = $this->prepare_post_data( $data, $post_type );
 
@@ -485,6 +489,47 @@ class ImportHandler implements ImporterInterface {
 	 */
 	private function validate_page_data( array $data ): bool {
 		return isset( $data['title'], $data['content'], $data['slug'] );
+	}
+
+	/**
+	 * Resolve post type from export payload (`type` from exporter; `post_type` for compatibility).
+	 *
+	 * @param array $data Item payload.
+	 * @return string|false Registered post type, or false if type is blocked or missing on site.
+	 */
+	private function resolve_import_post_type( array $data ): string|false {
+		$raw = $data['type'] ?? $data['post_type'] ?? '';
+		$post_type = '';
+		if ( is_scalar( $raw ) ) {
+			$post_type = \sanitize_key( (string) $raw );
+		}
+
+		if ( '' === $post_type ) {
+			$post_type = 'page';
+		}
+
+		$disallowed = array(
+			'attachment',
+			'revision',
+			'nav_menu_item',
+			'custom_css',
+			'customize_changeset',
+			'oembed_cache',
+			'user_request',
+			'wp_navigation',
+			'wp_font_family',
+			'wp_font_face',
+		);
+
+		if ( in_array( $post_type, $disallowed, true ) ) {
+			return false;
+		}
+
+		if ( ! \post_type_exists( $post_type ) ) {
+			return false;
+		}
+
+		return $post_type;
 	}
 
 	/**
