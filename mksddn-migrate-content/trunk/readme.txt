@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 2.3.0
+Stable tag: 2.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -156,6 +156,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.3.1 =
+* Fixed: Selected content import now preserves registered custom post types instead of falling back to pages.
 
 = 2.3.0 =
 * Enhanced: Export flow now has stricter payload checks, clearer validation errors, and safer type handling to make large exports more predictable.
