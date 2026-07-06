@@ -177,6 +177,13 @@
 	margin-top: 1rem;
 }
 
+.mksddn-mc-user-table th.check-column,
+.mksddn-mc-user-table td.check-column {
+	width: 2.2em;
+	text-align: center;
+	vertical-align: middle;
+}
+
 .mksddn-mc-user-table td select {
 	width: 100%;
 }

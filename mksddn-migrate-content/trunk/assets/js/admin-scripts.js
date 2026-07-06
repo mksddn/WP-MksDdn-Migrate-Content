@@ -253,10 +253,45 @@
 		});
 	}
 
+	/**
+	 * Toggle all user import checkboxes on the full-site import review step.
+	 */
+	function initUserPlanToggle() {
+		const toggleAll = document.querySelector('.mksddn-mc-user-import-toggle-all');
+		const checkboxes = document.querySelectorAll('.mksddn-mc-user-import-checkbox');
+
+		if (!toggleAll || checkboxes.length === 0) {
+			return;
+		}
+
+		function syncToggleAllState() {
+			const checkedCount = Array.from(checkboxes).filter(function(checkbox) {
+				return checkbox.checked;
+			}).length;
+
+			toggleAll.checked = checkedCount === checkboxes.length;
+			toggleAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+		}
+
+		toggleAll.addEventListener('change', function() {
+			checkboxes.forEach(function(checkbox) {
+				checkbox.checked = toggleAll.checked;
+			});
+			toggleAll.indeterminate = false;
+		});
+
+		checkboxes.forEach(function(checkbox) {
+			checkbox.addEventListener('change', syncToggleAllState);
+		});
+
+		syncToggleAllState();
+	}
+
 	// Initialize progress bar and select search when DOM is ready.
 	function init() {
 		window.mksddnMcProgress = initProgressBar();
 		initSelectSearch();
+		initUserPlanToggle();
 	}
 
 	if (document.readyState === 'loading') {

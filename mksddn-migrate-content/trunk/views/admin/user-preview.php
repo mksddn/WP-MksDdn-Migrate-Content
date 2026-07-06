@@ -35,7 +35,10 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 		<table class="widefat striped mksddn-mc-user-table">
 			<thead>
 				<tr>
-					<th><?php esc_html_e( 'Include', 'mksddn-migrate-content' ); ?></th>
+					<th class="check-column">
+						<label class="screen-reader-text" for="mksddn-mc-user-import-toggle-all"><?php esc_html_e( 'Select all users', 'mksddn-migrate-content' ); ?></label>
+						<input type="checkbox" id="mksddn-mc-user-import-toggle-all" class="mksddn-mc-user-import-toggle-all" checked>
+					</th>
 					<th><?php esc_html_e( 'Email', 'mksddn-migrate-content' ); ?></th>
 					<th><?php esc_html_e( 'Archive role', 'mksddn-migrate-content' ); ?></th>
 					<th><?php esc_html_e( 'Current role', 'mksddn-migrate-content' ); ?></th>
@@ -68,7 +71,7 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 					$status_label = 'conflict' === $status ? __( 'Existing user', 'mksddn-migrate-content' ) : __( 'New user', 'mksddn-migrate-content' );
 					?>
 					<tr>
-						<td>
+						<td class="check-column">
 							<input type="hidden" name="user_plan[<?php echo esc_attr( $key ); ?>][email]" value="<?php echo esc_attr( $email ); ?>">
 							<input type="hidden" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="0">
 							<?php
@@ -76,7 +79,7 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 							$label_text = sprintf( esc_html__( 'Include %s', 'mksddn-migrate-content' ), esc_html( $email ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 							?>
 							<label class="screen-reader-text" for="<?php echo esc_attr( $checkbox ); ?>"><?php echo esc_html( $label_text ); ?></label>
-							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
+							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" class="mksddn-mc-user-import-checkbox" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
 						</td>
 						<td><strong><?php echo esc_html( $email ); ?></strong><br><span class="description"><?php echo esc_html( $entry['login'] ?? '' ); ?></span></td>
 						<td><?php echo esc_html( $role ?: '—' ); ?></td>
