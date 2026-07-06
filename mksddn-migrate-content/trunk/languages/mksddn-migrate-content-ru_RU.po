@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: MksDdn Migrate Content\n"
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/issues\n"
 "POT-Creation-Date: 2026-04-28 13:51+0000\n"
-"PO-Revision-Date: 2026-04-28 13:55+0000\n"
+"PO-Revision-Date: 2026-07-06 13:45+0000\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ru_RU\n"
@@ -1106,6 +1106,26 @@ msgstr "Не удалось прочитать исходный файл для 
 #: includes/Admin/AdminPageController.php:364
 msgid "Chunked upload failed. Please try again."
 msgstr "Чанковая загрузка не удалась. Повторите попытку."
+
+#: includes/Admin/AdminPageController.php:365
+msgid "WordPress REST API is not reachable (HTTP 404). Chunked transfers need working permalinks: open Settings → Permalinks and click Save without changes. If the problem remains, ask your host to fix /wp-json/ routing."
+msgstr "WordPress REST API недоступен (HTTP 404). Для чанковой передачи нужны рабочие постоянные ссылки: откройте «Настройки → Постоянные ссылки» и нажмите «Сохранить изменения» без правок. Если ошибка остаётся — попросите хостинг исправить маршрутизацию /wp-json/."
+
+#: includes/Admin/AdminPageController.php:366
+msgid "You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator."
+msgstr "Нет прав на использование REST API миграции. Обновите страницу и повторите попытку под учётной записью администратора."
+
+#: includes/Admin/AdminPageController.php:367
+msgid "The server returned an error during chunked transfer. Check PHP error logs or try again later."
+msgstr "Сервер вернул ошибку при чанковой передаче. Проверьте логи PHP или повторите попытку позже."
+
+#: includes/Admin/AdminPageController.php:368
+msgid "The server returned an unexpected response during chunked transfer."
+msgstr "Сервер вернул неожиданный ответ при чанковой передаче."
+
+#: includes/Admin/AdminPageController.php:369
+msgid "Invalid response when starting chunked upload."
+msgstr "Некорректный ответ при запуске чанковой загрузки."
 
 #: includes/Archive/Packer.php:49
 msgid "Failed to encode payload for export."

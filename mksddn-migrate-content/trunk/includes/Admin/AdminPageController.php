@@ -362,6 +362,11 @@ class AdminPageController {
 						/* translators: %d: upload progress percent. */
 						'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
 						'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
+						'restNotFound'       => __( 'WordPress REST API is not reachable (HTTP 404). Chunked transfers need working permalinks: open Settings → Permalinks and click Save without changes. If the problem remains, ask your host to fix /wp-json/ routing.', 'mksddn-migrate-content' ),
+						'restForbidden'      => __( 'You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator.', 'mksddn-migrate-content' ),
+						'restServerError'    => __( 'The server returned an error during chunked transfer. Check PHP error logs or try again later.', 'mksddn-migrate-content' ),
+						'restInvalidResponse' => __( 'The server returned an unexpected response during chunked transfer.', 'mksddn-migrate-content' ),
+						'restInvalidInit'    => __( 'Invalid response when starting chunked upload.', 'mksddn-migrate-content' ),
 						/* translators: 1: selected label, 2: chunk size label. */
 						'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
 						/* translators: %d: upload progress percent. */
