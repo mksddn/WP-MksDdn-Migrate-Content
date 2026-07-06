@@ -12,6 +12,7 @@ use MksDdn\MigrateContent\Database\FullDatabaseImporter;
 use MksDdn\MigrateContent\Support\DomainReplacer;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Users\UserMergeApplier;
 use WP_Error;
 use ZipArchive;
@@ -824,16 +825,14 @@ class FullContentImporter {
 	}
 
 	/**
-	 * Log message if WP_DEBUG is enabled.
+	 * Log message via centralized plugin logger.
 	 *
 	 * @param string $message Message to log.
 	 * @return void
 	 * @since 1.0.0
 	 */
 	private function log( string $message ): void {
-		// Always log to help debug import issues.
-		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
-		error_log( 'MksDdn Migrate: ' . $message );
+		PluginLogger::log( $message, 'FullContentImporter' );
 	}
 
 	/**

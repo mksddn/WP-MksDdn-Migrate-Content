@@ -62,9 +62,10 @@ register_activation_hook(
 			$result = \MksDdn\MigrateContent\Config\PluginConfig::create_required_directories();
 			if ( is_wp_error( $result ) ) {
 				// Log error but don't prevent activation.
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( 'MksDdn Migrate Content activation error: ' . $result->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				}
+				\MksDdn\MigrateContent\Services\PluginLogger::log(
+					'Activation error: ' . $result->get_error_message(),
+					'activation'
+				);
 			}
 		}
 	}

@@ -9,6 +9,7 @@ namespace MksDdn\MigrateContent\Chunking;
 
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -24,9 +25,10 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 		$this->storage_dir = $dirs['jobs'];
 
 		if ( ! is_dir( $this->storage_dir ) && ! wp_mkdir_p( $this->storage_dir ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( 'MksDdn Migrate Content: Failed to create directory: %s', $this->storage_dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			}
+			PluginLogger::log(
+				sprintf( 'Failed to create directory: %s', $this->storage_dir ),
+				'ChunkJobRepository'
+			);
 		}
 
 		$this->cleanup_expired();

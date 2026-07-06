@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Config;
 
+use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -185,6 +186,16 @@ class PluginConfig {
 		return trailingslashit( $base ) . 'mksddn-mc/';
 	}
 
+	/**
+	 * Get logs directory path for plugin diagnostics.
+	 *
+	 * @return string Logs directory path.
+	 * @since 2.3.2
+	 */
+	public static function logs_dir(): string {
+		return trailingslashit( self::uploads_base_dir() ) . 'logs/';
+	}
+
 	// ==========================================================================
 	// Import Memory/Size Limits
 	// ==========================================================================
@@ -276,9 +287,10 @@ class PluginConfig {
 		$base = self::uploads_base_dir();
 
 		return array(
-			'base'       => $base,
-			'jobs'       => $base . 'jobs/',
-			'imports'    => $base . 'imports/',
+			'base'    => $base,
+			'jobs'    => $base . 'jobs/',
+			'imports' => $base . 'imports/',
+			'logs'    => $base . 'logs/',
 		);
 	}
 
@@ -296,9 +308,10 @@ class PluginConfig {
 			if ( ! is_dir( $dir ) ) {
 				if ( ! wp_mkdir_p( $dir ) ) {
 					$failed[ $key ] = $dir;
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						error_log( sprintf( 'MksDdn Migrate Content: Failed to create directory: %s', $dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-					}
+					PluginLogger::log(
+						sprintf( 'Failed to create directory: %s', $dir ),
+						'PluginConfig'
+					);
 				}
 			}
 		}

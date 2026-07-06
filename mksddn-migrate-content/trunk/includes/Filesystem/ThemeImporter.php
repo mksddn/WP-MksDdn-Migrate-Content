@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Filesystem;
 
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 use ZipArchive;
 
@@ -52,16 +53,13 @@ class ThemeImporter {
 	}
 
 	/**
-	 * Log debug message if WP_DEBUG is enabled.
+	 * Log message via centralized plugin logger.
 	 *
 	 * @param string $message Debug message.
 	 * @return void
 	 */
 	private function log_debug( string $message ): void {
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging only when WP_DEBUG is enabled
-			error_log( sprintf( '[MksDdn MC] %s', $message ) );
-		}
+		PluginLogger::log( $message, 'ThemeImporter' );
 	}
 
 	/**

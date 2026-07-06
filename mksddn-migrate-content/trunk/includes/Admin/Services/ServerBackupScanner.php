@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Config\PluginConfig;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -105,9 +106,10 @@ class ServerBackupScanner {
 
 		if ( false === $items ) {
 			$error_message = __( 'Failed to scan imports directory.', 'mksddn-migrate-content' );
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( 'MksDdn Migrate Content: %s (Directory: %s)', $error_message, $imports_dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			}
+			PluginLogger::log(
+				sprintf( '%s (Directory: %s)', $error_message, $imports_dir ),
+				'ServerBackupScanner'
+			);
 			return new WP_Error(
 				'mksddn_mc_imports_scan_failed',
 				$error_message
@@ -176,9 +178,10 @@ class ServerBackupScanner {
 		$imports_dir = PluginConfig::imports_dir();
 
 		// Debug logging for troubleshooting.
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( 'MksDdn Migrate Content: get_file() called with filename: %s', $filename ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		}
+		PluginLogger::log(
+			sprintf( 'get_file() called with filename: %s', $filename ),
+			'ServerBackupScanner'
+		);
 
 		// Ensure directory exists, create if needed.
 		$ensure_error = $this->ensure_imports_dir();
@@ -196,9 +199,10 @@ class ServerBackupScanner {
 		$file_path = trailingslashit( $imports_dir ) . $safe_filename;
 
 		// Debug logging for troubleshooting.
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( 'MksDdn Migrate Content: get_file() checking path: %s (exists: %s)', $file_path, file_exists( $file_path ) ? 'yes' : 'no' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		}
+		PluginLogger::log(
+			sprintf( 'get_file() checking path: %s (exists: %s)', $file_path, file_exists( $file_path ) ? 'yes' : 'no' ),
+			'ServerBackupScanner'
+		);
 
 		// Check if file exists before path validation.
 		if ( ! file_exists( $file_path ) ) {
@@ -251,9 +255,10 @@ class ServerBackupScanner {
 		// Use case-sensitive comparison as macOS file system is case-sensitive by default.
 		if ( strpos( $real_path_normalized, $real_imports_dir_normalized ) !== 0 ) {
 			// Debug logging for troubleshooting.
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( 'MksDdn Migrate Content: Path validation failed. File path: %s, Imports dir: %s', $real_path_normalized, $real_imports_dir_normalized ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			}
+			PluginLogger::log(
+				sprintf( 'Path validation failed. File path: %s, Imports dir: %s', $real_path_normalized, $real_imports_dir_normalized ),
+				'ServerBackupScanner'
+			);
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )

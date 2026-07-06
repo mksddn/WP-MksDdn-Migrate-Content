@@ -18,6 +18,7 @@ use MksDdn\MigrateContent\Support\ImportLock;
 use MksDdn\MigrateContent\Support\PostImportMaintenance;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 use WP_Error;
@@ -644,7 +645,7 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	private function log( string $message ): void {
-		error_log( 'MksDdn Migrate: ' . $message ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		PluginLogger::log( $message, 'FullSiteImportService' );
 	}
 }
 

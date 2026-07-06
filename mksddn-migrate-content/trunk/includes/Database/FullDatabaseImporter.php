@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Database;
 
 use MksDdn\MigrateContent\Config\PluginConfig;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use wpdb;
 use WP_Error;
 
@@ -875,16 +876,13 @@ class FullDatabaseImporter {
 	}
 
 	/**
-	 * Log message if WP_DEBUG is enabled.
+	 * Log message via centralized plugin logger.
 	 *
 	 * @param string $message Message to log.
 	 * @return void
 	 * @since 1.0.0
 	 */
 	private function log( string $message ): void {
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging.
-			error_log( 'MksDdn Migrate: ' . $message );
-		}
+		PluginLogger::log( $message, 'FullDatabaseImporter' );
 	}
 }
