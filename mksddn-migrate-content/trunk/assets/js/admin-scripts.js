@@ -257,34 +257,63 @@
 	 * Toggle all user import checkboxes on the full-site import review step.
 	 */
 	function initUserPlanToggle() {
-		const toggleAll = document.querySelector('.mksddn-mc-user-import-toggle-all');
+		const selectAllButton = document.querySelector('.mksddn-mc-user-select-all');
+		const deselectAllButton = document.querySelector('.mksddn-mc-user-deselect-all');
 		const checkboxes = document.querySelectorAll('.mksddn-mc-user-import-checkbox');
+		const selectionCount = document.querySelector('.mksddn-mc-user-selection-count');
 
-		if (!toggleAll || checkboxes.length === 0) {
+		if (checkboxes.length === 0) {
 			return;
 		}
 
-		function syncToggleAllState() {
-			const checkedCount = Array.from(checkboxes).filter(function(checkbox) {
+		function getCheckedCount() {
+			return Array.from(checkboxes).filter(function(checkbox) {
 				return checkbox.checked;
 			}).length;
-
-			toggleAll.checked = checkedCount === checkboxes.length;
-			toggleAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
 		}
 
-		toggleAll.addEventListener('change', function() {
-			checkboxes.forEach(function(checkbox) {
-				checkbox.checked = toggleAll.checked;
+		function updateSelectionState() {
+			const checkedCount = getCheckedCount();
+			const label = selectionCount ? selectionCount.getAttribute('data-label') : '';
+
+			if (selectionCount && label) {
+				selectionCount.textContent = label
+					.replace('%1$d', checkedCount)
+					.replace('%2$d', checkboxes.length);
+			}
+
+			if (selectAllButton) {
+				selectAllButton.disabled = checkedCount === checkboxes.length;
+			}
+
+			if (deselectAllButton) {
+				deselectAllButton.disabled = checkedCount === 0;
+			}
+		}
+
+		if (selectAllButton) {
+			selectAllButton.addEventListener('click', function() {
+				checkboxes.forEach(function(checkbox) {
+					checkbox.checked = true;
+				});
+				updateSelectionState();
 			});
-			toggleAll.indeterminate = false;
-		});
+		}
+
+		if (deselectAllButton) {
+			deselectAllButton.addEventListener('click', function() {
+				checkboxes.forEach(function(checkbox) {
+					checkbox.checked = false;
+				});
+				updateSelectionState();
+			});
+		}
 
 		checkboxes.forEach(function(checkbox) {
-			checkbox.addEventListener('change', syncToggleAllState);
+			checkbox.addEventListener('change', updateSelectionState);
 		});
 
-		syncToggleAllState();
+		updateSelectionState();
 	}
 
 	// Initialize progress bar and select search when DOM is ready.
