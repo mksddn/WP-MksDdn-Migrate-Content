@@ -503,6 +503,12 @@ function hideProgressLabel( delay = 0 ) {
 				hidden.value = jobId;
 				form.appendChild( hidden );
 
+				const hiddenName = document.createElement( 'input' );
+				hiddenName.type = 'hidden';
+				hiddenName.name = 'chunk_original_name';
+				hiddenName.value = file.name;
+				form.appendChild( hiddenName );
+
 				fileInput.value = '';
 				fileInput.disabled = true;
 

@@ -220,11 +220,20 @@ class UnifiedImportOrchestrator {
 			return new WP_Error( 'mksddn_mc_chunk_file_missing', __( 'Chunked upload file not found.', 'mksddn-migrate-content' ) );
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
+		$original_name = isset( $_POST['chunk_original_name'] )
+			? sanitize_file_name( wp_unslash( (string) $_POST['chunk_original_name'] ) )
+			: '';
+
+		if ( '' === $original_name ) {
+			$original_name = sprintf( 'chunk:%s', $chunk_job_id );
+		}
+
 		return array(
-			'path'      => $file_path,
-			'extension' => 'wpbkp',
-			'name'      => sprintf( 'chunk:%s', $chunk_job_id ),
-			'source'    => 'chunked',
+			'path'         => $file_path,
+			'extension'    => 'wpbkp',
+			'name'         => $original_name,
+			'source'       => 'chunked',
 			'chunk_job_id' => $chunk_job_id,
 		);
 	}
@@ -349,20 +358,13 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Build persistent import handle after preflight (so the next step does not re-upload).
 	 *
-	 * @param array  $file_info Resolved file info from the first request.
-	 * @param string $report_id Report id (directory name for staged browser uploads).
+	 * Browser and chunked uploads are copied into the imports directory so the backup
+	 * can be re-imported later via "Select from server".
+	 *
+	 * @param array $file_info Resolved file info from the first request.
 	 * @return array|WP_Error
 	 */
-	private function build_import_handle( array $file_info, string $report_id ): array|WP_Error {
-		if ( 'chunked' === $file_info['source'] ) {
-			return array(
-				'source_type'   => 'chunked',
-				'chunk_job_id'  => $file_info['chunk_job_id'],
-				'extension'     => 'wpbkp',
-				'original_name' => $file_info['name'],
-			);
-		}
-
+	private function build_import_handle( array $file_info ): array|WP_Error {
 		if ( 'server' === $file_info['source'] ) {
 			return array(
 				'source_type'   => 'server',
@@ -372,43 +374,19 @@ class UnifiedImportOrchestrator {
 			);
 		}
 
-		if ( 'upload' === $file_info['source'] ) {
-			$uploads = wp_upload_dir();
-			if ( ! empty( $uploads['error'] ) ) {
-				return new WP_Error(
-					'mksddn_mc_upload_dir',
-					__( 'Unable to prepare import storage. Check uploads directory permissions.', 'mksddn-migrate-content' )
-				);
-			}
+		if ( 'chunked' === $file_info['source'] || 'upload' === $file_info['source'] ) {
+			$original_name = isset( $file_info['name'] ) ? (string) $file_info['name'] : '';
+			$stored        = $this->server_scanner->store_uploaded_file( $file_info['path'], $original_name );
 
-			$safe_id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $report_id );
-			if ( '' === $safe_id ) {
-				return new WP_Error( 'mksddn_mc_preflight_invalid', __( 'Invalid preflight session.', 'mksddn-migrate-content' ) );
-			}
-
-			$dir = trailingslashit( $uploads['basedir'] ) . 'mksddn-mc/preflight/' . $safe_id;
-			if ( ! wp_mkdir_p( $dir ) ) {
-				return new WP_Error(
-					'mksddn_mc_stage_mkdir',
-					__( 'Could not create directory for the next import step.', 'mksddn-migrate-content' )
-				);
-			}
-
-			$basename = sanitize_file_name( $file_info['name'] );
-			$dest     = $dir . '/' . wp_unique_filename( $dir, $basename );
-
-			if ( ! FilesystemHelper::copy( $file_info['path'], $dest, true ) ) {
-				return new WP_Error(
-					'mksddn_mc_stage_copy',
-					__( 'Could not stash import file for the next step.', 'mksddn-migrate-content' )
-				);
+			if ( is_wp_error( $stored ) ) {
+				return $stored;
 			}
 
 			return array(
-				'source_type'   => 'staged',
-				'staged_path'   => $dest,
-				'extension'     => $file_info['extension'],
-				'original_name' => $file_info['name'],
+				'source_type'   => 'server',
+				'server_file'   => $stored['name'],
+				'extension'     => $stored['extension'],
+				'original_name' => $stored['name'],
 			);
 		}
 
@@ -583,7 +561,7 @@ class UnifiedImportOrchestrator {
 	private function run_preflight( array $file_info, string $import_type ): void {
 		$report    = $this->preflight_service->analyze( $file_info, $import_type );
 		$report_id = wp_generate_password( 24, false, false );
-		$handle    = $this->build_import_handle( $file_info, $report_id );
+		$handle    = $this->build_import_handle( $file_info );
 
 		if ( is_wp_error( $handle ) ) {
 			wp_die( esc_html( $handle->get_error_message() ) );
