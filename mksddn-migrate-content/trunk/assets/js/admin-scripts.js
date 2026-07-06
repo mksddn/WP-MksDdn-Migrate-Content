@@ -316,11 +316,118 @@
 		updateSelectionState();
 	}
 
+	/**
+	 * Show an inline import error notice near the form that failed.
+	 *
+	 * @param {HTMLFormElement} form Target form.
+	 * @param {string} message User-visible message.
+	 */
+	function showImportRequestNotice(form, message) {
+		if (!form || !message) {
+			return;
+		}
+
+		const existing = form.querySelector('.mksddn-mc-import-request-warning');
+		if (existing) {
+			existing.remove();
+		}
+
+		const notice = document.createElement('div');
+		notice.className = 'notice notice-error inline mksddn-mc-import-request-warning';
+
+		const paragraph = document.createElement('p');
+		paragraph.textContent = message;
+		notice.appendChild(paragraph);
+
+		form.prepend(notice);
+	}
+
+	/**
+	 * Catch gateway timeouts on the final import request and keep the user on the page.
+	 */
+	function initFinalImportTimeoutHandler() {
+		if (!window.fetch || !window.FormData) {
+			return;
+		}
+
+		const settings = window.mksddnMcAdmin || {};
+		const i18n = settings.i18n || {};
+		const forms = document.querySelectorAll('.mksddn-mc-preflight-import-form, .mksddn-mc-user-plan');
+
+		forms.forEach(function(form) {
+			let busy = false;
+
+			form.addEventListener('submit', function(event) {
+				if (busy) {
+					event.preventDefault();
+					return;
+				}
+
+				event.preventDefault();
+				busy = true;
+
+				const button = form.querySelector('button[type="submit"]');
+				if (button) {
+					button.disabled = true;
+				}
+
+				if (window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function') {
+					window.mksddnMcProgress.set(15, i18n.importProcessing || 'Server is processing the archive...');
+				}
+
+				fetch(form.action, {
+					credentials: 'same-origin',
+					method: form.method || 'POST',
+					body: new FormData(form)
+				}).then(function(response) {
+					if (response.status === 504) {
+						throw new Error(
+							i18n.importGatewayTimeout ||
+							'The server timed out while waiting for the import response. The import may still be running; check the site before starting it again.'
+						);
+					}
+
+					if (!response.ok) {
+						throw new Error(i18n.importRequestFailed || 'Import request failed. Check PHP error logs and try again.');
+					}
+
+					if (window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function') {
+						window.mksddnMcProgress.set(100, i18n.importDone || 'Import request finished.');
+					}
+
+					window.location.assign(response.url || window.location.href);
+				}).catch(function(error) {
+					const message = error && error.message
+						? error.message
+						: (i18n.importRequestFailed || 'Import request failed. Check PHP error logs and try again.');
+
+					console.error(error);
+					showImportRequestNotice(form, message);
+
+					if (window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function') {
+						window.mksddnMcProgress.set(0, message);
+						setTimeout(function() {
+							if (window.mksddnMcProgress && typeof window.mksddnMcProgress.hide === 'function') {
+								window.mksddnMcProgress.hide();
+							}
+						}, 6000);
+					}
+
+					if (button) {
+						button.disabled = false;
+					}
+					busy = false;
+				});
+			});
+		});
+	}
+
 	// Initialize progress bar and select search when DOM is ready.
 	function init() {
 		window.mksddnMcProgress = initProgressBar();
 		initSelectSearch();
 		initUserPlanToggle();
+		initFinalImportTimeoutHandler();
 	}
 
 	if (document.readyState === 'loading') {

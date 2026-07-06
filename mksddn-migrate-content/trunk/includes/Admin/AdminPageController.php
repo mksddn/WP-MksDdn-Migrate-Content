@@ -313,6 +313,19 @@ class AdminPageController {
 			)
 		);
 
+		wp_localize_script(
+			'mksddn-mc-admin-scripts',
+			'mksddnMcAdmin',
+			array(
+				'i18n' => array(
+					'importProcessing'     => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
+					'importDone'           => __( 'Import request finished.', 'mksddn-migrate-content' ),
+					'importGatewayTimeout' => __( 'The server timed out while waiting for the import response. The import may still be running; check the site before starting it again.', 'mksddn-migrate-content' ),
+					'importRequestFailed'  => __( 'Import request failed. Check PHP error logs and try again.', 'mksddn-migrate-content' ),
+				),
+			)
+		);
+
 		// Enqueue server file selector script.
 		wp_enqueue_script(
 			'mksddn-server-file-selector',

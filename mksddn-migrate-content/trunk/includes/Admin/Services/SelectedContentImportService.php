@@ -116,6 +116,8 @@ class SelectedContentImportService {
 			return;
 		}
 
+		$this->prepare_long_running_request();
+
 		$lock       = new ImportLock();
 		$lock_token = null;
 
@@ -321,6 +323,20 @@ class SelectedContentImportService {
 		}
 
 		return false !== $import_handler->import_single_page( $data );
+	}
+
+	/**
+	 * Prepare PHP runtime for selected imports that may restore many posts/media items.
+	 *
+	 * @return void
+	 */
+	private function prepare_long_running_request(): void {
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+		}
+
+		@ini_set( 'max_execution_time', '0' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		@ignore_user_abort( true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 }
 
