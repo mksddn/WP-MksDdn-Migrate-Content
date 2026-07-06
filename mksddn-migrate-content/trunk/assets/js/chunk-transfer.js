@@ -31,6 +31,70 @@
 	}
 
 	/**
+	 * @param {*} data Parsed JSON body.
+	 * @returns {boolean}
+	 */
+	function isRestErrorPayload( data ) {
+		return Boolean(
+			data &&
+			typeof data === 'object' &&
+			typeof data.code === 'string' &&
+			data.code.length > 0 &&
+			typeof data.message === 'string'
+		);
+	}
+
+	/**
+	 * @param {*} payload Parsed JSON body.
+	 * @returns {boolean}
+	 */
+	function isRestNoRoute( payload ) {
+		return Boolean(
+			isRestErrorPayload( payload ) &&
+			payload.code === 'rest_no_route'
+		);
+	}
+
+	/**
+	 * @param {RequestInit} options Fetch options.
+	 * @returns {RequestInit}
+	 */
+	function buildFetchOptions( options ) {
+		return Object.assign(
+			{
+				credentials: 'same-origin',
+				// Fail fast when http/https or www redirects would turn POST into GET.
+				redirect: 'error',
+			},
+			options || {}
+		);
+	}
+
+	/**
+	 * @param {string} message User-visible message.
+	 */
+	function showRestWarning( message ) {
+		if ( ! message ) {
+			return;
+		}
+
+		document.querySelectorAll(
+			'[data-mksddn-full-import], [data-mksddn-unified-import], [data-mksddn-full-export]'
+		).forEach( ( form ) => {
+			if ( form.querySelector( '.mksddn-chunk-rest-warning' ) ) {
+				return;
+			}
+
+			const notice = document.createElement( 'div' );
+			notice.className = 'notice notice-warning inline mksddn-chunk-rest-warning';
+			const paragraph = document.createElement( 'p' );
+			paragraph.textContent = message;
+			notice.appendChild( paragraph );
+			form.prepend( notice );
+		} );
+	}
+
+	/**
 	 * @param {Response} response Fetch response.
 	 * @param {*} payload Parsed JSON body.
 	 * @returns {string}
@@ -38,14 +102,18 @@
 	function resolveRestFailureMessage( response, payload ) {
 		const i18n = settings.i18n || {};
 
+		if ( isRestNoRoute( payload ) ) {
+			return i18n.restNoRoute ||
+				'Migration REST endpoints are unavailable for this request.';
+		}
+		if ( isRestErrorPayload( payload ) ) {
+			return payload.message;
+		}
 		if ( response.status === 404 ) {
 			return i18n.restNotFound || 'WordPress REST API is not reachable (HTTP 404).';
 		}
 		if ( response.status === 401 || response.status === 403 ) {
 			return i18n.restForbidden || 'You are not allowed to use the migration REST API.';
-		}
-		if ( isRestErrorPayload( payload ) ) {
-			return payload.message;
 		}
 		if ( response.status >= 500 ) {
 			return i18n.restServerError || 'The server returned an error during chunked transfer.';
@@ -60,7 +128,20 @@
 	 * @returns {Promise<Object>}
 	 */
 	async function fetchChunkJson( path, options ) {
-		const response = await fetch( settings.restUrl + path, options );
+		let response;
+
+		try {
+			response = await fetch( settings.restUrl + path, buildFetchOptions( options ) );
+		} catch ( error ) {
+			if ( error instanceof TypeError ) {
+				throw createChunkFailure(
+					( settings.i18n && settings.i18n.restRedirect ) ||
+					'The chunk transfer request was redirected.'
+				);
+			}
+			throw error;
+		}
+
 		let payload;
 
 		try {
@@ -80,6 +161,30 @@
 		}
 
 		return payload;
+	}
+
+	async function verifyChunkRestRoute() {
+		if ( ! settings.restUrl || ! settings.nonce ) {
+			return false;
+		}
+
+		try {
+			const response = await fetch(
+				settings.restUrl + 'chunk/ping',
+				buildFetchOptions( {
+					headers: { 'X-WP-Nonce': settings.nonce },
+				} )
+			);
+
+			if ( ! response.ok ) {
+				return false;
+			}
+
+			const payload = await response.json();
+			return Boolean( payload && payload.ok );
+		} catch ( error ) {
+			return false;
+		}
 	}
 
 	const ChunkClient = {
@@ -151,20 +256,6 @@
 		);
 		err.name = 'MksddnExportFailure';
 		return err;
-	}
-
-	/**
-	 * @param {*} data Parsed JSON body.
-	 * @returns {boolean}
-	 */
-	function isRestErrorPayload( data ) {
-		return Boolean(
-			data &&
-			typeof data === 'object' &&
-			typeof data.code === 'string' &&
-			data.code.length > 0 &&
-			typeof data.message === 'string'
-		);
 	}
 
 	function isTransferFailure( error ) {
@@ -482,15 +573,18 @@ function hideProgressLabel( delay = 0 ) {
 		}
 
 		try {
-			fetch( settings.restUrl + 'chunk/cancel', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-WP-Nonce': settings.nonce,
-				},
-				body: JSON.stringify( { job_id: jobId } ),
-				keepalive: keepAlive,
-			} );
+			fetch(
+				settings.restUrl + 'chunk/cancel',
+				buildFetchOptions( {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-WP-Nonce': settings.nonce,
+					},
+					body: JSON.stringify( { job_id: jobId } ),
+					keepalive: keepAlive,
+				} )
+			);
 		} catch ( error ) {
 			// Ignore cleanup failures.
 		}
@@ -502,7 +596,15 @@ function hideProgressLabel( delay = 0 ) {
 		}
 	} );
 
-	document.addEventListener( 'DOMContentLoaded', () => {
+	document.addEventListener( 'DOMContentLoaded', async () => {
+		const restReady = await verifyChunkRestRoute();
+		if ( ! restReady ) {
+			showRestWarning(
+				( settings.i18n && settings.i18n.restPreflightFailed ) ||
+				'Chunk transfer endpoints are not reachable yet.'
+			);
+		}
+
 		attachFullImportHandler();
 		attachFullExportHandler();
 	} );

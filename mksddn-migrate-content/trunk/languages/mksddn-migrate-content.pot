@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: MksDdn Migrate Content\n"
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/issues\n"
-"POT-Creation-Date: 2026-07-06 13:43+0000\n"
+"POT-Creation-Date: 2026-07-06 13:56+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -17,7 +17,7 @@ msgstr ""
 msgid "Some user emails may conflict with existing accounts."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:368
+#: includes/Admin/AdminPageController.php:371
 msgid "The server returned an unexpected response during chunked transfer."
 msgstr ""
 
@@ -29,7 +29,7 @@ msgstr ""
 msgid "Invalid file type. Please upload a valid export file."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:388
+#: includes/Admin/AdminPageController.php:391
 msgid "Archive downloaded."
 msgstr ""
 
@@ -65,7 +65,7 @@ msgstr ""
 msgid "For large files, it is recommended to upload them via FTP/SFTP to the %s directory and then use the \"Select from server\" option."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:135
+#: includes/Chunking/ChunkRestController.php:156
 msgid "Missing chunk data."
 msgstr ""
 
@@ -93,7 +93,7 @@ msgstr ""
 msgid ".json skips media files and is best for quick edits. .wpbkp packs media + checksum."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:188 includes/Chunking/ChunkRestController.php:189
+#: includes/Filesystem/FullContentExporter.php:188 includes/Chunking/ChunkRestController.php:210
 msgid "Check free disk space, hosting quota, and PHP temp directory (sys_temp_dir / upload_tmp_dir)."
 msgstr ""
 
@@ -137,7 +137,7 @@ msgstr ""
 msgid "Payload has no slug; the importer may generate one at run time."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:218 includes/Chunking/ChunkRestController.php:257 includes/Chunking/ChunkRestController.php:271
+#: includes/Chunking/ChunkRestController.php:239 includes/Chunking/ChunkRestController.php:278 includes/Chunking/ChunkRestController.php:292
 msgid "Job ID is required."
 msgstr ""
 
@@ -157,7 +157,7 @@ msgstr ""
 msgid "Upload file"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:391
+#: includes/Admin/AdminPageController.php:394
 msgid "The server returned an invalid response during export."
 msgstr ""
 
@@ -205,7 +205,7 @@ msgstr ""
 msgid "Choose theme import mode"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:438
+#: includes/Admin/AdminPageController.php:441
 msgid "User selection data is empty. Restart the import."
 msgstr ""
 
@@ -213,7 +213,7 @@ msgstr ""
 msgid "Media files in archive: %d"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:374
+#: includes/Admin/AdminPageController.php:377
 msgid "Upload finished. Processing…"
 msgstr ""
 
@@ -237,11 +237,11 @@ msgstr ""
 msgid "Chunked upload"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:387
+#: includes/Admin/AdminPageController.php:390
 msgid "Streaming archive… %d%"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:394
+#: includes/Admin/AdminPageController.php:397
 msgid "Chunk download failed."
 msgstr ""
 
@@ -257,11 +257,11 @@ msgstr ""
 msgid "Archive role"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:511 includes/Admin/Services/ThemeImportService.php:136
+#: includes/Admin/AdminPageController.php:514 includes/Admin/Services/ThemeImportService.php:136
 msgid "You are not allowed to continue this theme import."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:537 includes/Admin/AdminPageController.php:588
+#: includes/Admin/AdminPageController.php:540 includes/Admin/AdminPageController.php:591
 msgid "Insufficient permissions."
 msgstr ""
 
@@ -273,7 +273,7 @@ msgstr ""
 msgid "Media file not found inside archive."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:371
+#: includes/Admin/AdminPageController.php:374
 msgid "Selected %1$s (planned chunk %2$s)."
 msgstr ""
 
@@ -305,11 +305,11 @@ msgstr ""
 msgid "Unable to allocate a temporary file."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:148
+#: includes/Chunking/ChunkRestController.php:169
 msgid "Unable to write chunk."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:366
+#: includes/Admin/AdminPageController.php:369
 msgid "You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator."
 msgstr ""
 
@@ -325,7 +325,7 @@ msgstr ""
 msgid "Selected content"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:566
+#: includes/Admin/AdminPageController.php:569
 msgid "Import lock released successfully."
 msgstr ""
 
@@ -333,7 +333,7 @@ msgstr ""
 msgid "Archive payload is missing on disk."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:427
+#: includes/Admin/AdminPageController.php:430
 msgid "User selection session expired. Please upload the archive again."
 msgstr ""
 
@@ -377,11 +377,11 @@ msgstr ""
 msgid "Invalid request."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:557 includes/Admin/Handlers/UserMergeRequestHandler.php:62 includes/Admin/Handlers/ThemePreviewRequestHandler.php:62
+#: includes/Admin/AdminPageController.php:560 includes/Admin/Handlers/UserMergeRequestHandler.php:62 includes/Admin/Handlers/ThemePreviewRequestHandler.php:62
 msgid "Sorry, you are not allowed to perform this action."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:606
+#: includes/Admin/AdminPageController.php:609
 msgid "Invalid post type."
 msgstr ""
 
@@ -397,7 +397,7 @@ msgstr ""
 msgid "Unsupported file extension. Use .wpbkp or .json."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:432
+#: includes/Admin/AdminPageController.php:435
 msgid "You are not allowed to continue this user selection."
 msgstr ""
 
@@ -441,7 +441,7 @@ msgstr ""
 msgid "ABSPATH is not defined."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:506 includes/Admin/Services/ThemeImportService.php:131
+#: includes/Admin/AdminPageController.php:509 includes/Admin/Services/ThemeImportService.php:131
 msgid "Theme import session expired. Please upload the archive again."
 msgstr ""
 
@@ -477,7 +477,7 @@ msgstr ""
 msgid "Payload type: %s"
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:231
+#: includes/Chunking/ChunkRestController.php:252
 msgid "Job data not found."
 msgstr ""
 
@@ -521,6 +521,10 @@ msgstr ""
 msgid "File upload security check failed."
 msgstr ""
 
+#: includes/Admin/AdminPageController.php:367
+msgid "The chunk transfer request was redirected (often http↔https or www mismatch). Open WordPress admin using the same URL as Settings → General → Site Address, refresh the page, and try again."
+msgstr ""
+
 #: includes/Validation/ArchiveValidator.php:91
 msgid "Manifest version is missing."
 msgstr ""
@@ -557,7 +561,7 @@ msgstr ""
 msgid "Invalid JSON structure."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:59 includes/Filesystem/ThemeExporter.php:61 includes/Chunking/ChunkRestController.php:171
+#: includes/Filesystem/FullContentExporter.php:59 includes/Filesystem/ThemeExporter.php:61 includes/Chunking/ChunkRestController.php:192
 msgid "Unable to create export directory."
 msgstr ""
 
@@ -577,11 +581,11 @@ msgstr ""
 msgid "Post type"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:395
+#: includes/Admin/AdminPageController.php:398
 msgid "Invalid chunk data from server."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:381
+#: includes/Admin/AdminPageController.php:384
 msgid "Downloading chunks… %d%"
 msgstr ""
 
@@ -605,7 +609,7 @@ msgstr ""
 msgid "Uploading chunks… %d%"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:393
+#: includes/Admin/AdminPageController.php:396
 msgid "Invalid export response from server."
 msgstr ""
 
@@ -613,7 +617,7 @@ msgstr ""
 msgid "Include %s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:601
+#: includes/Admin/AdminPageController.php:604
 msgid "Post type is required."
 msgstr ""
 
@@ -625,7 +629,7 @@ msgstr ""
 msgid "File size exceeds maximum allowed size of %s."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:143
+#: includes/Chunking/ChunkRestController.php:164
 msgid "Invalid chunk payload."
 msgstr ""
 
@@ -649,7 +653,7 @@ msgstr ""
 msgid "Unable to allocate temporary directory."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:383
+#: includes/Admin/AdminPageController.php:386
 msgid "Chunked download failed. Falling back to direct download."
 msgstr ""
 
@@ -665,11 +669,15 @@ msgstr ""
 msgid "Export file is empty after writing."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:382
-msgid "Download complete."
+#: includes/Admin/AdminPageController.php:368
+msgid "Chunk transfer endpoints are not reachable yet. Refresh this page before uploading or exporting. If the warning remains, check permalinks and security plugins blocking /wp-json/."
 msgstr ""
 
 #: includes/Admin/AdminPageController.php:385
+msgid "Download complete."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:388
 msgid "Preparing archive…"
 msgstr ""
 
@@ -713,7 +721,7 @@ msgstr ""
 msgid "Could not create directory for the next import step."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:471
+#: includes/Admin/AdminPageController.php:474
 msgid "Preflight report expired or not found. Run preflight again."
 msgstr ""
 
@@ -721,7 +729,7 @@ msgstr ""
 msgid "Export file not found."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:373
+#: includes/Admin/AdminPageController.php:376
 msgid "Uploading archive… %d%"
 msgstr ""
 
@@ -729,7 +737,7 @@ msgstr ""
 msgid "Export selected themes (active theme is pre-selected)."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:389
+#: includes/Admin/AdminPageController.php:392
 msgid "Falling back to classic download…"
 msgstr ""
 
@@ -785,7 +793,7 @@ msgstr ""
 msgid "Preflight report (no changes were made)"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:376
+#: includes/Admin/AdminPageController.php:379
 msgid "Upload failed. Please retry."
 msgstr ""
 
@@ -821,7 +829,7 @@ msgstr ""
 msgid "Unsupported file extension."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:691
+#: includes/Admin/AdminPageController.php:694
 msgid "Release Lock"
 msgstr ""
 
@@ -829,7 +837,7 @@ msgstr ""
 msgid "Server file"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:420 includes/Admin/AdminPageController.php:466 includes/Admin/AdminPageController.php:499
+#: includes/Admin/AdminPageController.php:423 includes/Admin/AdminPageController.php:469 includes/Admin/AdminPageController.php:502
 msgid "You do not have permission to access this page."
 msgstr ""
 
@@ -837,11 +845,11 @@ msgstr ""
 msgid "Invalid file source."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:375
+#: includes/Admin/AdminPageController.php:378
 msgid "Server is processing the archive…"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:415 includes/Admin/AdminPageController.php:462 includes/Admin/AdminPageController.php:494 includes/Admin/Services/ThemeImportService.php:103 includes/Admin/Services/UnifiedImportOrchestrator.php:141
+#: includes/Admin/AdminPageController.php:418 includes/Admin/AdminPageController.php:465 includes/Admin/AdminPageController.php:497 includes/Admin/Services/ThemeImportService.php:103 includes/Admin/Services/UnifiedImportOrchestrator.php:141
 msgid "Security check failed."
 msgstr ""
 
@@ -873,7 +881,7 @@ msgstr ""
 msgid "Post type is missing."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:367
+#: includes/Admin/AdminPageController.php:370
 msgid "The server returned an error during chunked transfer. Check PHP error logs or try again later."
 msgstr ""
 
@@ -897,7 +905,11 @@ msgstr ""
 msgid "These theme directories already exist; replace mode would remove them before import."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:238
+#: includes/Admin/AdminPageController.php:366
+msgid "Migration REST endpoints are unavailable for this request. Hard-refresh the page (Ctrl+F5), open admin with the same URL as Settings → General → Site Address (http/https, www), save Permalinks once, and allow /wp-json/mksddn/v1/ in security or caching plugins."
+msgstr ""
+
+#: includes/Chunking/ChunkRestController.php:259
 msgid "Unable to read chunk."
 msgstr ""
 
@@ -921,11 +933,11 @@ msgstr ""
 msgid "Unable to open archive."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:227
+#: includes/Chunking/ChunkRestController.php:248
 msgid "Chunk index out of bounds."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:392
+#: includes/Admin/AdminPageController.php:395
 msgid "Export request failed."
 msgstr ""
 
@@ -973,7 +985,7 @@ msgstr ""
 msgid "Error loading entries"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:687
+#: includes/Admin/AdminPageController.php:690
 msgid "An import operation appears to be running or was interrupted. Lock age: %s minutes."
 msgstr ""
 
@@ -993,7 +1005,7 @@ msgstr ""
 msgid "An unexpected error occurred."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:684
+#: includes/Admin/AdminPageController.php:687
 msgid "Import is currently locked"
 msgstr ""
 
@@ -1049,7 +1061,7 @@ msgstr ""
 msgid "Staged import file is missing. Run preflight again."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:568
+#: includes/Admin/AdminPageController.php:571
 msgid "No active import lock found."
 msgstr ""
 
@@ -1133,7 +1145,7 @@ msgstr ""
 msgid "Full archive payload is empty."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:533 includes/Admin/AdminPageController.php:584
+#: includes/Admin/AdminPageController.php:536 includes/Admin/AdminPageController.php:587
 msgid "Invalid security token."
 msgstr ""
 
@@ -1245,7 +1257,7 @@ msgstr ""
 msgid "File not found."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:390
+#: includes/Admin/AdminPageController.php:393
 msgid "Full site export failed."
 msgstr ""
 
@@ -1273,7 +1285,7 @@ msgstr ""
 msgid "Search entries"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:369
+#: includes/Admin/AdminPageController.php:372
 msgid "Invalid response when starting chunked upload."
 msgstr ""
 
@@ -1285,7 +1297,7 @@ msgstr ""
 msgid "Invalid full site manifest structure."
 msgstr ""
 
-#: includes/Chunking/ChunkRestController.php:187
+#: includes/Chunking/ChunkRestController.php:208
 msgid "Export file is empty or cannot be read."
 msgstr ""
 
@@ -1301,7 +1313,7 @@ msgstr ""
 msgid "Existing post ID"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:379
+#: includes/Admin/AdminPageController.php:382
 msgid "Preparing download…"
 msgstr ""
 
@@ -1313,7 +1325,7 @@ msgstr ""
 msgid "Theme Export"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:378
+#: includes/Admin/AdminPageController.php:381
 msgid "· %s chunks"
 msgstr ""
 
@@ -1333,7 +1345,7 @@ msgstr ""
 msgid "Export file exists but is not readable."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:384
+#: includes/Admin/AdminPageController.php:387
 msgid "Ready for full export."
 msgstr ""
 
