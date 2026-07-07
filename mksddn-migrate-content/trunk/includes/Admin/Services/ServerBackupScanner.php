@@ -9,6 +9,8 @@
 namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Config\PluginConfig;
+use MksDdn\MigrateContent\Services\PluginLogger;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -105,9 +107,10 @@ class ServerBackupScanner {
 
 		if ( false === $items ) {
 			$error_message = __( 'Failed to scan imports directory.', 'mksddn-migrate-content' );
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( 'MksDdn Migrate Content: %s (Directory: %s)', $error_message, $imports_dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			}
+			PluginLogger::log(
+				sprintf( '%s (Directory: %s)', $error_message, $imports_dir ),
+				'ServerBackupScanner'
+			);
 			return new WP_Error(
 				'mksddn_mc_imports_scan_failed',
 				$error_message
@@ -176,9 +179,10 @@ class ServerBackupScanner {
 		$imports_dir = PluginConfig::imports_dir();
 
 		// Debug logging for troubleshooting.
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( 'MksDdn Migrate Content: get_file() called with filename: %s', $filename ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		}
+		PluginLogger::log(
+			sprintf( 'get_file() called with filename: %s', $filename ),
+			'ServerBackupScanner'
+		);
 
 		// Ensure directory exists, create if needed.
 		$ensure_error = $this->ensure_imports_dir();
@@ -196,9 +200,10 @@ class ServerBackupScanner {
 		$file_path = trailingslashit( $imports_dir ) . $safe_filename;
 
 		// Debug logging for troubleshooting.
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( sprintf( 'MksDdn Migrate Content: get_file() checking path: %s (exists: %s)', $file_path, file_exists( $file_path ) ? 'yes' : 'no' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		}
+		PluginLogger::log(
+			sprintf( 'get_file() checking path: %s (exists: %s)', $file_path, file_exists( $file_path ) ? 'yes' : 'no' ),
+			'ServerBackupScanner'
+		);
 
 		// Check if file exists before path validation.
 		if ( ! file_exists( $file_path ) ) {
@@ -251,9 +256,10 @@ class ServerBackupScanner {
 		// Use case-sensitive comparison as macOS file system is case-sensitive by default.
 		if ( strpos( $real_path_normalized, $real_imports_dir_normalized ) !== 0 ) {
 			// Debug logging for troubleshooting.
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( sprintf( 'MksDdn Migrate Content: Path validation failed. File path: %s, Imports dir: %s', $real_path_normalized, $real_imports_dir_normalized ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			}
+			PluginLogger::log(
+				sprintf( 'Path validation failed. File path: %s, Imports dir: %s', $real_path_normalized, $real_imports_dir_normalized ),
+				'ServerBackupScanner'
+			);
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_path',
 				__( 'Invalid file path.', 'mksddn-migrate-content' )
@@ -289,6 +295,74 @@ class ServerBackupScanner {
 			'size'     => $file_size,
 			'extension' => $extension,
 		);
+	}
+
+	/**
+	 * Copy a browser-uploaded backup into the imports directory for reuse.
+	 *
+	 * @param string $source_path   Absolute path to the uploaded file.
+	 * @param string $original_name Desired filename (basename is used).
+	 * @return array|WP_Error Stored file metadata or error.
+	 * @since 2.4.0
+	 */
+	public function store_uploaded_file( string $source_path, string $original_name ): array|WP_Error {
+		if ( '' === $source_path || ! is_readable( $source_path ) ) {
+			return new WP_Error(
+				'mksddn_mc_imports_store_source',
+				__( 'Uploaded backup file is not readable.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$ensure_error = $this->ensure_imports_dir();
+		if ( $ensure_error ) {
+			return $ensure_error;
+		}
+
+		$imports_dir = PluginConfig::imports_dir();
+		$validation_error = $this->validate_imports_dir( $imports_dir );
+		if ( $validation_error ) {
+			return $validation_error;
+		}
+
+		$basename  = basename( sanitize_file_name( $original_name ) );
+		$extension = strtolower( pathinfo( $basename, PATHINFO_EXTENSION ) );
+
+		if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+			$extension = strtolower( pathinfo( $source_path, PATHINFO_EXTENSION ) );
+		}
+
+		if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+			return new WP_Error(
+				'mksddn_mc_import_file_invalid_type',
+				__( 'Invalid import file type. Only .wpbkp and .json files are supported.', 'mksddn-migrate-content' )
+			);
+		}
+
+		if ( '' === $basename || ! str_ends_with( strtolower( $basename ), '.' . $extension ) ) {
+			$basename = 'import-' . gmdate( 'Y-m-d-His' ) . '.' . $extension;
+		}
+
+		$dest = trailingslashit( $imports_dir ) . wp_unique_filename( $imports_dir, $basename );
+
+		if ( ! FilesystemHelper::copy( $source_path, $dest, true ) ) {
+			return new WP_Error(
+				'mksddn_mc_imports_store_failed',
+				__( 'Could not save uploaded backup to the imports directory.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$this->invalidate_cache();
+
+		return $this->get_file( basename( $dest ) );
+	}
+
+	/**
+	 * Clear cached server backup list.
+	 *
+	 * @return void
+	 */
+	private function invalidate_cache(): void {
+		delete_transient( 'mksddn_mc_server_backups' );
 	}
 }
 

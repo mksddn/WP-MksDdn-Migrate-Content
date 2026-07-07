@@ -22,6 +22,7 @@ use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapper;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Core\BatchLoader;
+use MksDdn\MigrateContent\Services\ErrorHandler;
 use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 
@@ -44,6 +45,13 @@ class CoreServiceProvider implements ServiceProviderInterface {
 	 * @since 1.0.0
 	 */
 	public function register( ServiceContainer $container ): void {
+		$container->register(
+			ErrorHandler::class,
+			function ( ServiceContainer $container ) {
+				return new ErrorHandler();
+			}
+		);
+
 		// Batch loader for optimizing database queries.
 		$container->register(
 			BatchLoader::class,

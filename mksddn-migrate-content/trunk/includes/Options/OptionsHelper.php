@@ -8,6 +8,7 @@
 namespace MksDdn\MigrateContent\Options;
 
 use Exception;
+use MksDdn\MigrateContent\Services\PluginLogger;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -33,10 +34,10 @@ class OptionsHelper {
 					$options_pages = $acf_pages;
 				}
 			} catch ( Exception $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Log is acceptable for admin-only context troubleshooting.
-					error_log( 'ACF Options Page API error: ' . $e->getMessage() );
-				}
+				PluginLogger::log(
+					'ACF Options Page API error: ' . $e->getMessage(),
+					'OptionsHelper'
+				);
 			}
 		}
 

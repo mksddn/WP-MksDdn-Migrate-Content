@@ -119,11 +119,6 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	 * @since 1.4.0
 	 */
 	public function handle_unified_import(): void {
-		// Start output buffering early to catch any accidental output.
-		if ( ! ob_get_level() ) {
-			ob_start();
-		}
-
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to import.', 'mksddn-migrate-content' ) );
 		}
@@ -140,6 +135,7 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 		$request_data = array(
 			'preflight_report_id' => isset( $_POST['preflight_report_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_report_id'] ) ) : '',
 			'chunk_job_id'        => isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '',
+			'chunk_original_name' => isset( $_POST['chunk_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['chunk_original_name'] ) ) : '',
 			'server_file'         => isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '',
 		);
 

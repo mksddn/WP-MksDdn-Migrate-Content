@@ -95,6 +95,27 @@ class ChunkRestController {
 			)
 		);
 
+		register_rest_route(
+			'mksddn/v1',
+			'/chunk/ping',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'ping' ),
+				'permission_callback' => array( $this, 'ensure_permission' ),
+			)
+		);
+
+	}
+
+	/**
+	 * Lightweight health check for chunked transfer REST routes.
+	 *
+	 * @return array{ok: bool}
+	 */
+	public function ping(): array {
+		return array(
+			'ok' => true,
+		);
 	}
 
 	public function ensure_permission(): bool {

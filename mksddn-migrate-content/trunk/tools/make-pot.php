@@ -16,6 +16,14 @@
 
 namespace MksDdn\MigrateContent\Tools;
 
+if ( 'cli' === php_sapi_name() && ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
+}
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;

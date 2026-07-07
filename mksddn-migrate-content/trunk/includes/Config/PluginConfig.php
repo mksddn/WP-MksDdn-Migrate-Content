@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Config;
 
+use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -68,7 +69,17 @@ class PluginConfig {
 	 * @since 1.0.0
 	 */
 	public static function text_domain(): string {
-		return apply_filters( 'mksddn_mc_text_domain', MKSDDN_MC_TEXT_DOMAIN );
+		$filtered = apply_filters( 'mksddn_mc_text_domain', MKSDDN_MC_TEXT_DOMAIN );
+		if ( ! is_string( $filtered ) ) {
+			return MKSDDN_MC_TEXT_DOMAIN;
+		}
+
+		$slug = sanitize_key( $filtered );
+		if ( '' === $slug || ! str_starts_with( $slug, 'mksddn-' ) ) {
+			return MKSDDN_MC_TEXT_DOMAIN;
+		}
+
+		return $slug;
 	}
 
 	/**
@@ -185,6 +196,62 @@ class PluginConfig {
 		return trailingslashit( $base ) . 'mksddn-mc/';
 	}
 
+	/**
+	 * Get logs directory path for plugin diagnostics.
+	 *
+	 * @return string Logs directory path.
+	 * @since 2.3.2
+	 */
+	public static function logs_dir(): string {
+		$uploads_default = trailingslashit( self::uploads_base_dir() ) . 'logs/';
+		$private_default = trailingslashit( sys_get_temp_dir() ) . 'mksddn-mc-logs/';
+		$preferred_dir   = (string) apply_filters( 'mksddn_mc_logs_dir', $uploads_default );
+
+		if ( '' === $preferred_dir ) {
+			$preferred_dir = $uploads_default;
+		}
+
+		$candidates = array(
+			trailingslashit( $preferred_dir ),
+			trailingslashit( $uploads_default ),
+			trailingslashit( $private_default ),
+		);
+
+		foreach ( $candidates as $candidate ) {
+			if ( ! is_dir( $candidate ) && ! wp_mkdir_p( $candidate ) ) {
+				continue;
+			}
+
+			if ( self::is_writable_directory( $candidate ) ) {
+				return $candidate;
+			}
+		}
+
+		return trailingslashit( $uploads_default );
+	}
+
+	/**
+	 * Check whether a directory is writable by creating a probe file.
+	 *
+	 * @param string $dir Directory path.
+	 * @return bool True when writable, false otherwise.
+	 * @since 2.3.3
+	 */
+	private static function is_writable_directory( string $dir ): bool {
+		$probe = trailingslashit( $dir ) . '.mksddn-mc-write-test';
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		$written = @file_put_contents( $probe, '1' );
+		if ( false === $written ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
+		@unlink( $probe );
+
+		return true;
+	}
+
 	// ==========================================================================
 	// Import Memory/Size Limits
 	// ==========================================================================
@@ -276,9 +343,10 @@ class PluginConfig {
 		$base = self::uploads_base_dir();
 
 		return array(
-			'base'       => $base,
-			'jobs'       => $base . 'jobs/',
-			'imports'    => $base . 'imports/',
+			'base'    => $base,
+			'jobs'    => $base . 'jobs/',
+			'imports' => $base . 'imports/',
+			'logs'    => self::logs_dir(),
 		);
 	}
 
@@ -296,9 +364,10 @@ class PluginConfig {
 			if ( ! is_dir( $dir ) ) {
 				if ( ! wp_mkdir_p( $dir ) ) {
 					$failed[ $key ] = $dir;
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						error_log( sprintf( 'MksDdn Migrate Content: Failed to create directory: %s', $dir ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-					}
+					PluginLogger::log(
+						sprintf( 'Failed to create directory: %s', $dir ),
+						'PluginConfig'
+					);
 				}
 			}
 		}

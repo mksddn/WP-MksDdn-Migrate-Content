@@ -8,6 +8,8 @@
 
 namespace MksDdn\MigrateContent\Support;
 
+use MksDdn\MigrateContent\Services\PluginLogger;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -58,9 +60,10 @@ class ImportLock {
 			
 			if ( $lock_time > 0 && $age > self::MAX_LOCK_AGE ) {
 				// Lock is stale, log and clear it.
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( sprintf( 'MksDdn Migrate: Clearing stale import lock (age: %d seconds)', $age ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				}
+				PluginLogger::log(
+					sprintf( 'Clearing stale import lock (age: %d seconds)', $age ),
+					'ImportLock'
+				);
 				delete_transient( self::LOCK_KEY );
 			} else {
 				// Lock is still valid.

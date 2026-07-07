@@ -49,10 +49,7 @@ class ErrorHandler {
 			}
 		}
 
-		if ( function_exists( 'error_log' ) ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Error logging is intentional for production debugging.
-			error_log( sprintf( 'MksDdn Migrate Content: %s', $message ) );
-		}
+		PluginLogger::log( $message, 'ErrorHandler' );
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_trigger_error, WordPress.Security.EscapeOutput.OutputNotEscaped -- Debug output only, message is already sanitized.

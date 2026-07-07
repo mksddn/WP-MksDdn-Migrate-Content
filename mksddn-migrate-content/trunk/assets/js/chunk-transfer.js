@@ -16,9 +16,180 @@
 		MAX_UPLOAD_CHUNK
 	);
 
+	/**
+	 * @param {string} message User-visible message.
+	 * @returns {Error}
+	 */
+	function createChunkFailure( message ) {
+		const err = new Error(
+			message ||
+			( settings.i18n && settings.i18n.uploadError ) ||
+			'Chunk transfer failed.'
+		);
+		err.name = 'MksddnChunkFailure';
+		return err;
+	}
+
+	/**
+	 * @param {*} data Parsed JSON body.
+	 * @returns {boolean}
+	 */
+	function isRestErrorPayload( data ) {
+		return Boolean(
+			data &&
+			typeof data === 'object' &&
+			typeof data.code === 'string' &&
+			data.code.length > 0 &&
+			typeof data.message === 'string'
+		);
+	}
+
+	/**
+	 * @param {*} payload Parsed JSON body.
+	 * @returns {boolean}
+	 */
+	function isRestNoRoute( payload ) {
+		return Boolean(
+			isRestErrorPayload( payload ) &&
+			payload.code === 'rest_no_route'
+		);
+	}
+
+	/**
+	 * @param {RequestInit} options Fetch options.
+	 * @returns {RequestInit}
+	 */
+	function buildFetchOptions( options ) {
+		return Object.assign(
+			{
+				credentials: 'same-origin',
+				// Fail fast when http/https or www redirects would turn POST into GET.
+				redirect: 'error',
+			},
+			options || {}
+		);
+	}
+
+	/**
+	 * @param {string} message User-visible message.
+	 */
+	function showRestWarning( message ) {
+		if ( ! message ) {
+			return;
+		}
+
+		document.querySelectorAll(
+			'[data-mksddn-full-import], [data-mksddn-unified-import], [data-mksddn-full-export]'
+		).forEach( ( form ) => {
+			if ( form.querySelector( '.mksddn-chunk-rest-warning' ) ) {
+				return;
+			}
+
+			const notice = document.createElement( 'div' );
+			notice.className = 'notice notice-warning inline mksddn-chunk-rest-warning';
+			const paragraph = document.createElement( 'p' );
+			paragraph.textContent = message;
+			notice.appendChild( paragraph );
+			form.prepend( notice );
+		} );
+	}
+
+	/**
+	 * @param {Response} response Fetch response.
+	 * @param {*} payload Parsed JSON body.
+	 * @returns {string}
+	 */
+	function resolveRestFailureMessage( response, payload ) {
+		const i18n = settings.i18n || {};
+
+		if ( isRestNoRoute( payload ) ) {
+			return i18n.restNoRoute ||
+				'Migration REST endpoints are unavailable for this request.';
+		}
+		if ( isRestErrorPayload( payload ) ) {
+			return payload.message;
+		}
+		if ( response.status === 404 ) {
+			return i18n.restNotFound || 'WordPress REST API is not reachable (HTTP 404).';
+		}
+		if ( response.status === 401 || response.status === 403 ) {
+			return i18n.restForbidden || 'You are not allowed to use the migration REST API.';
+		}
+		if ( response.status >= 500 ) {
+			return i18n.restServerError || 'The server returned an error during chunked transfer.';
+		}
+
+		return ( i18n.uploadError || 'Chunk transfer failed.' ) + ' (' + response.status + ')';
+	}
+
+	/**
+	 * @param {string} path REST path relative to mksddn/v1/.
+	 * @param {RequestInit} options Fetch options.
+	 * @returns {Promise<Object>}
+	 */
+	async function fetchChunkJson( path, options ) {
+		let response;
+
+		try {
+			response = await fetch( settings.restUrl + path, buildFetchOptions( options ) );
+		} catch ( error ) {
+			if ( error instanceof TypeError ) {
+				throw createChunkFailure(
+					( settings.i18n && settings.i18n.restRedirect ) ||
+					'The chunk transfer request was redirected.'
+				);
+			}
+			throw error;
+		}
+
+		let payload;
+
+		try {
+			payload = await response.json();
+		} catch ( e ) {
+			if ( response.status === 404 ) {
+				throw createChunkFailure( settings.i18n && settings.i18n.restNotFound );
+			}
+			throw createChunkFailure(
+				( ( settings.i18n && settings.i18n.restInvalidResponse ) || 'Unexpected server response.' ) +
+				' (' + response.status + ')'
+			);
+		}
+
+		if ( ! response.ok || isRestErrorPayload( payload ) ) {
+			throw createChunkFailure( resolveRestFailureMessage( response, payload ) );
+		}
+
+		return payload;
+	}
+
+	async function verifyChunkRestRoute() {
+		if ( ! settings.restUrl || ! settings.nonce ) {
+			return false;
+		}
+
+		try {
+			const response = await fetch(
+				settings.restUrl + 'chunk/ping',
+				buildFetchOptions( {
+					headers: { 'X-WP-Nonce': settings.nonce },
+				} )
+			);
+
+			if ( ! response.ok ) {
+				return false;
+			}
+
+			const payload = await response.json();
+			return Boolean( payload && payload.ok );
+		} catch ( error ) {
+			return false;
+		}
+	}
+
 	const ChunkClient = {
 		async initJob( totalChunks, checksum, jobChunkSize ) {
-			const response = await fetch( settings.restUrl + 'chunk/init', {
+			return fetchChunkJson( 'chunk/init', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -30,12 +201,10 @@
 					chunk_size: jobChunkSize,
 				} ),
 			} );
-
-			return response.json();
 		},
 
 		async uploadChunk( jobId, index, chunk ) {
-			const response = await fetch( settings.restUrl + 'chunk/upload', {
+			return fetchChunkJson( 'chunk/upload', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -47,8 +216,6 @@
 					chunk,
 				} ),
 			} );
-
-			return response.json();
 		},
 	};
 
@@ -91,33 +258,12 @@
 		return err;
 	}
 
-	/**
-	 * @param {*} data Parsed JSON body.
-	 * @returns {boolean}
-	 */
-	function isRestErrorPayload( data ) {
+	function isTransferFailure( error ) {
 		return Boolean(
-			data &&
-			typeof data === 'object' &&
-			typeof data.code === 'string' &&
-			data.code.length > 0 &&
-			typeof data.message === 'string'
+			error &&
+			( error.name === 'MksddnChunkFailure' || error.name === 'MksddnExportFailure' ) &&
+			error.message
 		);
-	}
-
-	/**
-	 * @param {Response} response Fetch response.
-	 * @returns {Promise<Object>}
-	 */
-	async function parseJsonResponse( response ) {
-		try {
-			return await response.json();
-		} catch ( e ) {
-			throw createExportFailure(
-				( settings.i18n && settings.i18n.exportInvalidResponse ) ||
-					( 'Invalid server response (' + response.status + ').' )
-			);
-		}
 	}
 
 	function formatBytes( bytes ) {
@@ -197,6 +343,14 @@ function hideProgressLabel( delay = 0 ) {
 		let totalChunks = Math.max( 1, Math.ceil( file.size / jobChunkSize ) );
 		const init = await ChunkClient.initJob( totalChunks, '', jobChunkSize );
 		const jobId = init.job_id;
+
+		if ( ! jobId ) {
+			throw createChunkFailure(
+				( settings.i18n && settings.i18n.restInvalidInit ) ||
+				'Invalid response when starting chunked upload.'
+			);
+		}
+
 		const negotiatedSize = init.chunk_size || jobChunkSize;
 		currentJobId = jobId;
 		uploadInProgress = true;
@@ -240,7 +394,7 @@ function hideProgressLabel( delay = 0 ) {
 			setProgressLabel( 1, settings.i18n.preparing );
 			setProgressLabel( 5, settings.i18n.exportBusy );
 
-			const initResponse = await fetch( settings.restUrl + 'chunk/download/init', {
+			const init = await fetchChunkJson( 'chunk/download/init', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -248,17 +402,6 @@ function hideProgressLabel( delay = 0 ) {
 				},
 				body: JSON.stringify( {} ),
 			} );
-
-			const init = await parseJsonResponse( initResponse );
-
-			if ( ! initResponse.ok || isRestErrorPayload( init ) ) {
-				throw createExportFailure(
-					isRestErrorPayload( init )
-						? init.message
-						: ( ( settings.i18n && settings.i18n.exportHttpError ) || 'Export request failed.' ) +
-								' (' + initResponse.status + ')'
-				);
-			}
 
 			if ( ! init.job_id || ! init.total_chunks ) {
 				throw createExportFailure(
@@ -273,21 +416,12 @@ function hideProgressLabel( delay = 0 ) {
 			const parts = [];
 
 			for ( let i = 0; i < totalChunks; i++ ) {
-				const chunkResponse = await fetch(
-					`${ settings.restUrl }chunk/download?job_id=${ encodeURIComponent( jobId ) }&index=${ i }`,
+				const payload = await fetchChunkJson(
+					`chunk/download?job_id=${ encodeURIComponent( jobId ) }&index=${ i }`,
 					{
 						headers: { 'X-WP-Nonce': settings.nonce },
 					}
 				);
-				const payload = await parseJsonResponse( chunkResponse );
-
-				if ( ! chunkResponse.ok || isRestErrorPayload( payload ) ) {
-					throw createExportFailure(
-						isRestErrorPayload( payload )
-							? payload.message
-							: ( settings.i18n && settings.i18n.exportChunkError ) || 'Chunk download failed.'
-					);
-				}
 
 				if ( typeof payload.chunk !== 'string' ) {
 					throw createExportFailure(
@@ -369,6 +503,12 @@ function hideProgressLabel( delay = 0 ) {
 				hidden.value = jobId;
 				form.appendChild( hidden );
 
+				const hiddenName = document.createElement( 'input' );
+				hiddenName.type = 'hidden';
+				hiddenName.name = 'chunk_original_name';
+				hiddenName.value = file.name;
+				form.appendChild( hiddenName );
+
 				fileInput.value = '';
 				fileInput.disabled = true;
 
@@ -376,8 +516,9 @@ function hideProgressLabel( delay = 0 ) {
 				form.submit();
 			} catch ( error ) {
 				console.error( error );
-				alert( settings.i18n.uploadError );
-				setProgressLabel( 0, settings.i18n.importError );
+				const message = isTransferFailure( error ) ? error.message : settings.i18n.uploadError;
+				alert( message );
+				setProgressLabel( 0, message );
 				hideProgressLabel( 2500 );
 				cancelChunkJob( currentJobId );
 				if ( submitButton ) {
@@ -413,7 +554,7 @@ function hideProgressLabel( delay = 0 ) {
 			try {
 				await downloadFullSite();
 			} catch ( error ) {
-				if ( error && error.name === 'MksddnExportFailure' ) {
+				if ( isTransferFailure( error ) ) {
 					window.alert( error.message );
 					setProgressLabel( 0, error.message );
 					hideProgressLabel( 4000 );
@@ -438,15 +579,18 @@ function hideProgressLabel( delay = 0 ) {
 		}
 
 		try {
-			fetch( settings.restUrl + 'chunk/cancel', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-WP-Nonce': settings.nonce,
-				},
-				body: JSON.stringify( { job_id: jobId } ),
-				keepalive: keepAlive,
-			} );
+			fetch(
+				settings.restUrl + 'chunk/cancel',
+				buildFetchOptions( {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-WP-Nonce': settings.nonce,
+					},
+					body: JSON.stringify( { job_id: jobId } ),
+					keepalive: keepAlive,
+				} )
+			);
 		} catch ( error ) {
 			// Ignore cleanup failures.
 		}
@@ -461,5 +605,20 @@ function hideProgressLabel( delay = 0 ) {
 	document.addEventListener( 'DOMContentLoaded', () => {
 		attachFullImportHandler();
 		attachFullExportHandler();
+
+		verifyChunkRestRoute()
+			.then( ( restReady ) => {
+				if ( restReady ) {
+					return;
+				}
+
+				showRestWarning(
+					( settings.i18n && settings.i18n.restPreflightFailed ) ||
+					'Chunk transfer endpoints are not reachable yet.'
+				);
+			} )
+			.catch( () => {
+				// Ignore check failures: form handlers are already attached.
+			} );
 	} );
 } )();

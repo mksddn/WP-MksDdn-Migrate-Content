@@ -8,6 +8,8 @@
 
 namespace MksDdn\MigrateContent\Support;
 
+use MksDdn\MigrateContent\Services\PluginLogger;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -74,9 +76,11 @@ class PostImportMaintenance {
 	public function purge_object_cache(): void {
 		if ( function_exists( 'wp_cache_flush' ) ) {
 			$flush_ok = wp_cache_flush();
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && false === $flush_ok ) {
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				error_log( 'MksDdn Migrate: wp_cache_flush() returned false after full import maintenance.' );
+			if ( false === $flush_ok ) {
+				PluginLogger::log(
+					'wp_cache_flush() returned false after full import maintenance.',
+					'object cache'
+				);
 			}
 		}
 
@@ -166,23 +170,20 @@ class PostImportMaintenance {
 			}
 
 			$ok = wp_cache_flush_group( $group );
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && false === $ok ) {
+			if ( false === $ok ) {
 				$this->log_object_cache_diagnostic( sprintf( 'wp_cache_flush_group( %s ) returned false.', $group ) );
 			}
 		}
 	}
 
 	/**
-	 * Emit a single WP_DEBUG diagnostic for object-cache behavior.
+	 * Emit an object-cache diagnostic log entry.
 	 *
 	 * @param string $message Human-readable explanation.
 	 * @return void
 	 */
 	private function log_object_cache_diagnostic( string $message ): void {
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( 'MksDdn Migrate [object cache]: ' . $message );
-		}
+		PluginLogger::log( $message, 'object cache' );
 	}
 
 	/**

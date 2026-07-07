@@ -217,17 +217,32 @@ class ExportHandler implements ExporterInterface {
 
 		// Load all posts in batch.
 		if ( ! empty( $all_post_ids ) ) {
-			$posts = \get_posts(
+			$allowed_post_types = array_unique( $post_types );
+			$posts              = \get_posts(
 				array(
 					'post__in'       => $all_post_ids,
-					'post_type'      => array_unique( $post_types ),
+					'post_type'      => $allowed_post_types,
 					'posts_per_page' => -1,
 					'post_status'    => 'any',
+					'lang'           => '', // Polylang: include posts from all languages.
 				)
 			);
 
 			foreach ( $posts as $post ) {
 				$posts_by_id[ $post->ID ] = $post;
+			}
+
+			// Fallback for plugins that still filter batch queries by current language.
+			foreach ( $all_post_ids as $post_id ) {
+				$post_id = (int) $post_id;
+				if ( isset( $posts_by_id[ $post_id ] ) ) {
+					continue;
+				}
+
+				$post = \get_post( $post_id );
+				if ( $post instanceof WP_Post && in_array( $post->post_type, $allowed_post_types, true ) ) {
+					$posts_by_id[ $post->ID ] = $post;
+				}
 			}
 
 			// Preload meta, thumbnails, and ACF fields in batch.

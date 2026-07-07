@@ -313,6 +313,19 @@ class AdminPageController {
 			)
 		);
 
+		wp_localize_script(
+			'mksddn-mc-admin-scripts',
+			'mksddnMcAdmin',
+			array(
+				'i18n' => array(
+					'importProcessing'     => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
+					'importDone'           => __( 'Import request finished.', 'mksddn-migrate-content' ),
+					'importGatewayTimeout' => __( 'The server timed out while waiting for the import response. The import may still be running; check the site before starting it again.', 'mksddn-migrate-content' ),
+					'importRequestFailed'  => __( 'Import request failed. Check PHP error logs and try again.', 'mksddn-migrate-content' ),
+				),
+			)
+		);
+
 		// Enqueue server file selector script.
 		wp_enqueue_script(
 			'mksddn-server-file-selector',
@@ -362,6 +375,14 @@ class AdminPageController {
 						/* translators: %d: upload progress percent. */
 						'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
 						'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
+						'restNotFound'       => __( 'WordPress REST API is not reachable (HTTP 404). Chunked transfers need working permalinks: open Settings → Permalinks and click Save without changes. If the problem remains, ask your host to fix /wp-json/ routing.', 'mksddn-migrate-content' ),
+						'restNoRoute'        => __( 'Migration REST endpoints are unavailable for this request. Hard-refresh the page (Ctrl+F5), open admin with the same URL as Settings → General → Site Address (http/https, www), save Permalinks once, and allow /wp-json/mksddn/v1/ in security or caching plugins.', 'mksddn-migrate-content' ),
+						'restRedirect'       => __( 'The chunk transfer request was redirected (often http↔https or www mismatch). Open WordPress admin using the same URL as Settings → General → Site Address, refresh the page, and try again.', 'mksddn-migrate-content' ),
+						'restPreflightFailed' => __( 'Chunk transfer endpoints are not reachable yet. Refresh this page before uploading or exporting. If the warning remains, check permalinks and security plugins blocking /wp-json/.', 'mksddn-migrate-content' ),
+						'restForbidden'      => __( 'You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator.', 'mksddn-migrate-content' ),
+						'restServerError'    => __( 'The server returned an error during chunked transfer. Check PHP error logs or try again later.', 'mksddn-migrate-content' ),
+						'restInvalidResponse' => __( 'The server returned an unexpected response during chunked transfer.', 'mksddn-migrate-content' ),
+						'restInvalidInit'    => __( 'Invalid response when starting chunked upload.', 'mksddn-migrate-content' ),
 						/* translators: 1: selected label, 2: chunk size label. */
 						'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
 						/* translators: %d: upload progress percent. */

@@ -45,21 +45,28 @@ class Plugin {
 	 * @since 1.0.0
 	 */
 	public function register(): void {
+		add_action( 'plugins_loaded', array( $this, 'boot_rest' ), 5 );
 		add_action( 'init', array( FullImportMaintenance::class, 'maybe_block_public_requests' ), 0 );
-		add_action( 'init', array( $this, 'boot' ) );
+		add_action( 'init', array( $this, 'boot_admin' ) );
 	}
 
 	/**
-	 * Initialize services.
+	 * Register chunk REST routes as early as possible.
+	 *
+	 * @return void
+	 * @since 2.3.1
+	 */
+	public function boot_rest(): void {
+		$this->container->get( ChunkRestController::class );
+	}
+
+	/**
+	 * Initialize admin services.
 	 *
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function boot(): void {
-		// Initialize chunk REST controller (needed for REST API routes).
-		$this->container->get( ChunkRestController::class );
-
-		// Only load admin controller on admin pages.
+	public function boot_admin(): void {
 		if ( is_admin() ) {
 			$admin_controller = $this->container->get( AdminPageController::class );
 			$admin_controller->register();

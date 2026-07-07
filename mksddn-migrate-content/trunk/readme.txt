@@ -2,9 +2,9 @@
 Contributors: mksddn
 Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.3.1
+Stable tag: 2.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -156,6 +156,13 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.3.2 =
+* Added: Centralized `PluginLogger` — dedicated log file in a private directory (uploads fallback), rotation, disable via `MKSDDN_MC_DISABLE_LOGGING`.
+* Enhanced: Chunk transfer reliability — REST health check, clearer error messages, original file name preserved through chunked uploads.
+* Enhanced: `ImportTypeDetector` — more accurate detection from archive payload, support for `full`/`full-site` manifests, theme-only vs full-site archives.
+* Enhanced: Import error handling — inline notices, gateway-timeout feedback, graceful handling when memory limit is exceeded.
+* Fixed: Selected content export now includes posts from all Polylang languages.
 
 = 2.3.1 =
 * Fixed: Selected content import now preserves registered custom post types instead of falling back to pages.

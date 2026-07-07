@@ -20,6 +20,8 @@ $counts   = $summary['counts'] ?? array();
 $total    = (int) ( $counts['incoming'] ?? count( $incoming ) );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $conflict = (int) ( $counts['conflicts'] ?? 0 );
+/* translators: 1: selected users count, 2: total users count. */
+$selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-content' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variable.
 ?>
 <h3><?php esc_html_e( 'Review users before import', 'mksddn-migrate-content' ); ?></h3>
 <p><?php esc_html_e( 'Pick which users from the archive should be added or overwrite existing accounts on this site.', 'mksddn-migrate-content' ); ?></p>
@@ -31,16 +33,29 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 	<input type="hidden" name="action" value="mksddn_mc_import_full">
 	<input type="hidden" name="preview_id" value="<?php echo esc_attr( $preview['id'] ); ?>">
 
+	<div class="tablenav top mksddn-mc-user-toolbar">
+		<div class="alignleft actions">
+			<button type="button" class="button mksddn-mc-user-select-all"><?php esc_html_e( 'Select all', 'mksddn-migrate-content' ); ?></button>
+			<button type="button" class="button mksddn-mc-user-deselect-all"><?php esc_html_e( 'Deselect all', 'mksddn-migrate-content' ); ?></button>
+		</div>
+		<div class="tablenav-pages one-page mksddn-mc-user-selection-summary">
+			<span
+				class="displaying-num mksddn-mc-user-selection-count"
+				data-label="<?php echo esc_attr( $selection_count_label ); ?>"
+			></span>
+		</div>
+	</div>
+
 	<div class="mksddn-mc-user-table-wrapper">
 		<table class="widefat striped mksddn-mc-user-table">
 			<thead>
 				<tr>
-					<th><?php esc_html_e( 'Include', 'mksddn-migrate-content' ); ?></th>
-					<th><?php esc_html_e( 'Email', 'mksddn-migrate-content' ); ?></th>
-					<th><?php esc_html_e( 'Archive role', 'mksddn-migrate-content' ); ?></th>
-					<th><?php esc_html_e( 'Current role', 'mksddn-migrate-content' ); ?></th>
-					<th><?php esc_html_e( 'Status', 'mksddn-migrate-content' ); ?></th>
-					<th><?php esc_html_e( 'Conflict handling', 'mksddn-migrate-content' ); ?></th>
+					<th scope="col" class="mksddn-mc-user-include-column"><?php esc_html_e( 'Include', 'mksddn-migrate-content' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Email', 'mksddn-migrate-content' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Archive role', 'mksddn-migrate-content' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Current role', 'mksddn-migrate-content' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Status', 'mksddn-migrate-content' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Conflict handling', 'mksddn-migrate-content' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -68,7 +83,7 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 					$status_label = 'conflict' === $status ? __( 'Existing user', 'mksddn-migrate-content' ) : __( 'New user', 'mksddn-migrate-content' );
 					?>
 					<tr>
-						<td>
+						<td class="mksddn-mc-user-include-column">
 							<input type="hidden" name="user_plan[<?php echo esc_attr( $key ); ?>][email]" value="<?php echo esc_attr( $email ); ?>">
 							<input type="hidden" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="0">
 							<?php
@@ -76,7 +91,7 @@ $conflict = (int) ( $counts['conflicts'] ?? 0 );
 							$label_text = sprintf( esc_html__( 'Include %s', 'mksddn-migrate-content' ), esc_html( $email ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 							?>
 							<label class="screen-reader-text" for="<?php echo esc_attr( $checkbox ); ?>"><?php echo esc_html( $label_text ); ?></label>
-							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
+							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" class="mksddn-mc-user-import-checkbox" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
 						</td>
 						<td><strong><?php echo esc_html( $email ); ?></strong><br><span class="description"><?php echo esc_html( $entry['login'] ?? '' ); ?></span></td>
 						<td><?php echo esc_html( $role ?: '—' ); ?></td>
