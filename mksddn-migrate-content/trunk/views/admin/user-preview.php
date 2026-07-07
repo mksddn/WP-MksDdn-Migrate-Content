@@ -21,8 +21,7 @@ $total    = (int) ( $counts['incoming'] ?? count( $incoming ) );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $conflict = (int) ( $counts['conflicts'] ?? 0 );
 /* translators: 1: selected users count, 2: total users count. */
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
-$selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-content' );
+$selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-content' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variable.
 ?>
 <h3><?php esc_html_e( 'Review users before import', 'mksddn-migrate-content' ); ?></h3>
 <p><?php esc_html_e( 'Pick which users from the archive should be added or overwrite existing accounts on this site.', 'mksddn-migrate-content' ); ?></p>

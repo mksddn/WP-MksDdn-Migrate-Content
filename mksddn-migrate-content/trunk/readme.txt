@@ -2,7 +2,7 @@
 Contributors: mksddn
 Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 8.0
 Stable tag: 2.3.1
 License: GPLv2 or later

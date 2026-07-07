@@ -147,7 +147,9 @@ class UnifiedImportOrchestrator {
 		// Verify nonce for form data processing.
 		// Check for unified import nonce first, then fallback to other nonces.
 		$nonce_verified = false;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Reading nonce value for verification.
 		if ( isset( $_REQUEST['_wpnonce'] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Reading nonce value for verification.
 			$nonce = sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) );
 			$nonce_verified = wp_verify_nonce( $nonce, 'mksddn_mc_unified_import' )
 				|| wp_verify_nonce( $nonce, 'mksddn_mc_full_import' )
@@ -230,7 +232,11 @@ class UnifiedImportOrchestrator {
 	private function resolve_file_source( array $request_data ): array|WP_Error {
 		// Check for chunked upload.
 		if ( ! empty( $request_data['chunk_job_id'] ) ) {
-			return $this->resolve_chunked_file( $request_data['chunk_job_id'] );
+			$original_name = isset( $request_data['chunk_original_name'] )
+				? sanitize_file_name( (string) $request_data['chunk_original_name'] )
+				: '';
+
+			return $this->resolve_chunked_file( (string) $request_data['chunk_job_id'], $original_name );
 		}
 
 		// Check for server file.
@@ -245,11 +251,12 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Resolve chunked file.
 	 *
-	 * @param string $chunk_job_id Chunk job ID.
+	 * @param string $chunk_job_id    Chunk job ID.
+	 * @param string $original_name   Original upload filename from the client.
 	 * @return array|WP_Error File info or error.
 	 * @since 2.0.0
 	 */
-	private function resolve_chunked_file( string $chunk_job_id ): array|WP_Error {
+	private function resolve_chunked_file( string $chunk_job_id, string $original_name = '' ): array|WP_Error {
 		$repo = new ChunkJobRepository();
 		$job  = $repo->get( $chunk_job_id );
 
@@ -261,11 +268,6 @@ class UnifiedImportOrchestrator {
 		if ( ! file_exists( $file_path ) ) {
 			return new WP_Error( 'mksddn_mc_chunk_file_missing', __( 'Chunked upload file not found.', 'mksddn-migrate-content' ) );
 		}
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
-		$original_name = isset( $_POST['chunk_original_name'] )
-			? sanitize_file_name( wp_unslash( (string) $_POST['chunk_original_name'] ) )
-			: '';
 
 		if ( '' === $original_name ) {
 			$original_name = sprintf( 'chunk:%s', $chunk_job_id );

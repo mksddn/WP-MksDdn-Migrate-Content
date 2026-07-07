@@ -173,7 +173,7 @@ class ImportTypeDetector {
 		$stream      = $zip->getStream( 'payload/content.json' );
 
 		if ( false !== $stream ) {
-			$sample = fread( $stream, $sample_size );
+			$sample = fread( $stream, $sample_size ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- ZipArchive stream requires native fread.
 			fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with ZipArchive stream
 			return false === $sample ? null : (string) $sample;
 		}
