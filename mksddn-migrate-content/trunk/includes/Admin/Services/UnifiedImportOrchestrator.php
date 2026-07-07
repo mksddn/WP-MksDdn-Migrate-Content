@@ -86,6 +86,20 @@ class UnifiedImportOrchestrator {
 	private ServerBackupScanner $server_scanner;
 
 	/**
+	 * Notification service.
+	 *
+	 * @var NotificationService
+	 */
+	private NotificationService $notification_service;
+
+	/**
+	 * Reserved memory to allow graceful handling after fatal errors.
+	 *
+	 * @var string|null
+	 */
+	private ?string $fatal_memory_reserve = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param SelectedContentImportService|null $selected_import_service Selected content import service.
@@ -94,6 +108,7 @@ class UnifiedImportOrchestrator {
 	 * @param ServerBackupScanner|null         $server_scanner           Server backup scanner.
 	 * @param ThemePreviewStoreInterface|null  $theme_preview_store      Theme preview store.
 	 * @param ResponseHandler|null             $response_handler         Response handler.
+	 * @param NotificationService|null         $notification_service     Notification service.
 	 * @param ImportPreflightService|null      $preflight_service        Preflight analyzer.
 	 * @param PreflightReportStore|null        $preflight_report_store   Preflight report store.
 	 * @since 2.0.0
@@ -105,6 +120,7 @@ class UnifiedImportOrchestrator {
 		?ServerBackupScanner $server_scanner = null,
 		?ThemePreviewStoreInterface $theme_preview_store = null,
 		?ResponseHandler $response_handler = null,
+		?NotificationService $notification_service = null,
 		?ImportPreflightService $preflight_service = null,
 		?PreflightReportStore $preflight_report_store = null
 	) {
@@ -114,6 +130,7 @@ class UnifiedImportOrchestrator {
 		$this->server_scanner           = $server_scanner ?? new ServerBackupScanner();
 		$this->theme_preview_store      = $theme_preview_store ?? new ThemePreviewStore();
 		$this->response_handler         = $response_handler ?? new ResponseHandler();
+		$this->notification_service     = $notification_service ?? new NotificationService();
 		$this->preflight_service        = $preflight_service ?? new ImportPreflightService();
 		$this->preflight_report_store   = $preflight_report_store ?? new PreflightReportStore();
 	}
@@ -140,6 +157,8 @@ class UnifiedImportOrchestrator {
 		if ( ! $nonce_verified ) {
 			wp_die( esc_html__( 'Security check failed.', 'mksddn-migrate-content' ) );
 		}
+
+		$this->register_fatal_memory_redirect();
 
 		$preflight_report_id = isset( $request_data['preflight_report_id'] )
 			? sanitize_text_field( (string) $request_data['preflight_report_id'] )
@@ -569,5 +588,52 @@ class UnifiedImportOrchestrator {
 
 		$this->preflight_report_store->save( (int) get_current_user_id(), $report, $handle, $report_id );
 		$this->response_handler->redirect_to_preflight_report( $report_id );
+	}
+
+	/**
+	 * Register shutdown redirect for memory exhaustion fatals.
+	 *
+	 * @return void
+	 */
+	private function register_fatal_memory_redirect(): void {
+		if ( null === $this->fatal_memory_reserve ) {
+			$this->fatal_memory_reserve = str_repeat( 'x', 32768 );
+		}
+
+		register_shutdown_function(
+			function (): void {
+				$this->fatal_memory_reserve = null;
+				$last_error                 = error_get_last();
+
+				if ( ! is_array( $last_error ) || empty( $last_error['type'] ) || empty( $last_error['message'] ) ) {
+					return;
+				}
+
+				$fatal_types = array(
+					E_ERROR,
+					E_PARSE,
+					E_CORE_ERROR,
+					E_COMPILE_ERROR,
+					E_USER_ERROR,
+				);
+				if ( ! in_array( (int) $last_error['type'], $fatal_types, true ) ) {
+					return;
+				}
+
+				$message = isset( $last_error['message'] ) ? (string) $last_error['message'] : '';
+				if ( false === stripos( $message, 'Allowed memory size' ) ) {
+					return;
+				}
+
+				if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+					return;
+				}
+
+				$this->notification_service->redirect_with_notice(
+					'error',
+					__( 'Import failed due to insufficient PHP memory. Increase memory_limit and try again.', 'mksddn-migrate-content' )
+				);
+			}
+		);
 	}
 }

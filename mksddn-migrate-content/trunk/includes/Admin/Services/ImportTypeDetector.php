@@ -119,7 +119,7 @@ class ImportTypeDetector {
 
 			// Read a small portion of payload to check for database structure.
 			// Read first 2048 bytes to get enough data for detection.
-			$payload_sample = $zip->getFromName( 'payload/content.json', 0, 2048 );
+			$payload_sample = $zip->getFromName( 'payload/content.json', 2048 );
 
 			if ( false === $payload_sample ) {
 				return 'selected';
