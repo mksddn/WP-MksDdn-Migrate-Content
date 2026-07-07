@@ -193,6 +193,18 @@ class PluginConfig {
 	 * @since 2.3.2
 	 */
 	public static function logs_dir(): string {
+		$private_default = trailingslashit( sys_get_temp_dir() ) . 'mksddn-mc-logs/';
+		$private_dir     = (string) apply_filters( 'mksddn_mc_logs_dir', $private_default );
+
+		if ( '' === $private_dir ) {
+			$private_dir = $private_default;
+		}
+
+		$private_dir = trailingslashit( $private_dir );
+		if ( is_dir( $private_dir ) || wp_mkdir_p( $private_dir ) ) {
+			return $private_dir;
+		}
+
 		return trailingslashit( self::uploads_base_dir() ) . 'logs/';
 	}
 
@@ -290,7 +302,7 @@ class PluginConfig {
 			'base'    => $base,
 			'jobs'    => $base . 'jobs/',
 			'imports' => $base . 'imports/',
-			'logs'    => $base . 'logs/',
+			'logs'    => self::logs_dir(),
 		);
 	}
 

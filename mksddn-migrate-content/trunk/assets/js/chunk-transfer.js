@@ -602,16 +602,23 @@ function hideProgressLabel( delay = 0 ) {
 		}
 	} );
 
-	document.addEventListener( 'DOMContentLoaded', async () => {
-		const restReady = await verifyChunkRestRoute();
-		if ( ! restReady ) {
-			showRestWarning(
-				( settings.i18n && settings.i18n.restPreflightFailed ) ||
-				'Chunk transfer endpoints are not reachable yet.'
-			);
-		}
-
+	document.addEventListener( 'DOMContentLoaded', () => {
 		attachFullImportHandler();
 		attachFullExportHandler();
+
+		verifyChunkRestRoute()
+			.then( ( restReady ) => {
+				if ( restReady ) {
+					return;
+				}
+
+				showRestWarning(
+					( settings.i18n && settings.i18n.restPreflightFailed ) ||
+					'Chunk transfer endpoints are not reachable yet.'
+				);
+			} )
+			.catch( () => {
+				// Ignore check failures: form handlers are already attached.
+			} );
 	} );
 } )();

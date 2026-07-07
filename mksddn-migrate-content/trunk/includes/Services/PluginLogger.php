@@ -15,7 +15,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Writes plugin logs to uploads/mksddn-mc/logs/migrate.log and PHP error_log.
+ * Writes plugin logs to a private directory and PHP error_log.
+ *
+ * Falls back to uploads-based logs when private storage is unavailable.
  *
  * @since 2.3.2
  */
@@ -134,6 +136,15 @@ class PluginLogger {
 		if ( ! file_exists( $htaccess ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 			@file_put_contents( $htaccess, "Deny from all\n" );
+		}
+
+		$web_config = trailingslashit( $dir ) . 'web.config';
+		if ( ! file_exists( $web_config ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			@file_put_contents(
+				$web_config,
+				"<configuration>\n<system.webServer>\n<authorization>\n<deny users=\"*\" />\n</authorization>\n</system.webServer>\n</configuration>\n"
+			);
 		}
 
 		$index = trailingslashit( $dir ) . 'index.php';
