@@ -193,19 +193,53 @@ class PluginConfig {
 	 * @since 2.3.2
 	 */
 	public static function logs_dir(): string {
+		$uploads_default = trailingslashit( self::uploads_base_dir() ) . 'logs/';
 		$private_default = trailingslashit( sys_get_temp_dir() ) . 'mksddn-mc-logs/';
-		$private_dir     = (string) apply_filters( 'mksddn_mc_logs_dir', $private_default );
+		$preferred_dir   = (string) apply_filters( 'mksddn_mc_logs_dir', $uploads_default );
 
-		if ( '' === $private_dir ) {
-			$private_dir = $private_default;
+		if ( '' === $preferred_dir ) {
+			$preferred_dir = $uploads_default;
 		}
 
-		$private_dir = trailingslashit( $private_dir );
-		if ( is_dir( $private_dir ) || wp_mkdir_p( $private_dir ) ) {
-			return $private_dir;
+		$candidates = array(
+			trailingslashit( $preferred_dir ),
+			trailingslashit( $uploads_default ),
+			trailingslashit( $private_default ),
+		);
+
+		foreach ( $candidates as $candidate ) {
+			if ( ! is_dir( $candidate ) && ! wp_mkdir_p( $candidate ) ) {
+				continue;
+			}
+
+			if ( self::is_writable_directory( $candidate ) ) {
+				return $candidate;
+			}
 		}
 
-		return trailingslashit( self::uploads_base_dir() ) . 'logs/';
+		return trailingslashit( $uploads_default );
+	}
+
+	/**
+	 * Check whether a directory is writable by creating a probe file.
+	 *
+	 * @param string $dir Directory path.
+	 * @return bool True when writable, false otherwise.
+	 * @since 2.3.3
+	 */
+	private static function is_writable_directory( string $dir ): bool {
+		$probe = trailingslashit( $dir ) . '.mksddn-mc-write-test';
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		$written = @file_put_contents( $probe, '1' );
+		if ( false === $written ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
+		@unlink( $probe );
+
+		return true;
 	}
 
 	// ==========================================================================

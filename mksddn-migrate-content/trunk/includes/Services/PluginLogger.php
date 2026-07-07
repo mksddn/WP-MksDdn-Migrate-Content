@@ -107,21 +107,45 @@ class PluginLogger {
 	 * @return void
 	 */
 	private static function write_file( string $line ): void {
-		$dir = PluginConfig::logs_dir();
-
-		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
-			return;
-		}
-
-		self::protect_directory( $dir );
-
-		$path = self::log_path();
-		self::maybe_rotate( $path );
-
 		$entry = sprintf( '[%s] %s%s', gmdate( 'Y-m-d H:i:s' ), $line, PHP_EOL );
 
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Dedicated plugin log file.
-		@file_put_contents( $path, $entry, FILE_APPEND | LOCK_EX );
+		foreach ( self::candidate_directories() as $dir ) {
+			if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+				continue;
+			}
+
+			self::protect_directory( $dir );
+
+			$path = trailingslashit( $dir ) . self::LOG_FILENAME;
+			self::maybe_rotate( $path );
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Dedicated plugin log file.
+			$written = @file_put_contents( $path, $entry, FILE_APPEND | LOCK_EX );
+			if ( false !== $written ) {
+				return;
+			}
+		}
+	}
+
+	/**
+	 * Build prioritized list of log directories.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function candidate_directories(): array {
+		$primary = trailingslashit( PluginConfig::logs_dir() );
+		$uploads = trailingslashit( PluginConfig::uploads_base_dir() ) . 'logs/';
+		$temp    = trailingslashit( sys_get_temp_dir() ) . 'mksddn-mc-logs/';
+
+		return array_values(
+			array_unique(
+				array(
+					$primary,
+					trailingslashit( $uploads ),
+					trailingslashit( $temp ),
+				)
+			)
+		);
 	}
 
 	/**
