@@ -95,7 +95,7 @@ class ImportTypeDetector {
 
 			// Check manifest type first.
 			$manifest_type = sanitize_key( $manifest['type'] ?? '' );
-			if ( 'full' === $manifest_type ) {
+			if ( in_array( $manifest_type, array( 'full', 'full-site' ), true ) ) {
 				// Validate full site manifest structure.
 				if ( ! isset( $manifest['format_version'] ) || ! isset( $manifest['plugin_version'] ) ) {
 					return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid full site manifest structure.', 'mksddn-migrate-content' ) );
