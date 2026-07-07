@@ -14,6 +14,7 @@ use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use WP_Error;
@@ -164,6 +165,14 @@ class UnifiedImportOrchestrator {
 			? sanitize_text_field( (string) $request_data['preflight_report_id'] )
 			: '';
 
+		$this->log(
+			sprintf(
+				'process() step=%s preflight_id=%s',
+				'' !== $preflight_report_id ? 'import' : 'preflight',
+				'' !== $preflight_report_id ? $preflight_report_id : '-'
+			)
+		);
+
 		if ( '' !== $preflight_report_id ) {
 			$file_info = $this->resolve_preflight_import( $preflight_report_id );
 		} else {
@@ -171,15 +180,28 @@ class UnifiedImportOrchestrator {
 		}
 
 		if ( is_wp_error( $file_info ) ) {
+			$this->log( 'File resolve failed: ' . $file_info->get_error_message() );
 			wp_die( esc_html( $file_info->get_error_message() ) );
 		}
+
+		$this->log(
+			sprintf(
+				'Resolved file: %s (source: %s, extension: %s)',
+				$file_info['name'] ?? basename( $file_info['path'] ?? '' ),
+				$file_info['source'] ?? 'unknown',
+				$file_info['extension'] ?? ''
+			)
+		);
 
 		// Detect import type.
 		$import_type = $this->type_detector->detect( $file_info['path'], $file_info['extension'] );
 
 		if ( is_wp_error( $import_type ) ) {
+			$this->log( 'Import type detection failed: ' . $import_type->get_error_message() );
 			wp_die( esc_html( $import_type->get_error_message() ) );
 		}
+
+		$this->log( 'Detected import type: ' . $import_type );
 
 		// First step (no preflight id): always run analysis and redirect to the report.
 		if ( '' === $preflight_report_id ) {
@@ -189,6 +211,7 @@ class UnifiedImportOrchestrator {
 
 		// Second step: run the real import using the same file reference from preflight.
 		if ( 'full' === $import_type ) {
+			$this->log( 'Routing to full site import service.' );
 			$this->route_to_full_import( $file_info );
 		} elseif ( 'themes' === $import_type ) {
 			$this->route_to_theme_preview( $file_info );
@@ -432,17 +455,22 @@ class UnifiedImportOrchestrator {
 	 * @since 2.1.0
 	 */
 	private function prepare_file_for_import( array $file_info, string $file_key, string $nonce_action ): void {
+		$nonce = wp_create_nonce( $nonce_action );
+
 		if ( 'chunked' === $file_info['source'] ) {
 			$_POST['chunk_job_id'] = $file_info['chunk_job_id'];
-			$_REQUEST['_wpnonce']  = wp_create_nonce( $nonce_action );
+			$_POST['_wpnonce']     = $nonce;
+			$_REQUEST['_wpnonce']  = $nonce;
 		} elseif ( 'server' === $file_info['source'] ) {
 			$_POST['server_file'] = $file_info['server_file'];
-			$_REQUEST['_wpnonce'] = wp_create_nonce( $nonce_action );
+			$_POST['_wpnonce']    = $nonce;
+			$_REQUEST['_wpnonce'] = $nonce;
 		} elseif ( 'staged' === $file_info['source'] ) {
 			$_POST['preflight_staged_path'] = $file_info['path'];
 			$_POST['preflight_staged_name'] = $file_info['name'];
 			$_POST['preflight_staged_ext']  = $file_info['extension'];
-			$_REQUEST['_wpnonce']           = wp_create_nonce( $nonce_action );
+			$_POST['_wpnonce']              = $nonce;
+			$_REQUEST['_wpnonce']           = $nonce;
 		} else {
 			$temp = wp_tempnam( 'mksddn-unified-import-' );
 			if ( ! $temp ) {
@@ -460,7 +488,8 @@ class UnifiedImportOrchestrator {
 				'error'    => UPLOAD_ERR_OK,
 				'type'     => $this->mime_for_import_file( $file_info['extension'] ?? '' ),
 			);
-			$_REQUEST['_wpnonce'] = wp_create_nonce( $nonce_action );
+			$_POST['_wpnonce']    = $nonce;
+			$_REQUEST['_wpnonce'] = $nonce;
 		}
 	}
 
@@ -635,5 +664,15 @@ class UnifiedImportOrchestrator {
 				);
 			}
 		);
+	}
+
+	/**
+	 * Log message with plugin prefix.
+	 *
+	 * @param string $message Message to log.
+	 * @return void
+	 */
+	private function log( string $message ): void {
+		PluginLogger::log( $message, 'UnifiedImportOrchestrator' );
 	}
 }

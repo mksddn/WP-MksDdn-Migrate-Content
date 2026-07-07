@@ -95,19 +95,24 @@ class ImportTypeDetector {
 
 			// Check manifest type first.
 			$manifest_type = sanitize_key( $manifest['type'] ?? '' );
-			if ( in_array( $manifest_type, array( 'full', 'full-site' ), true ) ) {
+			if ( in_array( $manifest_type, array( 'full', 'full-site', 'full_site', 'fullsite' ), true ) ) {
 				// Validate full site manifest structure.
 				if ( ! isset( $manifest['format_version'] ) || ! isset( $manifest['plugin_version'] ) ) {
 					return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid full site manifest structure.', 'mksddn-migrate-content' ) );
 				}
 				return 'full';
 			}
-			if ( 'themes' === $manifest_type ) {
+			if ( in_array( $manifest_type, array( 'themes', 'theme' ), true ) ) {
 				// Validate themes manifest structure.
 				if ( ! isset( $manifest['format_version'] ) || ! isset( $manifest['plugin_version'] ) || ! isset( $manifest['themes'] ) || ! is_array( $manifest['themes'] ) ) {
 					return new WP_Error( 'mksddn_mc_invalid_manifest', __( 'Invalid themes manifest structure.', 'mksddn-migrate-content' ) );
 				}
 				return 'themes';
+			}
+
+			// Common selected-content manifest types should route to selected import.
+			if ( in_array( $manifest_type, array( 'selected', 'page', 'post', 'bundle' ), true ) ) {
+				return 'selected';
 			}
 
 			// Check if payload/content.json exists and contains database data.
@@ -117,29 +122,26 @@ class ImportTypeDetector {
 				return 'selected';
 			}
 
-			// Read a small portion of payload to check for database structure.
-			// Read first 2048 bytes to get enough data for detection.
-			$payload_sample = $zip->getFromName( 'payload/content.json', 2048 );
-
-			if ( false === $payload_sample ) {
-				return 'selected';
+			// Full-site archives usually include wp-content trees.
+			if ( $this->archive_has_full_site_roots( $zip ) ) {
+				return 'full';
 			}
 
-			// Check if payload contains database structure (full site import).
-			$payload_data = json_decode( $payload_sample, true );
-			if ( JSON_ERROR_NONE === json_last_error() && is_array( $payload_data ) ) {
-				// Full site archives have 'database' key with 'tables' array.
-				if ( isset( $payload_data['database'] ) && is_array( $payload_data['database'] ) ) {
+			$payload_sample = $this->read_payload_sample( $zip );
+			if ( null !== $payload_sample ) {
+				// Full-site payloads always include database table dumps.
+				if ( false !== strpos( $payload_sample, '"database"' ) && false !== strpos( $payload_sample, '"tables"' ) ) {
 					return 'full';
 				}
-				// Theme archives have 'themes' key.
-				if ( isset( $payload_data['themes'] ) && is_array( $payload_data['themes'] ) ) {
+
+				// Theme payloads include themes metadata array.
+				if ( false !== strpos( $payload_sample, '"themes"' ) ) {
 					return 'themes';
 				}
 			}
 
 			// Check for database-related directories/files in archive.
-			$db_indicators = array( 'database/', 'options/', 'filesystem/' );
+			$db_indicators = array( 'database/', 'options/', 'filesystem/', 'files/wp-content/' );
 			for ( $i = 0; $i < $zip->numFiles; $i++ ) {
 				$filename = $zip->getNameIndex( $i );
 				if ( false === $filename ) {
@@ -158,5 +160,59 @@ class ImportTypeDetector {
 		} finally {
 			$zip->close();
 		}
+	}
+
+	/**
+	 * Read a small payload sample for heuristic type detection.
+	 *
+	 * @param ZipArchive $zip Archive object.
+	 * @return string|null
+	 */
+	private function read_payload_sample( ZipArchive $zip ): ?string {
+		$sample_size = 65536;
+		$stream      = $zip->getStream( 'payload/content.json' );
+
+		if ( false !== $stream ) {
+			$sample = fread( $stream, $sample_size );
+			fclose( $stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with ZipArchive stream
+			return false === $sample ? null : (string) $sample;
+		}
+
+		$sample = $zip->getFromName( 'payload/content.json', $sample_size );
+		return false === $sample ? null : (string) $sample;
+	}
+
+	/**
+	 * Determine whether archive contains wp-content directories typical for full-site backups.
+	 *
+	 * @param ZipArchive $zip Archive object.
+	 * @return bool
+	 */
+	private function archive_has_full_site_roots( ZipArchive $zip ): bool {
+		$prefixes = array(
+			'files/wp-content/uploads/',
+			'files/wp-content/plugins/',
+			'files/wp-content/themes/',
+			'files/wp-content/mu-plugins/',
+			'wp-content/uploads/',
+			'wp-content/plugins/',
+			'wp-content/themes/',
+			'wp-content/mu-plugins/',
+		);
+
+		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+			$filename = $zip->getNameIndex( $i );
+			if ( false === $filename ) {
+				continue;
+			}
+
+			foreach ( $prefixes as $prefix ) {
+				if ( 0 === strpos( $filename, $prefix ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 }

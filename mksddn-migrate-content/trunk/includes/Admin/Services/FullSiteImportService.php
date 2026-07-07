@@ -80,11 +80,14 @@ class FullSiteImportService {
 	 * @since 1.0.0
 	 */
 	public function import(): void {
+		$this->log( 'import() called.' );
+
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to import.', 'mksddn-migrate-content' ) );
 		}
 
 		check_admin_referer( 'mksddn_mc_full_import' );
+		$this->log( 'Security check passed.' );
 
 		$preview_id = isset( $_POST['preview_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preview_id'] ) ) : '';
 		if ( $preview_id ) {
@@ -109,9 +112,17 @@ class FullSiteImportService {
 		}
 
 		if ( empty( $diff['incoming'] ) ) {
+			$this->log( 'No users in archive; executing import directly.' );
 			$this->execute( $upload );
 			return;
 		}
+
+		$this->log(
+			sprintf(
+				'Archive has %d users; redirecting to user preview.',
+				count( $diff['incoming'] )
+			)
+		);
 
 		$preview_id = $this->preview_store->create(
 			array(

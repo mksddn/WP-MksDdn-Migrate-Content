@@ -69,7 +69,17 @@ class PluginConfig {
 	 * @since 1.0.0
 	 */
 	public static function text_domain(): string {
-		return apply_filters( 'mksddn_mc_text_domain', MKSDDN_MC_TEXT_DOMAIN );
+		$filtered = apply_filters( 'mksddn_mc_text_domain', MKSDDN_MC_TEXT_DOMAIN );
+		if ( ! is_string( $filtered ) ) {
+			return MKSDDN_MC_TEXT_DOMAIN;
+		}
+
+		$slug = sanitize_key( $filtered );
+		if ( '' === $slug || ! str_starts_with( $slug, 'mksddn-' ) ) {
+			return MKSDDN_MC_TEXT_DOMAIN;
+		}
+
+		return $slug;
 	}
 
 	/**
