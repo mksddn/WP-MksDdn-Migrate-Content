@@ -208,6 +208,7 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( ServerBackupScanner::class ),
 					$container->get( ThemePreviewStoreInterface::class ),
 					$container->get( ResponseHandler::class ),
+					$container->get( NotificationService::class ),
 					$container->get( ImportPreflightService::class ),
 					$container->get( PreflightReportStore::class )
 				);
