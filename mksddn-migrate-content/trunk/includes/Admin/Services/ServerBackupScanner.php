@@ -300,12 +300,13 @@ class ServerBackupScanner {
 	/**
 	 * Copy a browser-uploaded backup into the imports directory for reuse.
 	 *
-	 * @param string $source_path   Absolute path to the uploaded file.
-	 * @param string $original_name Desired filename (basename is used).
+	 * @param string $source_path      Absolute path to the uploaded file.
+	 * @param string $original_name    Desired filename (basename is used).
+	 * @param string $known_extension  Extension validated upstream (wpbkp|json); used when temp paths lack one.
 	 * @return array|WP_Error Stored file metadata or error.
 	 * @since 2.4.0
 	 */
-	public function store_uploaded_file( string $source_path, string $original_name ): array|WP_Error {
+	public function store_uploaded_file( string $source_path, string $original_name, string $known_extension = '' ): array|WP_Error {
 		if ( '' === $source_path || ! is_readable( $source_path ) ) {
 			return new WP_Error(
 				'mksddn_mc_imports_store_source',
@@ -324,14 +325,20 @@ class ServerBackupScanner {
 			return $validation_error;
 		}
 
-		$basename  = basename( sanitize_file_name( $original_name ) );
-		$extension = strtolower( pathinfo( $basename, PATHINFO_EXTENSION ) );
+		$basename          = basename( sanitize_file_name( $original_name ) );
+		$extension         = strtolower( pathinfo( $basename, PATHINFO_EXTENSION ) );
+		$known_extension   = strtolower( sanitize_file_name( $known_extension ) );
+		$allowed_extensions = array( 'wpbkp', 'json' );
 
-		if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+		if ( ! in_array( $extension, $allowed_extensions, true ) ) {
 			$extension = strtolower( pathinfo( $source_path, PATHINFO_EXTENSION ) );
 		}
 
-		if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+		if ( ! in_array( $extension, $allowed_extensions, true ) && in_array( $known_extension, $allowed_extensions, true ) ) {
+			$extension = $known_extension;
+		}
+
+		if ( ! in_array( $extension, $allowed_extensions, true ) ) {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_type',
 				__( 'Invalid import file type. Only .wpbkp and .json files are supported.', 'mksddn-migrate-content' )
