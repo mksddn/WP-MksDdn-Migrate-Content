@@ -270,7 +270,7 @@ class UnifiedImportOrchestrator {
 		}
 
 		if ( '' === $original_name ) {
-			$original_name = sprintf( 'chunk:%s', $chunk_job_id );
+			$original_name = sprintf( 'chunk-%s.wpbkp', $chunk_job_id );
 		}
 
 		return array(
@@ -420,7 +420,8 @@ class UnifiedImportOrchestrator {
 
 		if ( 'chunked' === $file_info['source'] || 'upload' === $file_info['source'] ) {
 			$original_name = isset( $file_info['name'] ) ? (string) $file_info['name'] : '';
-			$stored        = $this->server_scanner->store_uploaded_file( $file_info['path'], $original_name );
+			$extension     = isset( $file_info['extension'] ) ? (string) $file_info['extension'] : '';
+			$stored        = $this->server_scanner->store_uploaded_file( $file_info['path'], $original_name, $extension );
 
 			if ( is_wp_error( $stored ) ) {
 				return $stored;
