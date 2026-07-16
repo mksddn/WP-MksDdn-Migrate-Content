@@ -360,7 +360,7 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 		<p><?php echo esc_html( $mksddn_mc_next_step ); ?></p>
 	<?php endif; ?>
 
-	<?php if ( '' !== $mksddn_mc_preflight_report_id ) : ?>
+	<?php if ( '' !== $mksddn_mc_preflight_report_id && empty( $mksddn_mc_errors ) ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mksddn-mc-preflight-import-form" style="margin: 1rem 0;">
 			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
 			<input type="hidden" name="action" value="mksddn_mc_unified_import">

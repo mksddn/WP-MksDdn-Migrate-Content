@@ -292,9 +292,10 @@ class FullContentImporter {
 			
 			if ( false === $set_result || $new_limit_bytes < $target_limit_bytes ) {
 				$this->log( sprintf( 'CRITICAL ERROR - Unable to increase memory limit to %d MB (current: %s, %d MB). JSON reading will likely fail!', $target_limit_mb, $new_limit, round( $new_limit_bytes / ( 1024 * 1024 ) ) ) );
-				if ( $json_file_size > 100 * 1024 * 1024 ) {
-					$this->log( sprintf( 'CRITICAL: Large JSON file (%s MB) requires at least %d MB memory. You MUST increase PHP memory_limit in php.ini or wp-config.php to at least %d MB. Current limit (%s) is insufficient.', $json_file_size_mb, $target_limit_mb, $target_limit_mb, $new_limit ) );
-					// Don't proceed if we can't increase memory limit for large files.
+
+				$available = $new_limit_bytes - memory_get_usage( true );
+				if ( $available < $required_bytes ) {
+					$this->log( sprintf( 'CRITICAL: JSON file (%s MB) requires at least %d MB memory. Current limit (%s) is insufficient.', $json_file_size_mb, $target_limit_mb, $new_limit ) );
 					return new WP_Error(
 						'mksddn_mc_insufficient_memory',
 						sprintf(
