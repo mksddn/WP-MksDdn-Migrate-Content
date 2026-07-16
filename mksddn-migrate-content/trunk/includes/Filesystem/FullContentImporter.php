@@ -269,8 +269,9 @@ class FullContentImporter {
 		$json_file_size_gb = round( $json_file_size / ( 1024 * 1024 * 1024 ), 2 );
 		$this->log( sprintf( 'Found payload/content.json, size: %d bytes (%s MB, %s GB)', $json_file_size, $json_file_size_mb, $json_file_size_gb ) );
 		
-		// Calculate required memory BEFORE reading: JSON size * 7 (for reading + decoding + processing).
-		$required_bytes = $json_file_size * 7; // Conservative estimate: read (1x) + decode (5x) + buffer (1x).
+		// Calculate required memory BEFORE reading: JSON size * multiplier (read + decode + buffer).
+		$memory_multiplier = PluginConfig::import_json_memory_multiplier();
+		$required_bytes = $json_file_size * $memory_multiplier;
 		$required_mb = ceil( $required_bytes / ( 1024 * 1024 ) );
 		$required_gb = round( $required_bytes / ( 1024 * 1024 * 1024 ), 2 );
 		
@@ -292,9 +293,10 @@ class FullContentImporter {
 			
 			if ( false === $set_result || $new_limit_bytes < $target_limit_bytes ) {
 				$this->log( sprintf( 'CRITICAL ERROR - Unable to increase memory limit to %d MB (current: %s, %d MB). JSON reading will likely fail!', $target_limit_mb, $new_limit, round( $new_limit_bytes / ( 1024 * 1024 ) ) ) );
-				if ( $json_file_size > 100 * 1024 * 1024 ) {
-					$this->log( sprintf( 'CRITICAL: Large JSON file (%s MB) requires at least %d MB memory. You MUST increase PHP memory_limit in php.ini or wp-config.php to at least %d MB. Current limit (%s) is insufficient.', $json_file_size_mb, $target_limit_mb, $target_limit_mb, $new_limit ) );
-					// Don't proceed if we can't increase memory limit for large files.
+
+				$available = $new_limit_bytes - memory_get_usage( true );
+				if ( $available < $required_bytes ) {
+					$this->log( sprintf( 'CRITICAL: JSON file (%s MB) requires at least %d MB memory. Current limit (%s) is insufficient.', $json_file_size_mb, $target_limit_mb, $new_limit ) );
 					return new WP_Error(
 						'mksddn_mc_insufficient_memory',
 						sprintf(
@@ -357,8 +359,8 @@ class FullContentImporter {
 			}
 		}
 
-		// Check if file is too large to process safely.
-		$absolute_max = PluginConfig::max_import_json_size();
+		// Check if file is too large to process safely (memory-aware cap).
+		$absolute_max = PluginConfig::effective_max_import_json_size();
 		if ( $json_size > $absolute_max ) {
 			unset( $payload_json );
 			$this->restore_memory_limit( $original_limit );

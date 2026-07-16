@@ -127,6 +127,9 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 					?>
 				</li>
 			<?php endif; ?>
+			<?php if ( isset( $mksddn_mc_summary['item_count'] ) ) : ?>
+				<li><?php echo esc_html( sprintf( /* translators: %d: content item count */ __( 'Items to import: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['item_count'] ) ); ?></li>
+			<?php endif; ?>
 			<?php if ( isset( $mksddn_mc_summary['media_files'] ) ) : ?>
 				<li><?php echo esc_html( sprintf( /* translators: %d: media file count */ __( 'Media files in archive: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['media_files'] ) ); ?></li>
 			<?php endif; ?>
@@ -142,18 +145,14 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 			<?php if ( isset( $mksddn_mc_summary['theme_count'] ) ) : ?>
 				<li><?php echo esc_html( sprintf( /* translators: %d: theme count */ __( 'Themes in archive: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['theme_count'] ) ); ?></li>
 			<?php endif; ?>
-			<?php if ( ! empty( $mksddn_mc_summary['themes'] ) && is_array( $mksddn_mc_summary['themes'] ) ) : ?>
-				<li>
-					<?php
-					echo esc_html(
-						sprintf(
-							/* translators: %s: comma-separated theme directory slugs */
-							__( 'Theme slugs: %s', 'mksddn-migrate-content' ),
-							implode( ', ', array_map( 'sanitize_text_field', $mksddn_mc_summary['themes'] ) )
-						)
-					);
-					?>
-				</li>
+			<?php if ( isset( $mksddn_mc_summary['files_total'] ) ) : ?>
+				<li><?php echo esc_html( sprintf( /* translators: %d: file count */ __( 'Theme files in archive: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['files_total'] ) ); ?></li>
+			<?php endif; ?>
+			<?php if ( isset( $mksddn_mc_summary['files_added'] ) ) : ?>
+				<li><?php echo esc_html( sprintf( /* translators: %d: file count */ __( 'Files to add (merge): %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['files_added'] ) ); ?></li>
+			<?php endif; ?>
+			<?php if ( isset( $mksddn_mc_summary['files_overwrite'] ) ) : ?>
+				<li><?php echo esc_html( sprintf( /* translators: %d: file count */ __( 'Files to overwrite (merge): %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['files_overwrite'] ) ); ?></li>
 			<?php endif; ?>
 			<?php if ( ! empty( $mksddn_mc_summary['existing_slugs'] ) && is_array( $mksddn_mc_summary['existing_slugs'] ) ) : ?>
 				<li>
@@ -161,7 +160,7 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 					echo esc_html(
 						sprintf(
 							/* translators: %s: comma-separated theme slugs */
-							__( 'Already installed themes (may be replaced): %s', 'mksddn-migrate-content' ),
+							__( 'Already installed themes: %s', 'mksddn-migrate-content' ),
 							implode( ', ', array_map( 'sanitize_text_field', $mksddn_mc_summary['existing_slugs'] ) )
 						)
 					);
@@ -171,27 +170,168 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 		</ul>
 	<?php endif; ?>
 
-	<?php if ( ! empty( $mksddn_mc_estimated['slug_conflicts'] ) && is_array( $mksddn_mc_estimated['slug_conflicts'] ) ) : ?>
-		<p><strong><?php esc_html_e( 'Slug check', 'mksddn-migrate-content' ); ?></strong></p>
-		<table class="widefat striped" style="max-width: 640px;">
+	<?php
+	$mksddn_mc_theme_files = ( ! empty( $mksddn_mc_estimated['theme_files'] ) && is_array( $mksddn_mc_estimated['theme_files'] ) )
+		? $mksddn_mc_estimated['theme_files']
+		: array();
+	?>
+	<?php if ( ! empty( $mksddn_mc_theme_files ) ) : ?>
+		<div class="mksddn-mc-theme-diff">
+			<div class="mksddn-mc-theme-diff__intro">
+				<p><strong><?php esc_html_e( 'Theme file changes', 'mksddn-migrate-content' ); ?></strong></p>
+				<p class="description">
+					<?php esc_html_e( 'Counts use Merge semantics: new paths are added, matching paths are overwritten. Replace mode removes the whole theme directory first, then writes all archive files.', 'mksddn-migrate-content' ); ?>
+				</p>
+			</div>
+			<?php foreach ( $mksddn_mc_theme_files as $mksddn_mc_theme_row ) : ?>
+				<?php
+				if ( ! is_array( $mksddn_mc_theme_row ) ) {
+					continue;
+				}
+				$mksddn_mc_theme_slug       = sanitize_file_name( (string) ( $mksddn_mc_theme_row['slug'] ?? '' ) );
+				$mksddn_mc_theme_exists     = ! empty( $mksddn_mc_theme_row['exists'] );
+				$mksddn_mc_theme_added      = (int) ( $mksddn_mc_theme_row['added_count'] ?? 0 );
+				$mksddn_mc_theme_overwrite  = (int) ( $mksddn_mc_theme_row['overwrite_count'] ?? 0 );
+				$mksddn_mc_theme_file_total = (int) ( $mksddn_mc_theme_row['file_count'] ?? ( $mksddn_mc_theme_added + $mksddn_mc_theme_overwrite ) );
+				$mksddn_mc_sample_added     = ( ! empty( $mksddn_mc_theme_row['sample_added'] ) && is_array( $mksddn_mc_theme_row['sample_added'] ) )
+					? $mksddn_mc_theme_row['sample_added']
+					: array();
+				$mksddn_mc_sample_overwrite = ( ! empty( $mksddn_mc_theme_row['sample_overwrite'] ) && is_array( $mksddn_mc_theme_row['sample_overwrite'] ) )
+					? $mksddn_mc_theme_row['sample_overwrite']
+					: array();
+				$mksddn_mc_truncated_added = ! empty( $mksddn_mc_theme_row['samples_truncated_added'] );
+				$mksddn_mc_truncated_overwrite = ! empty( $mksddn_mc_theme_row['samples_truncated_overwrite'] );
+				if ( '' === $mksddn_mc_theme_slug ) {
+					continue;
+				}
+				?>
+				<article class="mksddn-mc-theme-diff__card">
+					<header class="mksddn-mc-theme-diff__header">
+						<div class="mksddn-mc-theme-diff__title">
+							<span class="mksddn-mc-theme-diff__slug"><?php echo esc_html( $mksddn_mc_theme_slug ); ?></span>
+							<?php if ( $mksddn_mc_theme_exists ) : ?>
+								<span class="mksddn-mc-theme-diff__badge mksddn-mc-theme-diff__badge--exists"><?php esc_html_e( 'Installed', 'mksddn-migrate-content' ); ?></span>
+							<?php else : ?>
+								<span class="mksddn-mc-theme-diff__badge mksddn-mc-theme-diff__badge--new"><?php esc_html_e( 'New', 'mksddn-migrate-content' ); ?></span>
+							<?php endif; ?>
+						</div>
+						<div class="mksddn-mc-theme-diff__stats" aria-label="<?php esc_attr_e( 'File change counts', 'mksddn-migrate-content' ); ?>">
+							<span class="mksddn-mc-theme-diff__stat mksddn-mc-theme-diff__stat--total">
+								<?php echo esc_html( sprintf( /* translators: %d: file count */ __( '%d files', 'mksddn-migrate-content' ), $mksddn_mc_theme_file_total ) ); ?>
+							</span>
+							<span class="mksddn-mc-theme-diff__stat mksddn-mc-theme-diff__stat--added">
+								<?php echo esc_html( sprintf( /* translators: %d: file count */ __( '+%d add', 'mksddn-migrate-content' ), $mksddn_mc_theme_added ) ); ?>
+							</span>
+							<span class="mksddn-mc-theme-diff__stat mksddn-mc-theme-diff__stat--overwrite">
+								<?php echo esc_html( sprintf( /* translators: %d: file count */ __( '~%d overwrite', 'mksddn-migrate-content' ), $mksddn_mc_theme_overwrite ) ); ?>
+							</span>
+						</div>
+					</header>
+
+					<div class="mksddn-mc-theme-diff__panels">
+						<details class="mksddn-mc-theme-diff__panel"<?php echo ( $mksddn_mc_theme_added > 0 && 0 === $mksddn_mc_theme_overwrite ) ? ' open' : ''; ?>>
+							<summary>
+								<?php echo esc_html( sprintf( /* translators: %d: file count */ __( 'Files to add (%d)', 'mksddn-migrate-content' ), $mksddn_mc_theme_added ) ); ?>
+							</summary>
+							<?php if ( empty( $mksddn_mc_sample_added ) ) : ?>
+								<p class="description mksddn-mc-theme-diff__empty"><?php esc_html_e( 'No new files — all archive paths already exist.', 'mksddn-migrate-content' ); ?></p>
+							<?php else : ?>
+								<ul class="mksddn-mc-theme-diff__files">
+									<?php foreach ( $mksddn_mc_sample_added as $mksddn_mc_file_path ) : ?>
+										<li><code><?php echo esc_html( (string) $mksddn_mc_file_path ); ?></code></li>
+									<?php endforeach; ?>
+								</ul>
+								<?php if ( $mksddn_mc_truncated_added && $mksddn_mc_theme_added > count( $mksddn_mc_sample_added ) ) : ?>
+									<p class="description">
+										<?php
+										echo esc_html(
+											sprintf(
+												/* translators: 1: shown count, 2: total count */
+												__( 'Showing %1$d of %2$d paths.', 'mksddn-migrate-content' ),
+												count( $mksddn_mc_sample_added ),
+												$mksddn_mc_theme_added
+											)
+										);
+										?>
+									</p>
+								<?php endif; ?>
+							<?php endif; ?>
+						</details>
+
+						<details class="mksddn-mc-theme-diff__panel"<?php echo ( $mksddn_mc_theme_overwrite > 0 ) ? ' open' : ''; ?>>
+							<summary>
+								<?php echo esc_html( sprintf( /* translators: %d: file count */ __( 'Files to overwrite (%d)', 'mksddn-migrate-content' ), $mksddn_mc_theme_overwrite ) ); ?>
+							</summary>
+							<?php if ( empty( $mksddn_mc_sample_overwrite ) ) : ?>
+								<p class="description mksddn-mc-theme-diff__empty"><?php esc_html_e( 'No overwrites — theme is new or paths do not collide.', 'mksddn-migrate-content' ); ?></p>
+							<?php else : ?>
+								<ul class="mksddn-mc-theme-diff__files">
+									<?php foreach ( $mksddn_mc_sample_overwrite as $mksddn_mc_file_path ) : ?>
+										<li><code><?php echo esc_html( (string) $mksddn_mc_file_path ); ?></code></li>
+									<?php endforeach; ?>
+								</ul>
+								<?php if ( $mksddn_mc_truncated_overwrite && $mksddn_mc_theme_overwrite > count( $mksddn_mc_sample_overwrite ) ) : ?>
+									<p class="description">
+										<?php
+										echo esc_html(
+											sprintf(
+												/* translators: 1: shown count, 2: total count */
+												__( 'Showing %1$d of %2$d paths.', 'mksddn-migrate-content' ),
+												count( $mksddn_mc_sample_overwrite ),
+												$mksddn_mc_theme_overwrite
+											)
+										);
+										?>
+									</p>
+								<?php endif; ?>
+							<?php endif; ?>
+						</details>
+					</div>
+				</article>
+			<?php endforeach; ?>
+		</div>
+	<?php endif; ?>
+
+	<?php if ( ! empty( $mksddn_mc_estimated['items'] ) && is_array( $mksddn_mc_estimated['items'] ) ) : ?>
+		<p><strong><?php esc_html_e( 'Content to import', 'mksddn-migrate-content' ); ?></strong></p>
+		<table class="widefat striped" style="max-width: 720px;">
 			<thead>
 				<tr>
+					<th><?php esc_html_e( 'Title', 'mksddn-migrate-content' ); ?></th>
 					<th><?php esc_html_e( 'Slug', 'mksddn-migrate-content' ); ?></th>
 					<th><?php esc_html_e( 'Post type', 'mksddn-migrate-content' ); ?></th>
-					<th><?php esc_html_e( 'Existing post ID', 'mksddn-migrate-content' ); ?></th>
+					<th><?php esc_html_e( 'Action', 'mksddn-migrate-content' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
-				<?php foreach ( $mksddn_mc_estimated['slug_conflicts'] as $mksddn_mc_row ) : ?>
+				<?php foreach ( $mksddn_mc_estimated['items'] as $mksddn_mc_item ) : ?>
 					<?php
-					if ( ! is_array( $mksddn_mc_row ) ) {
+					if ( ! is_array( $mksddn_mc_item ) ) {
 						continue;
+					}
+					$mksddn_mc_item_action = sanitize_key( (string) ( $mksddn_mc_item['action'] ?? 'create' ) );
+					$mksddn_mc_item_title  = (string) ( $mksddn_mc_item['title'] ?? '' );
+					if ( '' === $mksddn_mc_item_title ) {
+						$mksddn_mc_item_title = (string) ( $mksddn_mc_item['slug'] ?? '' );
+					}
+					if ( 'update' === $mksddn_mc_item_action ) {
+						$mksddn_mc_existing_id = (int) ( $mksddn_mc_item['existing_post_id'] ?? 0 );
+						$mksddn_mc_action_label = $mksddn_mc_existing_id > 0
+							? sprintf(
+								/* translators: %d: existing post ID */
+								__( 'Update (#%d)', 'mksddn-migrate-content' ),
+								$mksddn_mc_existing_id
+							)
+							: __( 'Update', 'mksddn-migrate-content' );
+					} else {
+						$mksddn_mc_action_label = __( 'Create', 'mksddn-migrate-content' );
 					}
 					?>
 					<tr>
-						<td><?php echo esc_html( (string) ( $mksddn_mc_row['slug'] ?? '' ) ); ?></td>
-						<td><?php echo esc_html( $mksddn_mc_preflight_post_type_label( (string) ( $mksddn_mc_row['post_type'] ?? '' ) ) ); ?></td>
-						<td><?php echo esc_html( (string) ( $mksddn_mc_row['post_id'] ?? '' ) ); ?></td>
+						<td><?php echo esc_html( $mksddn_mc_item_title ); ?></td>
+						<td><?php echo esc_html( (string) ( $mksddn_mc_item['slug'] ?? '' ) ); ?></td>
+						<td><?php echo esc_html( $mksddn_mc_preflight_post_type_label( (string) ( $mksddn_mc_item['post_type'] ?? '' ) ) ); ?></td>
+						<td><?php echo esc_html( $mksddn_mc_action_label ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
@@ -220,7 +360,7 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 		<p><?php echo esc_html( $mksddn_mc_next_step ); ?></p>
 	<?php endif; ?>
 
-	<?php if ( '' !== $mksddn_mc_preflight_report_id ) : ?>
+	<?php if ( '' !== $mksddn_mc_preflight_report_id && empty( $mksddn_mc_errors ) ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mksddn-mc-preflight-import-form" style="margin: 1rem 0;">
 			<?php wp_nonce_field( 'mksddn_mc_unified_import' ); ?>
 			<input type="hidden" name="action" value="mksddn_mc_unified_import">

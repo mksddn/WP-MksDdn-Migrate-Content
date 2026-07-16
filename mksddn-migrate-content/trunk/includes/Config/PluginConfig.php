@@ -259,11 +259,43 @@ class PluginConfig {
 	/**
 	 * Maximum JSON payload size for import (bytes).
 	 *
+	 * Prefer effective_max_import_json_size() for runtime checks — it also
+	 * respects memory headroom from import_json_memory_multiplier().
+	 *
 	 * @return int Size in bytes (default 5GB to support very large databases).
 	 * @since 1.0.0
 	 */
 	public static function max_import_json_size(): int {
 		return apply_filters( 'mksddn_mc_max_import_json_size', 5 * 1024 * 1024 * 1024 );
+	}
+
+	/**
+	 * Memory multiplier for JSON string + decode overhead during import.
+	 *
+	 * @return int Multiplier (>= 1). Default 7 (read + decode + buffer).
+	 * @since 2.3.4
+	 */
+	public static function import_json_memory_multiplier(): int {
+		$multiplier = (int) apply_filters( 'mksddn_mc_import_json_memory_multiplier', 7 );
+		return max( 1, $multiplier );
+	}
+
+	/**
+	 * Effective max JSON size: configured max capped by available memory budget.
+	 *
+	 * Prevents accepting payloads that cannot fit under max_import_memory_limit()
+	 * given import_json_memory_multiplier().
+	 *
+	 * @return int Size in bytes.
+	 * @since 2.3.4
+	 */
+	public static function effective_max_import_json_size(): int {
+		$configured = self::max_import_json_size();
+		$memory_cap = (int) floor( self::max_import_memory_limit() / self::import_json_memory_multiplier() );
+		if ( $memory_cap <= 0 ) {
+			return max( 0, $configured );
+		}
+		return min( $configured, $memory_cap );
 	}
 
 	/**

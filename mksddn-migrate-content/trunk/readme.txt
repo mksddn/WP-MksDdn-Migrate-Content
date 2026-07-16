@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.3.3
+Stable tag: 2.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -156,6 +156,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.4.0 =
+* Enhanced: Theme import preflight — clearer path analysis and reporting for theme archives.
+* Enhanced: Theme archive path resolution via `ThemeArchivePathHelper` for more reliable theme and full-site imports.
+* Improved: Memory management and error handling during import (URL handling, large payloads).
 
 = 2.3.3 =
 * Fixed: Unified import preflight — saving uploaded/chunked backups no longer fails when the temp path lacks a `.wpbkp`/`.json` extension (theme and full-site imports).

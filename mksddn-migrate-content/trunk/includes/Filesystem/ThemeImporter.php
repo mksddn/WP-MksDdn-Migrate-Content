@@ -2,13 +2,14 @@
 /**
  * @file: ThemeImporter.php
  * @description: Imports themes from archive with merge or replace mode
- * @dependencies: FilesystemHelper
+ * @dependencies: FilesystemHelper, ThemeArchivePathHelper
  * @created: 2026-02-19
  */
 
 namespace MksDdn\MigrateContent\Filesystem;
 
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ThemeArchivePathHelper;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 use ZipArchive;
@@ -23,11 +24,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since 2.1.0
  */
 class ThemeImporter {
-
-	/**
-	 * Theme directory prefix in archive.
-	 */
-	private const THEME_ARCHIVE_PREFIX = 'wp-content/themes/';
 
 	/**
 	 * Import mode: 'merge' or 'replace'.
@@ -136,7 +132,7 @@ class ThemeImporter {
 	 */
 	private function extract_themes( ZipArchive $zip ) {
 		$theme_root = get_theme_root();
-		$allowed_prefix = self::THEME_ARCHIVE_PREFIX;
+		$allowed_prefix = ThemeArchivePathHelper::ARCHIVE_PREFIX;
 		$theme_root_normalized = wp_normalize_path( trailingslashit( $theme_root ) );
 
 		$themes_to_extract = array();
@@ -156,7 +152,7 @@ class ThemeImporter {
 			}
 
 			// Normalize path.
-			$normalized = $this->normalize_archive_path( $name );
+			$normalized = ThemeArchivePathHelper::normalize( $name );
 			if ( null === $normalized ) {
 				continue;
 			}
@@ -216,7 +212,7 @@ class ThemeImporter {
 
 			// Extract theme files.
 			foreach ( $files as $archive_file ) {
-				$normalized = $this->normalize_archive_path( $archive_file );
+				$normalized = ThemeArchivePathHelper::normalize( $archive_file );
 				if ( null === $normalized ) {
 					continue;
 				}
@@ -257,50 +253,6 @@ class ThemeImporter {
 		}
 
 		return true;
-	}
-
-	/**
-	 * Normalize archive path by removing wrapper directories.
-	 *
-	 * @param string $path Raw archive path.
-	 * @return string|null
-	 */
-	private function normalize_archive_path( string $path ): ?string {
-		if ( '' === $path ) {
-			return null;
-		}
-
-		$path = str_replace( '\\', '/', $path );
-		if ( false !== strpos( $path, "\0" ) ) {
-			return null;
-		}
-
-		// Skip manifest/payload/meta files.
-		if ( 0 === strpos( $path, 'manifest' ) || 0 === strpos( $path, 'payload/' ) ) {
-			return null;
-		}
-
-		if ( 0 === strpos( $path, 'files/' ) ) {
-			$path = substr( $path, 6 );
-		}
-
-		$path = ltrim( $path, '/' );
-		if ( '' === $path ) {
-			return null;
-		}
-
-		$parts = explode( '/', $path );
-		foreach ( $parts as $part ) {
-			if ( '' === $part || '.' === $part ) {
-				continue;
-			}
-
-			if ( '..' === $part ) {
-				return null;
-			}
-		}
-
-		return $path;
 	}
 
 	/**

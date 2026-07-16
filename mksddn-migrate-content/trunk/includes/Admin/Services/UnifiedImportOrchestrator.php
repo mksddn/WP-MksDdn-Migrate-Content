@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
@@ -99,6 +100,13 @@ class UnifiedImportOrchestrator {
 	 * @var string|null
 	 */
 	private ?string $fatal_memory_reserve = null;
+
+	/**
+	 * Prebuilt redirect URL for OOM fatals (avoids heavy WP helpers during shutdown).
+	 *
+	 * @var string|null
+	 */
+	private ?string $fatal_memory_redirect_url = null;
 
 	/**
 	 * Constructor.
@@ -625,11 +633,27 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Register shutdown redirect for memory exhaustion fatals.
 	 *
+	 * Prebuilds the notice URL and keeps a larger memory reserve so redirect
+	 * can still run after OOM (heavy WP helpers often fail in that state).
+	 *
 	 * @return void
 	 */
 	private function register_fatal_memory_redirect(): void {
 		if ( null === $this->fatal_memory_reserve ) {
-			$this->fatal_memory_reserve = str_repeat( 'x', 32768 );
+			// ~512KB: enough for a lightweight Location header after OOM.
+			$this->fatal_memory_reserve = str_repeat( 'x', 524288 );
+		}
+
+		if ( null === $this->fatal_memory_redirect_url ) {
+			$notice = __( 'Import failed due to insufficient PHP memory. Increase memory_limit in php.ini or wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) and try again.', 'mksddn-migrate-content' );
+			$base   = admin_url( 'admin.php?page=' . PluginConfig::text_domain() . '-import' );
+			$this->fatal_memory_redirect_url = add_query_arg(
+				array(
+					'mksddn_mc_notice'         => 'error',
+					'mksddn_mc_notice_message' => $notice,
+				),
+				$base
+			);
 		}
 
 		register_shutdown_function(
@@ -653,7 +677,7 @@ class UnifiedImportOrchestrator {
 				}
 
 				$message = isset( $last_error['message'] ) ? (string) $last_error['message'] : '';
-				if ( false === stripos( $message, 'Allowed memory size' ) ) {
+				if ( false === stripos( $message, 'Allowed memory size' ) && false === stripos( $message, 'Out of memory' ) ) {
 					return;
 				}
 
@@ -661,10 +685,29 @@ class UnifiedImportOrchestrator {
 					return;
 				}
 
-				$this->notification_service->redirect_with_notice(
-					'error',
-					__( 'Import failed due to insufficient PHP memory. Increase memory_limit and try again.', 'mksddn-migrate-content' )
-				);
+				$url = $this->fatal_memory_redirect_url;
+				if ( ! is_string( $url ) || '' === $url ) {
+					return;
+				}
+
+				while ( ob_get_level() > 0 ) {
+					@ob_end_clean(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				}
+
+				// Avoid WP helpers here — they often allocate and re-fatal under OOM.
+				if ( ! headers_sent() ) {
+					header( 'Location: ' . $url, true, 302 );
+					exit;
+				}
+
+				// Use htmlspecialchars instead of esc_* — WP helpers may allocate and re-fatal under OOM.
+				$escaped = htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- htmlspecialchars above; avoid esc_* under OOM.
+				echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . $escaped . '"></head><body>';
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- htmlspecialchars above; avoid esc_* under OOM.
+				echo '<p><a href="' . $escaped . '">Continue</a></p>';
+				echo '</body></html>';
+				exit;
 			}
 		);
 	}
