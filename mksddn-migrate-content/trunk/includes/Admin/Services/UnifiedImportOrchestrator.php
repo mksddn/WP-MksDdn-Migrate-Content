@@ -700,8 +700,11 @@ class UnifiedImportOrchestrator {
 					exit;
 				}
 
+				// Use htmlspecialchars instead of esc_* — WP helpers may allocate and re-fatal under OOM.
 				$escaped = htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- htmlspecialchars above; avoid esc_* under OOM.
 				echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=' . $escaped . '"></head><body>';
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- htmlspecialchars above; avoid esc_* under OOM.
 				echo '<p><a href="' . $escaped . '">Continue</a></p>';
 				echo '</body></html>';
 				exit;
