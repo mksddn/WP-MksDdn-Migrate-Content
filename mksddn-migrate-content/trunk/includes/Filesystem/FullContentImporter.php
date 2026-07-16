@@ -269,8 +269,9 @@ class FullContentImporter {
 		$json_file_size_gb = round( $json_file_size / ( 1024 * 1024 * 1024 ), 2 );
 		$this->log( sprintf( 'Found payload/content.json, size: %d bytes (%s MB, %s GB)', $json_file_size, $json_file_size_mb, $json_file_size_gb ) );
 		
-		// Calculate required memory BEFORE reading: JSON size * 7 (for reading + decoding + processing).
-		$required_bytes = $json_file_size * 7; // Conservative estimate: read (1x) + decode (5x) + buffer (1x).
+		// Calculate required memory BEFORE reading: JSON size * multiplier (read + decode + buffer).
+		$memory_multiplier = PluginConfig::import_json_memory_multiplier();
+		$required_bytes = $json_file_size * $memory_multiplier;
 		$required_mb = ceil( $required_bytes / ( 1024 * 1024 ) );
 		$required_gb = round( $required_bytes / ( 1024 * 1024 * 1024 ), 2 );
 		
@@ -358,8 +359,8 @@ class FullContentImporter {
 			}
 		}
 
-		// Check if file is too large to process safely.
-		$absolute_max = PluginConfig::max_import_json_size();
+		// Check if file is too large to process safely (memory-aware cap).
+		$absolute_max = PluginConfig::effective_max_import_json_size();
 		if ( $json_size > $absolute_max ) {
 			unset( $payload_json );
 			$this->restore_memory_limit( $original_limit );

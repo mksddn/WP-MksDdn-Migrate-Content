@@ -2,13 +2,14 @@
 /**
  * @file: ImportPreflightService.php
  * @description: Read-only preflight analysis for unified import (dry-run)
- * @dependencies: ImportPayloadPreparer, Users\UserDiffBuilder, Support\MimeTypeHelper
+ * @dependencies: ImportPayloadPreparer, Users\UserDiffBuilder, Support\MimeTypeHelper, Support\ThemeArchivePathHelper
  * @created: 2026-04-08
  */
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
+use MksDdn\MigrateContent\Support\ThemeArchivePathHelper;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use WP_Error;
 use WP_Query;
@@ -25,12 +26,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class ImportPreflightService {
 
-	private const THEME_ARCHIVE_PREFIX = 'wp-content/themes/';
-
 	/**
 	 * Max sample paths stored per action (add/overwrite) per theme.
 	 */
 	private const THEME_FILE_SAMPLE_CAP = 40;
+
+	/**
+	 * Max slugs per WP_Query when resolving existing posts.
+	 */
+	private const SLUG_LOOKUP_CHUNK = 100;
 
 	/**
 	 * Payload preparer.
@@ -137,27 +141,25 @@ class ImportPreflightService {
 					continue;
 				}
 				$content_items[] = $row;
-				if ( ! empty( $row['existing_post_id'] ) ) {
-					$slug_conflicts[] = array(
-						'slug'      => $row['slug'],
-						'post_type' => $row['post_type'],
-						'post_id'   => $row['existing_post_id'],
-					);
-				}
 			}
 		} else {
 			$row = $this->build_selected_content_row( $payload, $type );
 			if ( ! empty( $row ) ) {
 				$content_items[] = $row;
-				if ( ! empty( $row['existing_post_id'] ) ) {
-					$slug_conflicts[] = array(
-						'slug'      => $row['slug'],
-						'post_type' => $row['post_type'],
-						'post_id'   => $row['existing_post_id'],
-					);
-				}
 			} elseif ( empty( $payload['slug'] ) ) {
 				$warnings[] = __( 'Payload has no slug; the importer may generate one at run time.', 'mksddn-migrate-content' );
+			}
+		}
+
+		$this->attach_existing_post_ids( $content_items );
+
+		foreach ( $content_items as $row ) {
+			if ( ! empty( $row['existing_post_id'] ) ) {
+				$slug_conflicts[] = array(
+					'slug'      => $row['slug'],
+					'post_type' => $row['post_type'],
+					'post_id'   => $row['existing_post_id'],
+				);
 			}
 		}
 
@@ -195,7 +197,7 @@ class ImportPreflightService {
 	}
 
 	/**
-	 * Build one inventory row for selected-content preflight.
+	 * Build one inventory row for selected-content preflight (without DB lookup).
 	 *
 	 * @param array  $item          Payload item or single-item payload.
 	 * @param string $default_type  Fallback post type when item has none.
@@ -211,16 +213,74 @@ class ImportPreflightService {
 			return array();
 		}
 
-		$title    = isset( $item['title'] ) ? sanitize_text_field( (string) $item['title'] ) : '';
-		$existing = $this->find_existing_post_id( $slug, $ptype );
+		$title = isset( $item['title'] ) ? sanitize_text_field( (string) $item['title'] ) : '';
 
 		return array(
 			'title'            => $title,
 			'slug'             => $slug,
 			'post_type'        => $ptype,
-			'action'           => $existing > 0 ? 'update' : 'create',
-			'existing_post_id' => $existing,
+			'action'           => 'create',
+			'existing_post_id' => 0,
 		);
+	}
+
+	/**
+	 * Resolve existing post IDs in batches and set action=update where found.
+	 *
+	 * @param array<int, array{title:string,slug:string,post_type:string,action:string,existing_post_id:int}> $items Rows by reference.
+	 * @return void
+	 */
+	private function attach_existing_post_ids( array &$items ): void {
+		if ( empty( $items ) ) {
+			return;
+		}
+
+		/** @var array<string, array<string, int[]>> $by_type slug => list of item indexes */
+		$by_type = array();
+		foreach ( $items as $index => $row ) {
+			$ptype = $row['post_type'];
+			$slug  = $row['slug'];
+			if ( ! isset( $by_type[ $ptype ] ) ) {
+				$by_type[ $ptype ] = array();
+			}
+			if ( ! isset( $by_type[ $ptype ][ $slug ] ) ) {
+				$by_type[ $ptype ][ $slug ] = array();
+			}
+			$by_type[ $ptype ][ $slug ][] = $index;
+		}
+
+		foreach ( $by_type as $post_type => $slug_indexes ) {
+			$slugs  = array_keys( $slug_indexes );
+			$chunks = array_chunk( $slugs, self::SLUG_LOOKUP_CHUNK );
+
+			foreach ( $chunks as $chunk ) {
+				$query = new WP_Query(
+					array(
+						'post_type'              => $post_type,
+						'post_name__in'          => $chunk,
+						'post_status'            => 'any',
+						'posts_per_page'         => count( $chunk ),
+						'no_found_rows'          => true,
+						'update_post_meta_cache' => false,
+						'update_post_term_cache' => false,
+					)
+				);
+
+				foreach ( $query->posts as $post ) {
+					if ( ! $post instanceof \WP_Post ) {
+						continue;
+					}
+					$slug = $post->post_name;
+					if ( ! isset( $slug_indexes[ $slug ] ) ) {
+						continue;
+					}
+					foreach ( $slug_indexes[ $slug ] as $index ) {
+						$items[ $index ]['existing_post_id'] = (int) $post->ID;
+						$items[ $index ]['action']           = 'update';
+					}
+				}
+			}
+		}
 	}
 
 	/**
@@ -351,11 +411,14 @@ class ImportPreflightService {
 
 		$from_manifest = $this->read_theme_slugs_from_manifest( $zip );
 		$theme_root    = trailingslashit( get_theme_root() );
-		$prefix        = self::THEME_ARCHIVE_PREFIX;
+		$prefix        = ThemeArchivePathHelper::ARCHIVE_PREFIX;
 		$cap           = self::THEME_FILE_SAMPLE_CAP;
 
 		/** @var array<string, array{added:int,overwrite:int,sample_added:string[],sample_overwrite:string[],truncated_added:bool,truncated_overwrite:bool}> $buckets */
 		$buckets = array();
+
+		/** @var array<string, bool> $theme_dir_exists */
+		$theme_dir_exists = array();
 
 		foreach ( $from_manifest as $manifest_slug ) {
 			if ( ! isset( $buckets[ $manifest_slug ] ) ) {
@@ -376,7 +439,7 @@ class ImportPreflightService {
 				continue;
 			}
 
-			$normalized = $this->normalize_theme_archive_path( (string) $stat['name'] );
+			$normalized = ThemeArchivePathHelper::normalize( (string) $stat['name'] );
 			if ( null === $normalized ) {
 				continue;
 			}
@@ -422,8 +485,17 @@ class ImportPreflightService {
 				continue;
 			}
 
-			$dest   = $theme_root . $slug . '/' . $rel_in_theme;
-			$action = is_file( $dest ) ? 'overwrite' : 'added';
+			if ( ! isset( $theme_dir_exists[ $slug ] ) ) {
+				$theme_dir_exists[ $slug ] = is_dir( $theme_root . $slug );
+			}
+
+			// New theme folder: all archive files are adds (skip per-file is_file).
+			if ( ! $theme_dir_exists[ $slug ] ) {
+				$action = 'added';
+			} else {
+				$dest   = $theme_root . $slug . '/' . $rel_in_theme;
+				$action = is_file( $dest ) ? 'overwrite' : 'added';
+			}
 
 			++$buckets[ $slug ][ $action ];
 
@@ -503,76 +575,6 @@ class ImportPreflightService {
 		}
 
 		return array_values( array_filter( $from_manifest ) );
-	}
-
-	/**
-	 * Normalize theme archive entry path (mirrors ThemeImporter rules).
-	 *
-	 * @param string $path Raw zip entry name.
-	 * @return string|null Normalized path or null if skipped/invalid.
-	 */
-	private function normalize_theme_archive_path( string $path ): ?string {
-		if ( '' === $path ) {
-			return null;
-		}
-
-		$path = str_replace( '\\', '/', $path );
-		if ( false !== strpos( $path, "\0" ) ) {
-			return null;
-		}
-
-		if ( 0 === strpos( $path, 'manifest' ) || 0 === strpos( $path, 'payload/' ) ) {
-			return null;
-		}
-
-		if ( 0 === strpos( $path, 'files/' ) ) {
-			$path = substr( $path, 6 );
-		}
-
-		$path = ltrim( $path, '/' );
-		if ( '' === $path ) {
-			return null;
-		}
-
-		$parts = explode( '/', $path );
-		foreach ( $parts as $part ) {
-			if ( '' === $part || '.' === $part ) {
-				continue;
-			}
-			if ( '..' === $part ) {
-				return null;
-			}
-		}
-
-		return $path;
-	}
-
-	/**
-	 * Find existing post id by slug and type.
-	 *
-	 * @param string $slug      Post slug.
-	 * @param string $post_type Post type.
-	 * @return int 0 if none.
-	 */
-	private function find_existing_post_id( string $slug, string $post_type ): int {
-		if ( '' === $slug ) {
-			return 0;
-		}
-		$query = new WP_Query(
-			array(
-				'name'           => $slug,
-				'post_type'      => $post_type,
-				'post_status'    => 'any',
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'no_found_rows'  => true,
-			)
-		);
-		if ( $query->have_posts() ) {
-			$ids = $query->posts;
-			return isset( $ids[0] ) ? (int) $ids[0] : 0;
-		}
-		return 0;
 	}
 
 	/**

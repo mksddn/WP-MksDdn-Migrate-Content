@@ -21,11 +21,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullArchivePayload {
 
 	/**
-	 * Memory multiplier for JSON string + decode overhead.
-	 */
-	private const MEMORY_MULTIPLIER = 7;
-
-	/**
 	 * Read payload/content.json from archive and decode it.
 	 *
 	 * Checks payload size and available PHP memory before loading to avoid fatal OOM.
@@ -38,23 +33,16 @@ class FullArchivePayload {
 			return new WP_Error( 'mksddn_mc_payload_missing', __( 'Archive payload is missing on disk.', 'mksddn-migrate-content' ) );
 		}
 
-		$payload_size = self::get_payload_size( $archive_path );
-		if ( is_wp_error( $payload_size ) ) {
-			return $payload_size;
+		$loaded = self::load_payload_json( $archive_path );
+		if ( is_wp_error( $loaded ) ) {
+			return $loaded;
 		}
 
-		$memory_ready = self::ensure_memory_for_payload( (int) $payload_size );
-		if ( is_wp_error( $memory_ready ) ) {
-			return $memory_ready;
-		}
-
-		$json = self::read_payload_json( $archive_path );
-		if ( is_wp_error( $json ) ) {
-			return $json;
-		}
-
+		$json      = $loaded['json'];
 		$json_size = strlen( $json );
-		if ( $json_size > 0 && $json_size !== (int) $payload_size ) {
+
+		// Re-validate when PclZip path had unknown size, or zip size disagreed with bytes read.
+		if ( $json_size > 0 && $json_size !== (int) $loaded['declared_size'] ) {
 			$memory_ready = self::ensure_memory_for_payload( $json_size );
 			if ( is_wp_error( $memory_ready ) ) {
 				unset( $json );
@@ -73,6 +61,94 @@ class FullArchivePayload {
 	}
 
 	/**
+	 * Open archive once: size check, memory raise, then read payload JSON.
+	 *
+	 * @param string $archive_path Archive path.
+	 * @return array{json:string,declared_size:int}|WP_Error
+	 */
+	private static function load_payload_json( string $archive_path ) {
+		if ( class_exists( ZipArchive::class ) ) {
+			$zip  = new ZipArchive();
+			$open = $zip->open( $archive_path );
+
+			if ( true === $open ) {
+				$stat = $zip->statName( 'payload/content.json' );
+				if ( false === $stat || ! isset( $stat['size'] ) ) {
+					$zip->close();
+					return new WP_Error( 'mksddn_mc_payload_not_found', __( 'Full archive payload not found.', 'mksddn-migrate-content' ) );
+				}
+
+				$declared_size = (int) $stat['size'];
+				$memory_ready  = self::ensure_memory_for_payload( $declared_size );
+				if ( is_wp_error( $memory_ready ) ) {
+					$zip->close();
+					return $memory_ready;
+				}
+
+				$payload = false;
+				$stream  = $zip->getStream( 'payload/content.json' );
+				if ( false !== $stream ) {
+					$payload = stream_get_contents( $stream );
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- ZipArchive stream resource, not a filesystem file.
+					fclose( $stream );
+				}
+
+				if ( false === $payload ) {
+					$payload = $zip->getFromName( 'payload/content.json' );
+				}
+
+				$zip->close();
+
+				if ( false === $payload ) {
+					return new WP_Error( 'mksddn_mc_payload_not_found', __( 'Full archive payload not found.', 'mksddn-migrate-content' ) );
+				}
+
+				return array(
+					'json'           => $payload,
+					'declared_size'  => $declared_size,
+				);
+			}
+		}
+
+		return self::load_payload_json_via_pclzip( $archive_path );
+	}
+
+	/**
+	 * PclZip fallback when ZipArchive is unavailable or cannot open the archive.
+	 *
+	 * Size is unknown before extract; memory is validated after read.
+	 *
+	 * @param string $archive_path Archive path.
+	 * @return array{json:string,declared_size:int}|WP_Error
+	 */
+	private static function load_payload_json_via_pclzip( string $archive_path ) {
+		if ( ! class_exists( 'PclZip' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+		}
+
+		$archive = new \PclZip( $archive_path );
+		$result  = $archive->extract(
+			PCLZIP_OPT_BY_NAME,
+			'payload/content.json',
+			PCLZIP_OPT_EXTRACT_AS_STRING
+		);
+
+		if ( false === $result || empty( $result ) ) {
+			return new WP_Error( 'mksddn_mc_payload_not_found', __( 'Full archive payload not found.', 'mksddn-migrate-content' ) );
+		}
+
+		$content = $result[0]['content'] ?? '';
+		if ( '' === $content ) {
+			return new WP_Error( 'mksddn_mc_payload_empty', __( 'Full archive payload is empty.', 'mksddn-migrate-content' ) );
+		}
+
+		return array(
+			'json'          => $content,
+			'declared_size' => 0,
+		);
+	}
+
+	/**
 	 * Ensure PHP memory_limit can hold payload read + json_decode.
 	 *
 	 * @param int $payload_size Uncompressed payload size in bytes.
@@ -83,7 +159,7 @@ class FullArchivePayload {
 			return true;
 		}
 
-		$absolute_max = PluginConfig::max_import_json_size();
+		$absolute_max = PluginConfig::effective_max_import_json_size();
 		if ( $payload_size > $absolute_max ) {
 			return new WP_Error(
 				'mksddn_mc_file_too_large',
@@ -96,7 +172,7 @@ class FullArchivePayload {
 			);
 		}
 
-		$required_bytes = $payload_size * self::MEMORY_MULTIPLIER;
+		$required_bytes = $payload_size * PluginConfig::import_json_memory_multiplier();
 		$min_limit      = PluginConfig::min_import_memory_limit();
 		$max_limit      = PluginConfig::max_import_memory_limit();
 		$target_bytes   = max( $min_limit, min( $required_bytes + memory_get_usage( true ), $max_limit ) );
@@ -169,33 +245,6 @@ class FullArchivePayload {
 	}
 
 	/**
-	 * Uncompressed size of payload/content.json inside the archive.
-	 *
-	 * @param string $archive_path Archive path.
-	 * @return int|WP_Error Size in bytes, or error when payload is missing.
-	 */
-	private static function get_payload_size( string $archive_path ) {
-		if ( class_exists( ZipArchive::class ) ) {
-			$zip  = new ZipArchive();
-			$open = $zip->open( $archive_path );
-
-			if ( true === $open ) {
-				$stat = $zip->statName( 'payload/content.json' );
-				$zip->close();
-
-				if ( false !== $stat && isset( $stat['size'] ) ) {
-					return (int) $stat['size'];
-				}
-
-				return new WP_Error( 'mksddn_mc_payload_not_found', __( 'Full archive payload not found.', 'mksddn-migrate-content' ) );
-			}
-		}
-
-		// PclZip cannot cheaply report size; treat as unknown (0) and validate after read.
-		return 0;
-	}
-
-	/**
 	 * Format bytes as MB label for messages.
 	 *
 	 * @param int $bytes Size in bytes.
@@ -203,65 +252,5 @@ class FullArchivePayload {
 	 */
 	private static function bytes_to_mb_label( int $bytes ): string {
 		return (string) round( $bytes / ( 1024 * 1024 ), 2 );
-	}
-
-	/**
-	 * Read payload JSON either via ZipArchive or PclZip.
-	 *
-	 * @param string $archive_path Archive path.
-	 * @return string|WP_Error
-	 */
-	private static function read_payload_json( string $archive_path ) {
-		if ( class_exists( ZipArchive::class ) ) {
-			$zip  = new ZipArchive();
-			$open = $zip->open( $archive_path );
-
-			if ( true === $open ) {
-				// Use stream for better memory efficiency.
-				$stream = $zip->getStream( 'payload/content.json' );
-				if ( false !== $stream ) {
-					$payload = stream_get_contents( $stream );
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- ZipArchive stream resource, not a filesystem file.
-					fclose( $stream );
-					$zip->close();
-
-					if ( false !== $payload ) {
-						return $payload;
-					}
-				} else {
-					// Fallback to getFromName if stream fails.
-					$payload = $zip->getFromName( 'payload/content.json' );
-					$zip->close();
-
-					if ( false !== $payload ) {
-						return $payload;
-					}
-				}
-
-				$zip->close();
-			}
-		}
-
-		// Load PclZip class required for archive payload reading when ZipArchive is unavailable.
-		if ( ! class_exists( 'PclZip' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
-		}
-		$archive = new \PclZip( $archive_path );
-		$result  = $archive->extract(
-			PCLZIP_OPT_BY_NAME,
-			'payload/content.json',
-			PCLZIP_OPT_EXTRACT_AS_STRING
-		);
-
-		if ( false === $result || empty( $result ) ) {
-			return new WP_Error( 'mksddn_mc_payload_not_found', __( 'Full archive payload not found.', 'mksddn-migrate-content' ) );
-		}
-
-		$content = $result[0]['content'] ?? '';
-		if ( '' === $content ) {
-			return new WP_Error( 'mksddn_mc_payload_empty', __( 'Full archive payload is empty.', 'mksddn-migrate-content' ) );
-		}
-
-		return $content;
 	}
 }
