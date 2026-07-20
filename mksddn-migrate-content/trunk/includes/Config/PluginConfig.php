@@ -323,26 +323,63 @@ class PluginConfig {
 	// ==========================================================================
 
 	/**
-	 * Minimum memory limit for full-site export (bytes).
+	 * Soft target memory limit for full-site export (bytes).
 	 *
-	 * Full export builds a DB dump in RAM and JSON-encodes it; use
-	 * filter `mksddn_mc_min_export_memory_limit` for heavier sites (e.g. 2560M).
+	 * Export streams the DB dump to disk; keep this modest so a single PHP-FPM
+	 * worker cannot OOM the whole server (especially on 1–2GB VPS without swap).
+	 * Filter `mksddn_mc_min_export_memory_limit` only if you know the host has spare RAM.
 	 *
-	 * @return int Size in bytes (default 2560MB — full export holds DB + JSON in RAM).
+	 * @return int Size in bytes (default 256MB).
 	 * @since 2.1.2
 	 */
 	public static function min_export_memory_limit(): int {
-		return apply_filters( 'mksddn_mc_min_export_memory_limit', 2560 * 1024 * 1024 );
+		return apply_filters( 'mksddn_mc_min_export_memory_limit', 256 * 1024 * 1024 );
 	}
 
 	/**
-	 * Maximum memory limit for full-site export (bytes).
+	 * Hard ceiling for full-site export memory_limit (bytes).
 	 *
-	 * @return int Size in bytes (default 8GB).
+	 * Never raise PHP memory_limit above this during export, even if filters ask
+	 * for more via min_export_memory_limit — prevents host-wide OOM kills.
+	 *
+	 * @return int Size in bytes (default 512MB).
 	 * @since 2.1.2
 	 */
 	public static function max_export_memory_limit(): int {
-		return apply_filters( 'mksddn_mc_max_export_memory_limit', 8 * 1024 * 1024 * 1024 );
+		return apply_filters( 'mksddn_mc_max_export_memory_limit', 512 * 1024 * 1024 );
+	}
+
+	/**
+	 * Disk multiplier for export preflight (DB bytes → free space required).
+	 *
+	 * Covers JSON expansion, temp payload file, and ZIP scratch space.
+	 *
+	 * @return float Multiplier (default 3.0).
+	 * @since 2.4.1
+	 */
+	public static function export_disk_safety_multiplier(): float {
+		return (float) apply_filters( 'mksddn_mc_export_disk_safety_multiplier', 3.0 );
+	}
+
+	/**
+	 * Minimum free disk headroom required before full-site export (bytes).
+	 *
+	 * @return int Size in bytes (default 256MB).
+	 * @since 2.4.1
+	 */
+	public static function export_disk_min_headroom(): int {
+		return (int) apply_filters( 'mksddn_mc_export_disk_min_headroom', 256 * 1024 * 1024 );
+	}
+
+	/**
+	 * Abort export when memory usage exceeds this fraction of memory_limit.
+	 *
+	 * @return float Fraction 0–1 (default 0.85).
+	 * @since 2.4.1
+	 */
+	public static function export_memory_abort_ratio(): float {
+		$ratio = (float) apply_filters( 'mksddn_mc_export_memory_abort_ratio', 0.85 );
+		return max( 0.5, min( 0.95, $ratio ) );
 	}
 
 	/**

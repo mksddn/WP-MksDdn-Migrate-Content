@@ -1,7 +1,7 @@
 <?php
 /**
  * @file: ExportMemoryHelper.php
- * @description: Raises PHP memory_limit for full-site export when ini_set is allowed
+ * @description: Safely raises PHP memory_limit for full-site export within host-safe caps
  * @dependencies: PluginConfig
  * @created: 2026-03-20
  */
@@ -15,17 +15,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Temporarily increases memory for building large JSON payloads during export.
+ * Temporarily increases memory for export within a hard ceiling.
+ *
+ * Intentionally does NOT request multi-GB limits: on small VPS that triggers
+ * the Linux OOM killer and can take down the entire PHP-FPM pool.
  */
 class ExportMemoryHelper {
 
 	/**
-	 * Apply WordPress admin memory boost and optional ini_set up to configured bounds.
+	 * Apply a modest WordPress admin memory boost, capped by PluginConfig.
 	 *
 	 * @return string Original memory_limit value for restore().
 	 */
 	public static function raise_for_export(): string {
-		$original = ini_get( 'memory_limit' );
+		$original = (string) ini_get( 'memory_limit' );
 		if ( self::is_unlimited( $original ) ) {
 			return $original;
 		}
@@ -34,7 +37,7 @@ class ExportMemoryHelper {
 			wp_raise_memory_limit( 'admin' );
 		}
 
-		$current_str   = ini_get( 'memory_limit' );
+		$current_str   = (string) ini_get( 'memory_limit' );
 		$current_bytes = wp_convert_hr_to_bytes( $current_str );
 		if ( $current_bytes <= 0 || self::is_unlimited( $current_str ) ) {
 			return $original;
@@ -42,10 +45,14 @@ class ExportMemoryHelper {
 
 		$min_bytes = PluginConfig::min_export_memory_limit();
 		$max_bytes = PluginConfig::max_export_memory_limit();
-		$target    = max( $current_bytes, $min_bytes );
-		$target    = min( $target, $max_bytes );
+
+		// Never exceed the hard ceiling, even if min filter is raised aggressively.
+		$target = min( max( $current_bytes, $min_bytes ), $max_bytes );
 
 		if ( $target > $current_bytes ) {
+			if ( function_exists( 'wp_is_ini_value_changeable' ) && ! wp_is_ini_value_changeable( 'memory_limit' ) ) {
+				return $original;
+			}
 			$target_mb = (int) ceil( $target / ( 1024 * 1024 ) );
 			@ini_set( 'memory_limit', $target_mb . 'M' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
 		}
@@ -63,7 +70,31 @@ class ExportMemoryHelper {
 			return;
 		}
 
+		if ( function_exists( 'wp_is_ini_value_changeable' ) && ! wp_is_ini_value_changeable( 'memory_limit' ) ) {
+			return;
+		}
+
 		@ini_set( 'memory_limit', $original ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+	}
+
+	/**
+	 * Whether current memory usage is critically high relative to memory_limit.
+	 */
+	public static function is_memory_critical(): bool {
+		$limit_str = (string) ini_get( 'memory_limit' );
+		if ( self::is_unlimited( $limit_str ) ) {
+			return false;
+		}
+
+		$limit = wp_convert_hr_to_bytes( $limit_str );
+		if ( $limit <= 0 ) {
+			return false;
+		}
+
+		$used  = memory_get_usage( true );
+		$ratio = PluginConfig::export_memory_abort_ratio();
+
+		return ( $used / $limit ) >= $ratio;
 	}
 
 	/**

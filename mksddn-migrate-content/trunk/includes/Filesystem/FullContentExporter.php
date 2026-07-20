@@ -1,8 +1,8 @@
 <?php
 /**
  * @file: FullContentExporter.php
- * @description: Builds full-site .wpbkp ZIP with database JSON and wp-content trees; validates archive completion and size.
- * @dependencies: FullDatabaseExporter, ContentCollector, ExportMemoryHelper, FilesystemHelper, ZipArchive
+ * @description: Builds full-site .wpbkp ZIP with streamed database JSON and wp-content trees
+ * @dependencies: FullDatabaseExporter, ContentCollector, ExportMemoryHelper, ExportPreflight, FilesystemHelper, ZipArchive
  * @created: 2024-12-15
  */
 
@@ -16,6 +16,7 @@ namespace MksDdn\MigrateContent\Filesystem;
 
 use MksDdn\MigrateContent\Database\FullDatabaseExporter;
 use MksDdn\MigrateContent\Support\ExportMemoryHelper;
+use MksDdn\MigrateContent\Support\ExportPreflight;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use ZipArchive;
@@ -31,16 +32,19 @@ class FullContentExporter {
 
 	private FullDatabaseExporter $db_exporter;
 	private ContentCollector $collector;
+	private ExportPreflight $preflight;
 
 	/**
 	 * Setup exporter.
 	 *
 	 * @param FullDatabaseExporter|null $db_exporter Optional DB exporter.
 	 * @param ContentCollector|null     $collector   Optional collector.
+	 * @param ExportPreflight|null      $preflight   Optional preflight checker.
 	 */
-	public function __construct( ?FullDatabaseExporter $db_exporter = null, ?ContentCollector $collector = null ) {
+	public function __construct( ?FullDatabaseExporter $db_exporter = null, ?ContentCollector $collector = null, ?ExportPreflight $preflight = null ) {
 		$this->db_exporter = $db_exporter ?? new FullDatabaseExporter();
 		$this->collector   = $collector ?? new ContentCollector();
+		$this->preflight   = $preflight ?? new ExportPreflight();
 	}
 
 	/**
@@ -51,7 +55,18 @@ class FullContentExporter {
 	 */
 	public function export_to( string $target_path ) {
 		$original_memory = ExportMemoryHelper::raise_for_export();
+		$payload_temp    = '';
+
 		try {
+			if ( function_exists( 'set_time_limit' ) ) {
+				@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged
+			}
+
+			$preflight = $this->preflight->validate_full_export();
+			if ( is_wp_error( $preflight ) ) {
+				return $preflight;
+			}
+
 			$dir_result = FilesystemHelper::ensure_directory( $target_path );
 			if ( is_wp_error( $dir_result ) ) {
 				return new WP_Error(
@@ -59,6 +74,11 @@ class FullContentExporter {
 					__( 'Unable to create export directory.', 'mksddn-migrate-content' ),
 					array( 'hint' => $this->get_disk_hint_message() )
 				);
+			}
+
+			$payload_temp = $this->build_payload_file();
+			if ( is_wp_error( $payload_temp ) ) {
+				return $payload_temp;
 			}
 
 			$zip = new ZipArchive();
@@ -71,11 +91,6 @@ class FullContentExporter {
 				);
 			}
 
-			$payload = array(
-				'type'     => 'full-site',
-				'database' => $this->db_exporter->export(),
-			);
-
 			$manifest = array(
 				'format_version' => 1,
 				'plugin_version' => MKSDDN_MC_VERSION,
@@ -84,15 +99,12 @@ class FullContentExporter {
 			);
 
 			$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
-			$payload_json  = wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION );
-			unset( $payload );
-
-			if ( false === $manifest_json || false === $payload_json ) {
+			if ( false === $manifest_json ) {
 				$zip->close();
 				$this->discard_archive( $target_path );
 				return new WP_Error(
 					'mksddn_mc_full_export_payload',
-					__( 'Failed to encode full-site payload.', 'mksddn-migrate-content' ),
+					__( 'Failed to encode full-site manifest.', 'mksddn-migrate-content' ),
 					array( 'hint' => $this->get_memory_hint_message() )
 				);
 			}
@@ -107,7 +119,7 @@ class FullContentExporter {
 				);
 			}
 
-			if ( ! $zip->addFromString( 'payload/content.json', $payload_json ) ) {
+			if ( ! $zip->addFile( $payload_temp, 'payload/content.json' ) ) {
 				$zip->close();
 				$this->discard_archive( $target_path );
 				return new WP_Error(
@@ -175,8 +187,78 @@ class FullContentExporter {
 
 			return $target_path;
 		} finally {
+			if ( is_string( $payload_temp ) && '' !== $payload_temp && file_exists( $payload_temp ) ) {
+				FilesystemHelper::delete( $payload_temp );
+			}
 			ExportMemoryHelper::restore( $original_memory );
 		}
+	}
+
+	/**
+	 * Stream payload JSON to a temp file: {"type":"full-site","database":{...}}.
+	 *
+	 * @return string|WP_Error Absolute path to temp payload file.
+	 */
+	private function build_payload_file() {
+		$payload_temp = \wp_tempnam( 'mksddn-full-payload-' );
+		if ( ! $payload_temp ) {
+			return new WP_Error(
+				'mksddn_mc_export_temp',
+				__( 'Unable to create temporary file for export payload.', 'mksddn-migrate-content' ),
+				array( 'hint' => $this->get_disk_hint_message() )
+			);
+		}
+
+		$handle = fopen( $payload_temp, 'wb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming payload requires native handle
+		if ( ! $handle ) {
+			FilesystemHelper::delete( $payload_temp );
+			return new WP_Error(
+				'mksddn_mc_export_temp',
+				__( 'Unable to open temporary file for export payload.', 'mksddn-migrate-content' ),
+				array( 'hint' => $this->get_disk_hint_message() )
+			);
+		}
+
+		$prefix_ok = fwrite( $handle, '{"type":"full-site","database":' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		if ( false === $prefix_ok ) {
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			FilesystemHelper::delete( $payload_temp );
+			return new WP_Error(
+				'mksddn_mc_export_write',
+				__( 'Failed to write export payload header.', 'mksddn-migrate-content' ),
+				array( 'hint' => $this->get_disk_hint_message() )
+			);
+		}
+
+		$db_result = $this->db_exporter->stream_to( $handle );
+		if ( is_wp_error( $db_result ) ) {
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			FilesystemHelper::delete( $payload_temp );
+			return $db_result;
+		}
+
+		$suffix_ok = fwrite( $handle, '}' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+
+		if ( false === $suffix_ok ) {
+			FilesystemHelper::delete( $payload_temp );
+			return new WP_Error(
+				'mksddn_mc_export_write',
+				__( 'Failed to finalize export payload file.', 'mksddn-migrate-content' ),
+				array( 'hint' => $this->get_disk_hint_message() )
+			);
+		}
+
+		if ( ! is_readable( $payload_temp ) || (int) filesize( $payload_temp ) <= 0 ) {
+			FilesystemHelper::delete( $payload_temp );
+			return new WP_Error(
+				'mksddn_mc_export_payload_empty',
+				__( 'Export payload file is empty after writing.', 'mksddn-migrate-content' ),
+				array( 'hint' => $this->get_disk_hint_message() )
+			);
+		}
+
+		return $payload_temp;
 	}
 
 	/**
@@ -194,7 +276,7 @@ class FullContentExporter {
 	 * @return string
 	 */
 	private function get_memory_hint_message(): string {
-		return __( 'Increase PHP memory_limit and max_execution_time if possible, or export using server tools for very large sites.', 'mksddn-migrate-content' );
+		return __( 'Full-site export streams the database to disk in chunks. If it still fails, free RAM on the server, avoid multi-GB memory_limit on small VPS hosts, or export from staging / WP-CLI.', 'mksddn-migrate-content' );
 	}
 
 	/**
