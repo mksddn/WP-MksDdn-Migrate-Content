@@ -7,6 +7,7 @@
 
 namespace MksDdn\MigrateContent\Filesystem;
 
+use MksDdn\MigrateContent\Support\ExportMemoryHelper;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use WP_Error;
@@ -77,9 +78,23 @@ class ContentCollector {
 			RecursiveIteratorIterator::SELF_FIRST
 		);
 
+		$files_since_check = 0;
+
 		foreach ( $iterator as $path => $info ) {
 			if ( $this->should_skip_path( $path ) ) {
 				continue;
+			}
+
+			++$files_since_check;
+			if ( 0 === $files_since_check % 100 && ExportMemoryHelper::is_memory_critical() ) {
+				return new WP_Error(
+					'mksddn_mc_export_memory',
+					__( 'Export aborted while packing files: PHP memory usage is critically high. Free server memory or export from staging.', 'mksddn-migrate-content' ),
+					array(
+						'status' => 500,
+						'hint'   => __( 'A full-site export that exhausts RAM can trigger the Linux OOM killer and stop PHP-FPM for the whole site.', 'mksddn-migrate-content' ),
+					)
+				);
 			}
 
 			$relative = trim( str_replace( $source_dir, '', $path ), DIRECTORY_SEPARATOR );
