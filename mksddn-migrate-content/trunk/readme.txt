@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.4.0
+Stable tag: 2.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -156,6 +156,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.4.1 =
+* Enhanced: Full-site export — streaming database export to JSON, lower memory use on large sites.
+* Added: Export preflight checks for disk space and memory before full-site export starts.
+* Improved: Soft/hard memory targets (256MB / 512MB) and clearer admin notices for low-resource environments.
 
 = 2.4.0 =
 * Enhanced: Theme import preflight — clearer path analysis and reporting for theme archives.
