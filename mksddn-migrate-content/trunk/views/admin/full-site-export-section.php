@@ -10,7 +10,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 <section class="mksddn-mc-section">
-	<h2><?php esc_html_e( 'Full Site Export', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Pack the database and wp-content (uploads, plugins, mu-plugins, themes) into a .wpbkp archive. Large sites need free disk space in the PHP temp directory and may run for several minutes. Chunked download is used when available; direct download is used only for client or transport fallback.', 'mksddn-migrate-content' ); ?></p>
 
 	<div class="notice notice-warning inline" style="margin: 12px 0;">

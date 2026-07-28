@@ -58,31 +58,57 @@ class AdminPageView {
 	 * @since 1.0.0
 	 */
 	public function render_export_sections(): void {
-		$this->renderer->render( 'admin/full-site-export-section.php' );
-		
-		$exportable_types = $this->get_exportable_post_types();
-		$items_by_type    = array();
+		$allowed_tabs = array( 'full', 'selected', 'themes' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab switcher.
+		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'full';
+		$active_tab    = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : 'full';
 
-		foreach ( $exportable_types as $type => $label ) {
-			$items_by_type[ $type ] = $this->get_items_for_type( $type );
+		$this->renderer->render(
+			'admin/nav-tabs.php',
+			array(
+				'mksddn_mc_tabs'       => array(
+					'full'     => __( 'Full Site Export', 'mksddn-migrate-content' ),
+					'selected' => __( 'Selected Content Export', 'mksddn-migrate-content' ),
+					'themes'   => __( 'Theme Export', 'mksddn-migrate-content' ),
+				),
+				'mksddn_mc_active_tab' => $active_tab,
+				'mksddn_mc_tabs_mode'  => 'link',
+				'mksddn_mc_tabs_base'  => admin_url( 'admin.php?page=mksddn-migrate-content-export' ),
+				'mksddn_mc_tabs_class' => 'mksddn-mc-nav-tabs--page',
+			)
+		);
+
+		echo '<div class="mksddn-mc-tab-panels">';
+
+		if ( 'full' === $active_tab ) {
+			$this->renderer->render( 'admin/full-site-export-section.php' );
+		} elseif ( 'selected' === $active_tab ) {
+			$exportable_types = $this->get_exportable_post_types();
+			$items_by_type    = array();
+
+			foreach ( $exportable_types as $type => $label ) {
+				$items_by_type[ $type ] = $this->get_items_for_type( $type );
+			}
+
+			$this->renderer->render(
+				'admin/selected-content-export-section.php',
+				array(
+					'exportable_types' => $exportable_types,
+					'items_by_type'    => $items_by_type,
+				)
+			);
+		} else {
+			$theme_exporter   = new \MksDdn\MigrateContent\Filesystem\ThemeExporter();
+			$available_themes = $theme_exporter->get_available_themes();
+			$this->renderer->render(
+				'admin/theme-export-section.php',
+				array(
+					'available_themes' => $available_themes,
+				)
+			);
 		}
 
-		$this->renderer->render(
-			'admin/selected-content-export-section.php',
-			array(
-				'exportable_types' => $exportable_types,
-				'items_by_type'    => $items_by_type,
-			)
-		);
-
-		$theme_exporter = new \MksDdn\MigrateContent\Filesystem\ThemeExporter();
-		$available_themes = $theme_exporter->get_available_themes();
-		$this->renderer->render(
-			'admin/theme-export-section.php',
-			array(
-				'available_themes' => $available_themes,
-			)
-		);
+		echo '</div>';
 	}
 
 	/**
@@ -102,6 +128,33 @@ class AdminPageView {
 			$preflight_report_id = isset( $preflight_context['report_id'] ) ? (string) $preflight_context['report_id'] : '';
 		}
 
+		$show_source_form = empty( $pending_user_preview )
+			&& empty( $pending_theme_preview )
+			&& empty( $preflight_report );
+
+		$allowed_tabs = array( 'upload', 'server' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab switcher.
+		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'upload';
+		$active_tab    = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : 'upload';
+
+		if ( $show_source_form ) {
+			$this->renderer->render(
+				'admin/nav-tabs.php',
+				array(
+					'mksddn_mc_tabs'       => array(
+						'upload' => __( 'Upload file', 'mksddn-migrate-content' ),
+						'server' => __( 'Select from server', 'mksddn-migrate-content' ),
+					),
+					'mksddn_mc_active_tab' => $active_tab,
+					'mksddn_mc_tabs_mode'  => 'link',
+					'mksddn_mc_tabs_base'  => admin_url( 'admin.php?page=mksddn-migrate-content-import' ),
+					'mksddn_mc_tabs_class' => 'mksddn-mc-nav-tabs--page',
+				)
+			);
+		}
+
+		echo '<div class="mksddn-mc-tab-panels">';
+
 		$this->renderer->render(
 			'admin/unified-import-form.php',
 			array(
@@ -109,8 +162,11 @@ class AdminPageView {
 				'mksddn_mc_pending_theme_preview' => $pending_theme_preview,
 				'mksddn_mc_preflight_report'      => $preflight_report,
 				'mksddn_mc_preflight_report_id'   => $preflight_report_id,
+				'mksddn_mc_active_source_tab'     => $active_tab,
 			)
 		);
+
+		echo '</div>';
 	}
 
 	/**
@@ -133,7 +189,11 @@ class AdminPageView {
 			if ( in_array( $type, array( 'attachment', 'revision', 'nav_menu_item' ), true ) ) {
 				continue;
 			}
-			$types[ $type ] = $object->labels->singular_name ?? $object->label ?? ucfirst( $type );
+			$types[ $type ] = $object->labels->singular_name ?? $object->label ?? sprintf(
+				/* translators: %s: post type slug */
+				__( 'Content type: %s', 'mksddn-migrate-content' ),
+				$type
+			);
 		}
 
 		if ( ! isset( $types['page'] ) ) {

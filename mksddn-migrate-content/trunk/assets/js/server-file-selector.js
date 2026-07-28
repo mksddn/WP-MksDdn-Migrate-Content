@@ -8,32 +8,29 @@
 	'use strict';
 
 	/**
-	 * Server file selector handler.
+	 * Server file selector handler (server-source import tab).
 	 *
 	 * @param {Object} options Configuration options.
 	 * @param {HTMLElement} options.form Form element.
-	 * @param {HTMLElement} options.uploadRadio Upload radio button.
-	 * @param {HTMLElement} options.serverRadio Server radio button.
-	 * @param {HTMLElement} options.uploadDiv Upload container.
 	 * @param {HTMLElement} options.serverDiv Server container.
-	 * @param {HTMLElement} options.fileInput File input.
 	 * @param {HTMLElement} options.serverSelect Server file select.
+	 * @param {HTMLElement|null} options.deleteButton Delete backup button.
 	 * @param {string} options.ajaxAction AJAX action name.
+	 * @param {string} options.deleteAjaxAction AJAX action for delete.
 	 * @param {string} options.nonce Nonce for AJAX request.
- * @param {Object} options.i18n Translation strings.
+	 * @param {Object} options.i18n Translation strings.
 	 */
 	function ServerFileSelector(options) {
 		this.form = options.form;
-		this.uploadRadio = options.uploadRadio;
-		this.serverRadio = options.serverRadio;
-		this.uploadDiv = options.uploadDiv;
 		this.serverDiv = options.serverDiv;
-		this.fileInput = options.fileInput;
 		this.serverSelect = options.serverSelect;
+		this.deleteButton = options.deleteButton || null;
 		this.ajaxAction = options.ajaxAction;
+		this.deleteAjaxAction = options.deleteAjaxAction || 'mksddn_mc_delete_server_backup';
 		this.nonce = options.nonce;
 		this.i18n = options.i18n || {};
 		this.isLoading = false;
+		this.isDeleting = false;
 
 		this.init();
 	}
@@ -44,49 +41,50 @@
 	ServerFileSelector.prototype.init = function() {
 		var self = this;
 
-		this.uploadRadio.addEventListener('change', function() {
-			self.toggleSource();
+		this.serverSelect.addEventListener('change', function() {
+			self.updateDeleteButtonState();
+			self.clearNotice();
 		});
 
-		this.serverRadio.addEventListener('change', function() {
-			self.toggleSource();
-		});
+		if (this.deleteButton) {
+			this.deleteButton.addEventListener('click', function(e) {
+				e.preventDefault();
+				self.handleDelete();
+			});
+		}
 
 		this.form.addEventListener('submit', function(e) {
 			self.handleSubmit(e);
 		});
+
+		this.loadServerFiles();
+		this.updateDeleteButtonState();
 	};
 
 	/**
-	 * Toggle between upload and server source.
+	 * Enable or disable the delete button based on selection.
 	 */
-	ServerFileSelector.prototype.toggleSource = function() {
-		if (this.uploadRadio.checked) {
-			this.uploadDiv.style.display = 'block';
-			this.serverDiv.style.display = 'none';
-			this.fileInput.required = true;
-			this.serverSelect.required = false;
-			this.serverSelect.value = '';
-		} else {
-			this.uploadDiv.style.display = 'none';
-			this.serverDiv.style.display = 'block';
-			this.fileInput.required = false;
-			this.fileInput.value = '';
-			this.serverSelect.required = true;
-			this.loadServerFiles();
+	ServerFileSelector.prototype.updateDeleteButtonState = function() {
+		if (!this.deleteButton) {
+			return;
 		}
+
+		this.deleteButton.disabled = this.isLoading || this.isDeleting || !this.serverSelect.value || this.serverSelect.disabled;
 	};
 
 	/**
 	 * Load server files via AJAX.
+	 *
+	 * @param {string|null} successMessage Optional success notice to show after reload.
 	 */
-	ServerFileSelector.prototype.loadServerFiles = function() {
+	ServerFileSelector.prototype.loadServerFiles = function(successMessage) {
 		if (this.isLoading) {
 			return;
 		}
 
 		this.isLoading = true;
 		this.showLoading();
+		this.updateDeleteButtonState();
 
 		var self = this;
 		var formData = new URLSearchParams({
@@ -108,14 +106,93 @@
 			self.isLoading = false;
 			if (data.success && data.data.files && data.data.files.length > 0) {
 				self.populateSelect(data.data.files);
+				if (successMessage) {
+					self.showNotice(successMessage, 'success');
+				}
 			} else {
-				self.showError(data.data && data.data.message ? data.data.message : self.i18n.noFiles || 'No backup files found');
+				var emptyMessage = data.data && data.data.message ? data.data.message : self.i18n.noFiles || '';
+				self.showError(emptyMessage);
+				if (successMessage) {
+					self.showNotice(successMessage, 'success');
+				}
 			}
+			self.updateDeleteButtonState();
 		})
 		.catch(function(error) {
 			self.isLoading = false;
-			self.showError(self.i18n.loadError || 'Error loading files');
+			self.showError(self.i18n.loadError || '');
+			self.updateDeleteButtonState();
 			console.error('Error loading server files:', error);
+		});
+	};
+
+	/**
+	 * Delete the selected server backup file.
+	 */
+	ServerFileSelector.prototype.handleDelete = function() {
+		if (this.isDeleting || this.isLoading) {
+			return;
+		}
+
+		var filename = this.serverSelect.value;
+		if (!filename) {
+			this.showNotice(this.i18n.deleteSelect || '', 'error');
+			return;
+		}
+
+		var confirmMessage = this.i18n.deleteConfirm || '';
+		if (!window.confirm(confirmMessage)) {
+			return;
+		}
+
+		this.isDeleting = true;
+		this.updateDeleteButtonState();
+		if (this.deleteButton) {
+			this.deleteButton.textContent = this.i18n.deleting || '';
+		}
+
+		var self = this;
+		var formData = new URLSearchParams({
+			action: this.deleteAjaxAction,
+			nonce: this.nonce,
+			filename: filename
+		});
+
+		fetch(ajaxurl, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			body: formData
+		})
+		.then(function(response) {
+			return response.json();
+		})
+		.then(function(data) {
+			self.isDeleting = false;
+			if (self.deleteButton) {
+				self.deleteButton.textContent = self.deleteButton.dataset.label || self.i18n.deleteButton || '';
+			}
+
+			if (data.success) {
+				var successMessage = (data.data && data.data.message) ? data.data.message : (self.i18n.deleteSuccess || '');
+				self.loadServerFiles(successMessage);
+			} else {
+				self.showNotice(
+					(data.data && data.data.message) ? data.data.message : (self.i18n.deleteError || ''),
+					'error'
+				);
+				self.updateDeleteButtonState();
+			}
+		})
+		.catch(function(error) {
+			self.isDeleting = false;
+			if (self.deleteButton) {
+				self.deleteButton.textContent = self.deleteButton.dataset.label || self.i18n.deleteButton || '';
+			}
+			self.showNotice(self.i18n.deleteError || '', 'error');
+			self.updateDeleteButtonState();
+			console.error('Error deleting server file:', error);
 		});
 	};
 
@@ -123,11 +200,11 @@
 	 * Show loading state.
 	 */
 	ServerFileSelector.prototype.showLoading = function() {
-	this.serverSelect.innerHTML = '';
-	var option = document.createElement('option');
-	option.value = '';
-	option.textContent = this.i18n.loading || 'Loading...';
-	this.serverSelect.appendChild(option);
+		this.serverSelect.innerHTML = '';
+		var option = document.createElement('option');
+		option.value = '';
+		option.textContent = this.i18n.loading || '';
+		this.serverSelect.appendChild(option);
 		this.serverSelect.disabled = true;
 	};
 
@@ -137,7 +214,7 @@
 	 * @param {Array} files Array of file objects.
 	 */
 	ServerFileSelector.prototype.populateSelect = function(files) {
-		this.serverSelect.innerHTML = '<option value="">' + (this.i18n.selectFile || 'Select a file...') + '</option>';
+		this.serverSelect.innerHTML = '<option value="">' + (this.i18n.selectFile || '') + '</option>';
 		this.serverSelect.disabled = false;
 
 		var self = this;
@@ -147,28 +224,56 @@
 			option.textContent = file.name + ' (' + file.size_human + ', ' + file.modified_human + ')';
 			self.serverSelect.appendChild(option);
 		});
+
+		this.clearNotice();
+		this.updateDeleteButtonState();
 	};
 
 	/**
-	 * Show error message.
+	 * Show error message in the select and notice area.
 	 *
 	 * @param {string} message Error message.
 	 */
 	ServerFileSelector.prototype.showError = function(message) {
-	this.serverSelect.innerHTML = '';
-	var option = document.createElement('option');
-	option.value = '';
-	option.textContent = message;
-	this.serverSelect.appendChild(option);
+		this.serverSelect.innerHTML = '';
+		var option = document.createElement('option');
+		option.value = '';
+		option.textContent = message;
+		this.serverSelect.appendChild(option);
 		this.serverSelect.disabled = true;
+		this.showNotice(message, 'error');
+		this.updateDeleteButtonState();
+	};
 
-		// Show notice if possible.
+	/**
+	 * Show a notice below the server file controls.
+	 *
+	 * @param {string} message Notice text.
+	 * @param {string} type Notice type: error|success.
+	 */
+	ServerFileSelector.prototype.showNotice = function(message, type) {
 		var notice = this.serverDiv.querySelector('.mksddn-mc-server-file-notice');
-		if (notice) {
-			notice.textContent = message;
-			notice.style.display = 'block';
-			notice.className = 'mksddn-mc-server-file-notice notice notice-error';
+		if (!notice) {
+			return;
 		}
+
+		notice.textContent = message;
+		notice.style.display = 'block';
+		notice.className = 'mksddn-mc-server-file-notice notice notice-' + (type === 'success' ? 'success' : 'error');
+	};
+
+	/**
+	 * Hide the notice area.
+	 */
+	ServerFileSelector.prototype.clearNotice = function() {
+		var notice = this.serverDiv.querySelector('.mksddn-mc-server-file-notice');
+		if (!notice) {
+			return;
+		}
+
+		notice.textContent = '';
+		notice.style.display = 'none';
+		notice.className = 'mksddn-mc-server-file-notice notice notice-error';
 	};
 
 	/**
@@ -177,16 +282,10 @@
 	 * @param {Event} e Submit event.
 	 */
 	ServerFileSelector.prototype.handleSubmit = function(e) {
-		if (this.serverRadio.checked) {
-			if (!this.serverSelect.value) {
-				e.preventDefault();
-				alert(this.i18n.pleaseSelect || 'Please select a file from the server.');
-				return false;
-			}
-			this.fileInput.removeAttribute('required');
-			this.fileInput.disabled = true;
-		} else {
-			this.serverSelect.removeAttribute('required');
+		if (!this.serverSelect.value) {
+			e.preventDefault();
+			alert(this.i18n.pleaseSelect || '');
+			return false;
 		}
 	};
 
@@ -199,6 +298,7 @@
 		var forms = document.querySelectorAll('form[data-mksddn-full-import="true"], form[data-mksddn-unified-import="true"]');
 		var defaultConfig = {
 			ajaxAction: config && config.ajaxAction ? config.ajaxAction : 'mksddn_mc_get_server_backups',
+			deleteAjaxAction: config && config.deleteAjaxAction ? config.deleteAjaxAction : 'mksddn_mc_delete_server_backup',
 			nonce: config && config.nonce ? config.nonce : '',
 			i18n: config && config.i18n ? config.i18n : {}
 		};
@@ -208,26 +308,28 @@
 				return;
 			}
 
-			var uploadRadio = form.querySelector('input[name="import_source"][value="upload"]');
-			var serverRadio = form.querySelector('input[name="import_source"][value="server"]');
-			var uploadDiv = form.querySelector('.mksddn-mc-import-source-upload');
+			var sourceInput = form.querySelector('input[name="import_source"]');
+			var source = sourceInput ? sourceInput.value : '';
 			var serverDiv = form.querySelector('.mksddn-mc-import-source-server');
-			var fileInput = form.querySelector('input[type="file"]');
 			var serverSelect = form.querySelector('select[name="server_file"]');
+			var deleteButton = form.querySelector('.mksddn-mc-delete-server-file');
 
-			if (!uploadRadio || !serverRadio || !uploadDiv || !serverDiv || !fileInput || !serverSelect) {
+			// Page-level tabs render only the active source panel.
+			if ('server' !== source || !serverDiv || !serverSelect) {
 				return;
+			}
+
+			if (deleteButton) {
+				deleteButton.dataset.label = deleteButton.textContent;
 			}
 
 			new ServerFileSelector({
 				form: form,
-				uploadRadio: uploadRadio,
-				serverRadio: serverRadio,
-				uploadDiv: uploadDiv,
 				serverDiv: serverDiv,
-				fileInput: fileInput,
 				serverSelect: serverSelect,
+				deleteButton: deleteButton,
 				ajaxAction: defaultConfig.ajaxAction,
+				deleteAjaxAction: defaultConfig.deleteAjaxAction,
 				nonce: defaultConfig.nonce,
 				i18n: defaultConfig.i18n
 			});
@@ -253,4 +355,3 @@
 		}
 	}
 })();
-

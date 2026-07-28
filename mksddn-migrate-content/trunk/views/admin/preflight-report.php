@@ -42,8 +42,9 @@ $mksddn_mc_source_names        = array(
 	'server' => __( 'Server file', 'mksddn-migrate-content' ),
 	'chunk'  => __( 'Chunked upload', 'mksddn-migrate-content' ),
 );
-$mksddn_mc_import_type_label = isset( $mksddn_mc_import_type_names[ $mksddn_mc_import_type_code ] ) ? $mksddn_mc_import_type_names[ $mksddn_mc_import_type_code ] : $mksddn_mc_import_type_code;
-$mksddn_mc_source_label      = isset( $mksddn_mc_source_names[ $mksddn_mc_source_code ] ) ? $mksddn_mc_source_names[ $mksddn_mc_source_code ] : $mksddn_mc_source_code;
+$mksddn_mc_unknown_label       = __( 'Unknown', 'mksddn-migrate-content' );
+$mksddn_mc_import_type_label   = $mksddn_mc_import_type_names[ $mksddn_mc_import_type_code ] ?? $mksddn_mc_unknown_label;
+$mksddn_mc_source_label        = $mksddn_mc_source_names[ $mksddn_mc_source_code ] ?? $mksddn_mc_unknown_label;
 
 $mksddn_mc_payload_type_labels = array(
 	'page'   => __( 'Page', 'mksddn-migrate-content' ),
@@ -68,7 +69,7 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 	if ( $object && ! empty( $object->labels->singular_name ) ) {
 		return $object->labels->singular_name;
 	}
-	return $post_type;
+	return __( 'Unknown', 'mksddn-migrate-content' );
 };
 ?>
 <div class="mksddn-mc-preflight-report notice <?php echo esc_attr( $mksddn_mc_notice_class ); ?>" style="margin: 15px 0;">
@@ -116,7 +117,7 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 				<li>
 					<?php
 					$mksddn_mc_ptype_raw = sanitize_key( (string) $mksddn_mc_summary['payload_type'] );
-					$mksddn_mc_ptype_show = isset( $mksddn_mc_payload_type_labels[ $mksddn_mc_ptype_raw ] ) ? $mksddn_mc_payload_type_labels[ $mksddn_mc_ptype_raw ] : $mksddn_mc_ptype_raw;
+					$mksddn_mc_ptype_show = $mksddn_mc_payload_type_labels[ $mksddn_mc_ptype_raw ] ?? $mksddn_mc_unknown_label;
 					echo esc_html(
 						sprintf(
 							/* translators: %s: payload type label */

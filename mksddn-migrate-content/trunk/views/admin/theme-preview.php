@@ -33,19 +33,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<input type="hidden" name="preview_id" value="<?php echo esc_attr( $preview['id'] ); ?>">
 
 	<div class="mksddn-mc-field">
-		<label style="display: block; margin-bottom: 10px;">
+		<label>
 			<input type="radio" name="import_mode" value="replace" checked>
-			<strong><?php esc_html_e( 'Replace', 'mksddn-migrate-content' ); ?></strong>
-			<p class="description" style="margin-left: 25px;">
-				<?php esc_html_e( 'Remove existing theme directory and replace with files from archive.', 'mksddn-migrate-content' ); ?>
-			</p>
+			<span>
+				<strong><?php esc_html_e( 'Replace', 'mksddn-migrate-content' ); ?></strong>
+				<span class="description"><?php esc_html_e( 'Remove existing theme directory and replace with files from archive.', 'mksddn-migrate-content' ); ?></span>
+			</span>
 		</label>
-		<label style="display: block;">
+		<label>
 			<input type="radio" name="import_mode" value="merge">
-			<strong><?php esc_html_e( 'Merge', 'mksddn-migrate-content' ); ?></strong>
-			<p class="description" style="margin-left: 25px;">
-				<?php esc_html_e( 'Combine files from archive with existing theme. Files from archive will overwrite existing files.', 'mksddn-migrate-content' ); ?>
-			</p>
+			<span>
+				<strong><?php esc_html_e( 'Merge', 'mksddn-migrate-content' ); ?></strong>
+				<span class="description"><?php esc_html_e( 'Combine files from archive with existing theme. Files from archive will overwrite existing files.', 'mksddn-migrate-content' ); ?></span>
+			</span>
 		</label>
 	</div>
 

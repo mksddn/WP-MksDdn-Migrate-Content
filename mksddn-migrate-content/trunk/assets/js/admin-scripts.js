@@ -342,7 +342,7 @@
 				if (window.mksddnMcProgress && typeof window.mksddnMcProgress.set === 'function') {
 					window.mksddnMcProgress.set(
 						15,
-						i18n.importProcessing || 'Server is processing the archive...'
+						i18n.importProcessing || ''
 					);
 				}
 			});

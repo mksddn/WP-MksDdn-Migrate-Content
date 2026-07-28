@@ -150,6 +150,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_cancel_theme_preview', array( $this->theme_preview_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
+		add_action( 'wp_ajax_mksddn_mc_delete_server_backup', array( $this, 'handle_ajax_delete_server_backup' ) );
 		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
 	}
 
@@ -339,14 +340,48 @@ class AdminPageController {
 			'mksddn-server-file-selector',
 			'mksddnServerFileSelector',
 			array(
-				'ajaxAction' => 'mksddn_mc_get_server_backups',
-				'nonce'     => wp_create_nonce( 'mksddn_mc_admin' ),
-				'i18n'      => array(
-					'loading'     => __( 'Loading...', 'mksddn-migrate-content' ),
-					'selectFile'  => __( 'Select a file...', 'mksddn-migrate-content' ),
-					'noFiles'     => __( 'No backup files found', 'mksddn-migrate-content' ),
-					'loadError'   => __( 'Error loading files', 'mksddn-migrate-content' ),
-					'pleaseSelect' => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+				'ajaxAction'       => 'mksddn_mc_get_server_backups',
+				'deleteAjaxAction' => 'mksddn_mc_delete_server_backup',
+				'nonce'            => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'             => array(
+					'loading'         => __( 'Loading...', 'mksddn-migrate-content' ),
+					'selectFile'      => __( 'Select a file...', 'mksddn-migrate-content' ),
+					'noFiles'         => __( 'No backup files found', 'mksddn-migrate-content' ),
+					'loadError'       => __( 'Error loading files', 'mksddn-migrate-content' ),
+					'pleaseSelect'    => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+					'deleteConfirm'   => __( 'Delete this backup file from the server? This cannot be undone.', 'mksddn-migrate-content' ),
+					'deleteSuccess'   => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
+					'deleteError'     => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
+					'deleteSelect'    => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
+					'deleting'        => __( 'Deleting...', 'mksddn-migrate-content' ),
+					'deleteButton'    => __( 'Delete', 'mksddn-migrate-content' ),
+				),
+			)
+		);
+
+		wp_enqueue_script(
+			'mksddn-file-dropzone',
+			PluginConfig::assets_url() . 'js/file-dropzone.js',
+			array(),
+			PluginConfig::version(),
+			true
+		);
+
+		wp_localize_script(
+			'mksddn-file-dropzone',
+			'mksddnFileDropzone',
+			array(
+				'i18n' => array(
+					'invalidType' => __( 'Only .wpbkp and .json files are supported.', 'mksddn-migrate-content' ),
+					'assignError' => __( 'Could not attach the selected file. Please use Browse instead.', 'mksddn-migrate-content' ),
+					'bytesZero'   => __( '0 B', 'mksddn-migrate-content' ),
+					/* translators: 1: numeric value, 2: unit abbreviation (B, KB, etc.). */
+					'bytesFormat' => _x( '%1$s %2$s', 'file size: value and unit', 'mksddn-migrate-content' ),
+					'unitB'       => _x( 'B', 'bytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitKB'      => _x( 'KB', 'kilobytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitMB'      => _x( 'MB', 'megabytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitGB'      => _x( 'GB', 'gigabytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitTB'      => _x( 'TB', 'terabytes unit abbreviation', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -409,6 +444,15 @@ class AdminPageController {
 						'exportInvalidInit' => __( 'Invalid export response from server.', 'mksddn-migrate-content' ),
 						'exportChunkError' => __( 'Chunk download failed.', 'mksddn-migrate-content' ),
 						'exportInvalidChunk' => __( 'Invalid chunk data from server.', 'mksddn-migrate-content' ),
+						'fileReadError'    => __( 'File read error', 'mksddn-migrate-content' ),
+						'bytesZero'        => __( '0 B', 'mksddn-migrate-content' ),
+						/* translators: 1: numeric value, 2: unit abbreviation (B, KB, etc.). */
+						'bytesFormat'      => _x( '%1$s %2$s', 'file size: value and unit', 'mksddn-migrate-content' ),
+						'unitB'            => _x( 'B', 'bytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitKB'           => _x( 'KB', 'kilobytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitMB'           => _x( 'MB', 'megabytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitGB'           => _x( 'GB', 'gigabytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitTB'           => _x( 'TB', 'terabytes unit abbreviation', 'mksddn-migrate-content' ),
 					),
 				)
 			);
@@ -560,6 +604,45 @@ class AdminPageController {
 		}
 
 		wp_send_json_success( array( 'files' => $files ) );
+	}
+
+	/**
+	 * Handle AJAX request to delete a server backup file.
+	 *
+	 * @return void
+	 * @since 2.5.0
+	 */
+	public function handle_ajax_delete_server_backup(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$filename = isset( $_POST['filename'] ) ? sanitize_text_field( wp_unslash( $_POST['filename'] ) ) : '';
+		$filename = basename( $filename );
+
+		if ( '' === $filename ) {
+			wp_send_json_error( array( 'message' => __( 'No backup file specified.', 'mksddn-migrate-content' ) ) );
+		}
+
+		$result = $this->server_scanner->delete_file( $filename );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		wp_send_json_success(
+			array(
+				'message' => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
+			)
+		);
 	}
 
 	/**

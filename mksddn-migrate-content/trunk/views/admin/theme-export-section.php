@@ -11,7 +11,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 <section class="mksddn-mc-section">
-	<h2><?php esc_html_e( 'Theme Export', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Export selected themes (active theme is pre-selected).', 'mksddn-migrate-content' ); ?></p>
 	<div class="mksddn-mc-grid">
 		<div class="mksddn-mc-card">
@@ -37,7 +36,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 									<span class="mksddn-mc-theme-status"><?php esc_html_e( '(Parent)', 'mksddn-migrate-content' ); ?></span>
 								<?php endif; ?>
 								<?php if ( ! empty( $mksddn_mc_theme_data['version'] ) ) : ?>
-									<span class="mksddn-mc-theme-version">v<?php echo esc_html( $mksddn_mc_theme_data['version'] ); ?></span>
+									<span class="mksddn-mc-theme-version"><?php printf( /* translators: %s: theme version number */ esc_html__( 'v%s', 'mksddn-migrate-content' ), esc_html( $mksddn_mc_theme_data['version'] ) ); ?></span>
 								<?php endif; ?>
 							</label>
 						<?php endforeach; ?>

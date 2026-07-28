@@ -35,8 +35,8 @@ $selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-cont
 
 	<div class="tablenav top mksddn-mc-user-toolbar">
 		<div class="alignleft actions">
-			<button type="button" class="button mksddn-mc-user-select-all"><?php esc_html_e( 'Select all', 'mksddn-migrate-content' ); ?></button>
-			<button type="button" class="button mksddn-mc-user-deselect-all"><?php esc_html_e( 'Deselect all', 'mksddn-migrate-content' ); ?></button>
+			<button type="button" class="button button-secondary mksddn-mc-user-select-all"><?php esc_html_e( 'Select all', 'mksddn-migrate-content' ); ?></button>
+			<button type="button" class="button button-secondary mksddn-mc-user-deselect-all"><?php esc_html_e( 'Deselect all', 'mksddn-migrate-content' ); ?></button>
 		</div>
 		<div class="tablenav-pages one-page mksddn-mc-user-selection-summary">
 			<span
@@ -94,8 +94,8 @@ $selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-cont
 							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" class="mksddn-mc-user-import-checkbox" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
 						</td>
 						<td><strong><?php echo esc_html( $email ); ?></strong><br><span class="description"><?php echo esc_html( $entry['login'] ?? '' ); ?></span></td>
-						<td><?php echo esc_html( $role ?: '—' ); ?></td>
-						<td><?php echo esc_html( $local ?: '—' ); ?></td>
+						<td><?php echo esc_html( $role ?: __( '—', 'mksddn-migrate-content' ) ); ?></td>
+						<td><?php echo esc_html( $local ?: __( '—', 'mksddn-migrate-content' ) ); ?></td>
 						<td><?php echo esc_html( $status_label ); ?></td>
 						<td>
 							<?php if ( 'conflict' === $status ) : ?>
