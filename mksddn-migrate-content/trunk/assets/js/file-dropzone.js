@@ -106,7 +106,7 @@
 
 		var file = files[0];
 		if (!this.isAllowedFile(file)) {
-			this.showError(this.i18n.invalidType || 'Only .wpbkp and .json files are supported.');
+			this.showError(this.i18n.invalidType || '');
 			return;
 		}
 
@@ -136,7 +136,7 @@
 			transfer.items.add(file);
 			this.input.files = transfer.files;
 		} catch (error) {
-			this.showError(this.i18n.assignError || 'Could not attach the selected file. Please use Browse instead.');
+			this.showError(this.i18n.assignError || '');
 			return;
 		}
 
@@ -194,10 +194,16 @@
 	 */
 	FileDropzone.prototype.formatBytes = function (bytes) {
 		if (!bytes || bytes < 0) {
-			return '0 B';
+			return this.i18n.bytesZero || '';
 		}
 
-		var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+		var units = [
+			this.i18n.unitB,
+			this.i18n.unitKB,
+			this.i18n.unitMB,
+			this.i18n.unitGB,
+			this.i18n.unitTB
+		];
 		var i = 0;
 		var value = bytes;
 		while (value >= 1024 && i < units.length - 1) {
@@ -206,7 +212,8 @@
 		}
 
 		var rounded = value >= 10 || i === 0 ? Math.round(value) : Math.round(value * 10) / 10;
-		return rounded + ' ' + units[i];
+		var format = this.i18n.bytesFormat || '%1$s %2$s';
+		return format.replace('%1$s', String(rounded)).replace('%2$s', units[i] || '');
 	};
 
 	/**

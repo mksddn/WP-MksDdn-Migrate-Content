@@ -22,9 +22,7 @@
 	 */
 	function createChunkFailure( message ) {
 		const err = new Error(
-			message ||
-			( settings.i18n && settings.i18n.uploadError ) ||
-			'Chunk transfer failed.'
+			message || ( settings.i18n && settings.i18n.uploadError ) || ''
 		);
 		err.name = 'MksddnChunkFailure';
 		return err;
@@ -103,23 +101,22 @@
 		const i18n = settings.i18n || {};
 
 		if ( isRestNoRoute( payload ) ) {
-			return i18n.restNoRoute ||
-				'Migration REST endpoints are unavailable for this request.';
+			return i18n.restNoRoute || '';
 		}
 		if ( isRestErrorPayload( payload ) ) {
 			return payload.message;
 		}
 		if ( response.status === 404 ) {
-			return i18n.restNotFound || 'WordPress REST API is not reachable (HTTP 404).';
+			return i18n.restNotFound || '';
 		}
 		if ( response.status === 401 || response.status === 403 ) {
-			return i18n.restForbidden || 'You are not allowed to use the migration REST API.';
+			return i18n.restForbidden || '';
 		}
 		if ( response.status >= 500 ) {
-			return i18n.restServerError || 'The server returned an error during chunked transfer.';
+			return i18n.restServerError || '';
 		}
 
-		return ( i18n.uploadError || 'Chunk transfer failed.' ) + ' (' + response.status + ')';
+		return ( i18n.uploadError || '' ) + ' (' + response.status + ')';
 	}
 
 	/**
@@ -135,8 +132,7 @@
 		} catch ( error ) {
 			if ( error instanceof TypeError ) {
 				throw createChunkFailure(
-					( settings.i18n && settings.i18n.restRedirect ) ||
-					'The chunk transfer request was redirected.'
+					( settings.i18n && settings.i18n.restRedirect ) || ''
 				);
 			}
 			throw error;
@@ -151,7 +147,7 @@
 				throw createChunkFailure( settings.i18n && settings.i18n.restNotFound );
 			}
 			throw createChunkFailure(
-				( ( settings.i18n && settings.i18n.restInvalidResponse ) || 'Unexpected server response.' ) +
+				( ( settings.i18n && settings.i18n.restInvalidResponse ) || '' ) +
 				' (' + response.status + ')'
 			);
 		}
@@ -231,7 +227,9 @@
 					resolve( '' );
 				}
 			};
-			reader.onerror = () => reject( reader.error || new Error( 'File read error' ) );
+			reader.onerror = () => reject(
+				reader.error || new Error( ( settings.i18n && settings.i18n.fileReadError ) || '' )
+			);
 			reader.readAsDataURL( blob );
 		} );
 	}
@@ -250,9 +248,7 @@
 	 */
 	function createExportFailure( message ) {
 		const err = new Error(
-			message ||
-			( settings.i18n && settings.i18n.exportUnknownError ) ||
-			'Export failed.'
+			message || ( settings.i18n && settings.i18n.exportUnknownError ) || ''
 		);
 		err.name = 'MksddnExportFailure';
 		return err;
@@ -266,14 +262,21 @@
 		);
 	}
 
+	function formatBytesLabel( value, unit ) {
+		const i18n = settings.i18n || {};
+		const format = i18n.bytesFormat || '%1$s %2$s';
+		return format.replace( '%1$s', String( value ) ).replace( '%2$s', unit || '' );
+	}
+
 	function formatBytes( bytes ) {
+		const i18n = settings.i18n || {};
 		if ( bytes >= BYTES_MB ) {
-			return `${ ( bytes / BYTES_MB ).toFixed( 1 ) } MB`;
+			return formatBytesLabel( ( bytes / BYTES_MB ).toFixed( 1 ), i18n.unitMB );
 		}
 		if ( bytes >= BYTES_KB ) {
-			return `${ Math.round( bytes / BYTES_KB ) } KB`;
+			return formatBytesLabel( Math.round( bytes / BYTES_KB ), i18n.unitKB );
 		}
-		return `${ bytes } B`;
+		return formatBytesLabel( bytes, i18n.unitB );
 	}
 
 	function selectChunkSize( fileSize ) {
@@ -296,7 +299,7 @@
 		if ( ! bytes ) {
 			return '';
 		}
-		const template = settings.i18n.chunkInfo || `· ${ formatBytes( bytes ) } chunks`;
+		const template = settings.i18n.chunkInfo || '';
 		return template.replace( '%s', formatBytes( bytes ) );
 	}
 
@@ -346,8 +349,7 @@ function hideProgressLabel( delay = 0 ) {
 
 		if ( ! jobId ) {
 			throw createChunkFailure(
-				( settings.i18n && settings.i18n.restInvalidInit ) ||
-				'Invalid response when starting chunked upload.'
+				( settings.i18n && settings.i18n.restInvalidInit ) || ''
 			);
 		}
 
@@ -405,7 +407,7 @@ function hideProgressLabel( delay = 0 ) {
 
 			if ( ! init.job_id || ! init.total_chunks ) {
 				throw createExportFailure(
-					( settings.i18n && settings.i18n.exportInvalidInit ) || 'Invalid export response from server.'
+					( settings.i18n && settings.i18n.exportInvalidInit ) || ''
 				);
 			}
 
@@ -425,7 +427,7 @@ function hideProgressLabel( delay = 0 ) {
 
 				if ( typeof payload.chunk !== 'string' ) {
 					throw createExportFailure(
-						( settings.i18n && settings.i18n.exportInvalidChunk ) || 'Invalid chunk data from server.'
+						( settings.i18n && settings.i18n.exportInvalidChunk ) || ''
 					);
 				}
 
@@ -614,8 +616,7 @@ function hideProgressLabel( delay = 0 ) {
 				}
 
 				showRestWarning(
-					( settings.i18n && settings.i18n.restPreflightFailed ) ||
-					'Chunk transfer endpoints are not reachable yet.'
+					( settings.i18n && settings.i18n.restPreflightFailed ) || ''
 				);
 			} )
 			.catch( () => {

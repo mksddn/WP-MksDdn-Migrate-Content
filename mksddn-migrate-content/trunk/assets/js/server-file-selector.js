@@ -110,7 +110,7 @@
 					self.showNotice(successMessage, 'success');
 				}
 			} else {
-				var emptyMessage = data.data && data.data.message ? data.data.message : self.i18n.noFiles || 'No backup files found';
+				var emptyMessage = data.data && data.data.message ? data.data.message : self.i18n.noFiles || '';
 				self.showError(emptyMessage);
 				if (successMessage) {
 					self.showNotice(successMessage, 'success');
@@ -120,7 +120,7 @@
 		})
 		.catch(function(error) {
 			self.isLoading = false;
-			self.showError(self.i18n.loadError || 'Error loading files');
+			self.showError(self.i18n.loadError || '');
 			self.updateDeleteButtonState();
 			console.error('Error loading server files:', error);
 		});
@@ -136,11 +136,11 @@
 
 		var filename = this.serverSelect.value;
 		if (!filename) {
-			this.showNotice(this.i18n.deleteSelect || 'Please select a file to delete.', 'error');
+			this.showNotice(this.i18n.deleteSelect || '', 'error');
 			return;
 		}
 
-		var confirmMessage = this.i18n.deleteConfirm || 'Delete this backup file from the server? This cannot be undone.';
+		var confirmMessage = this.i18n.deleteConfirm || '';
 		if (!window.confirm(confirmMessage)) {
 			return;
 		}
@@ -148,7 +148,7 @@
 		this.isDeleting = true;
 		this.updateDeleteButtonState();
 		if (this.deleteButton) {
-			this.deleteButton.textContent = this.i18n.deleting || 'Deleting...';
+			this.deleteButton.textContent = this.i18n.deleting || '';
 		}
 
 		var self = this;
@@ -171,15 +171,15 @@
 		.then(function(data) {
 			self.isDeleting = false;
 			if (self.deleteButton) {
-				self.deleteButton.textContent = self.deleteButton.dataset.label || 'Delete';
+				self.deleteButton.textContent = self.deleteButton.dataset.label || self.i18n.deleteButton || '';
 			}
 
 			if (data.success) {
-				var successMessage = (data.data && data.data.message) ? data.data.message : (self.i18n.deleteSuccess || 'Backup file deleted.');
+				var successMessage = (data.data && data.data.message) ? data.data.message : (self.i18n.deleteSuccess || '');
 				self.loadServerFiles(successMessage);
 			} else {
 				self.showNotice(
-					(data.data && data.data.message) ? data.data.message : (self.i18n.deleteError || 'Failed to delete backup file.'),
+					(data.data && data.data.message) ? data.data.message : (self.i18n.deleteError || ''),
 					'error'
 				);
 				self.updateDeleteButtonState();
@@ -188,9 +188,9 @@
 		.catch(function(error) {
 			self.isDeleting = false;
 			if (self.deleteButton) {
-				self.deleteButton.textContent = self.deleteButton.dataset.label || 'Delete';
+				self.deleteButton.textContent = self.deleteButton.dataset.label || self.i18n.deleteButton || '';
 			}
-			self.showNotice(self.i18n.deleteError || 'Failed to delete backup file.', 'error');
+			self.showNotice(self.i18n.deleteError || '', 'error');
 			self.updateDeleteButtonState();
 			console.error('Error deleting server file:', error);
 		});
@@ -203,7 +203,7 @@
 		this.serverSelect.innerHTML = '';
 		var option = document.createElement('option');
 		option.value = '';
-		option.textContent = this.i18n.loading || 'Loading...';
+		option.textContent = this.i18n.loading || '';
 		this.serverSelect.appendChild(option);
 		this.serverSelect.disabled = true;
 	};
@@ -214,7 +214,7 @@
 	 * @param {Array} files Array of file objects.
 	 */
 	ServerFileSelector.prototype.populateSelect = function(files) {
-		this.serverSelect.innerHTML = '<option value="">' + (this.i18n.selectFile || 'Select a file...') + '</option>';
+		this.serverSelect.innerHTML = '<option value="">' + (this.i18n.selectFile || '') + '</option>';
 		this.serverSelect.disabled = false;
 
 		var self = this;
@@ -284,7 +284,7 @@
 	ServerFileSelector.prototype.handleSubmit = function(e) {
 		if (!this.serverSelect.value) {
 			e.preventDefault();
-			alert(this.i18n.pleaseSelect || 'Please select a file from the server.');
+			alert(this.i18n.pleaseSelect || '');
 			return false;
 		}
 	};

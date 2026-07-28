@@ -94,8 +94,8 @@ $selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-cont
 							<input type="checkbox" id="<?php echo esc_attr( $checkbox ); ?>" class="mksddn-mc-user-import-checkbox" name="user_plan[<?php echo esc_attr( $key ); ?>][import]" value="1" checked>
 						</td>
 						<td><strong><?php echo esc_html( $email ); ?></strong><br><span class="description"><?php echo esc_html( $entry['login'] ?? '' ); ?></span></td>
-						<td><?php echo esc_html( $role ?: '—' ); ?></td>
-						<td><?php echo esc_html( $local ?: '—' ); ?></td>
+						<td><?php echo esc_html( $role ?: __( '—', 'mksddn-migrate-content' ) ); ?></td>
+						<td><?php echo esc_html( $local ?: __( '—', 'mksddn-migrate-content' ) ); ?></td>
 						<td><?php echo esc_html( $status_label ); ?></td>
 						<td>
 							<?php if ( 'conflict' === $status ) : ?>

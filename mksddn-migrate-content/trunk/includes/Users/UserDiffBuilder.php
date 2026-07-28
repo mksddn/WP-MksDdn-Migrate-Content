@@ -301,7 +301,11 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 
 		$slug  = reset( $roles );
 		$roles = function_exists( 'wp_roles' ) ? wp_roles() : new WP_Roles();
-		$name  = $roles->roles[ $slug ]['name'] ?? ucfirst( (string) $slug );
+		$name  = $roles->roles[ $slug ]['name'] ?? '';
+
+		if ( '' === $name ) {
+			return __( 'Unknown role', 'mksddn-migrate-content' );
+		}
 
 		return translate_user_role( $name );
 	}

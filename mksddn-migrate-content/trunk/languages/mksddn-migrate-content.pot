@@ -3,65 +3,77 @@ msgid ""
 msgstr ""
 "Project-Id-Version: MksDdn Migrate Content\n"
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/issues\n"
-"POT-Creation-Date: 2026-07-06 13:56+0000\n"
+"POT-Creation-Date: 2026-07-28 11:33+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Domain: mksddn-migrate-content\n"
 
-#: includes/Admin/AdminPageController.php:179 includes/Admin/AdminPageController.php:180 includes/Admin/AdminPageController.php:215 views/admin/selected-export-card.php:15 views/admin/full-site-export-section.php:17
+#: includes/Filesystem/ContentCollector.php:92
+msgid "Export aborted while packing files: PHP memory usage is critically high. Free server memory or export from staging."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:180 includes/Admin/AdminPageController.php:181 includes/Admin/AdminPageController.php:216 views/admin/selected-export-card.php:15 views/admin/full-site-export-section.php:24
 msgid "Export"
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:217
+#: includes/Admin/Services/ImportPreflightService.php:312
 msgid "Some user emails may conflict with existing accounts."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:371
+#: includes/Admin/AdminPageController.php:419
 msgid "The server returned an unexpected response during chunked transfer."
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:220
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:277
 msgid "Chunked upload file not found."
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:128
+#: includes/Services/ErrorHandler.php:125
 msgid "Invalid file type. Please upload a valid export file."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:391
+#: views/admin/user-preview.php:39
+msgid "Deselect all"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:439
 msgid "Archive downloaded."
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:155
+#: views/admin/user-preview.php:38
+msgid "Select all"
+msgstr ""
+
+#: includes/Services/ErrorHandler.php:152
 msgid "Database operation failed. Please try again."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:335
+#: includes/Admin/AdminPageController.php:350
 msgid "Error loading files"
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:156
+#: includes/Services/ErrorHandler.php:153
 msgid "Import operation failed. Please check the import file."
 msgstr ""
 
-#: views/admin/unified-import-form.php:56
-msgid "Choose File"
+#: views/admin/preflight-report.php:150
+msgid "Theme files in archive: %d"
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:105
+#: includes/Filesystem/FullContentExporter.php:117
 msgid "Could not write manifest into the export archive."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:368
+#: includes/Filesystem/FullContentImporter.php:371
 msgid "Import file is too large (%1$s MB). Maximum supported size is %2$s MB. Please split the export or contact support."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:211 includes/Admin/AdminPageController.php:235
+#: includes/Admin/AdminPageController.php:212 includes/Admin/AdminPageController.php:236
 msgid "Sorry, you are not allowed to access this page."
 msgstr ""
 
-#: views/admin/unified-import-form.php:29
+#: views/admin/unified-import-form.php:33
 msgid "For large files, it is recommended to upload them via FTP/SFTP to the %s directory and then use the \"Select from server\" option."
 msgstr ""
 
@@ -73,7 +85,7 @@ msgstr ""
 msgid "Theme import cancelled."
 msgstr ""
 
-#: views/admin/theme-preview.php:45
+#: views/admin/theme-preview.php:46
 msgid "Merge"
 msgstr ""
 
@@ -81,11 +93,11 @@ msgstr ""
 msgid "Full site"
 msgstr ""
 
-#: includes/Admin/Services/FullSiteImportService.php:208
+#: includes/Admin/Services/FullSiteImportService.php:220
 msgid "Import file is missing on disk."
 msgstr ""
 
-#: views/admin/user-preview.php:41
+#: views/admin/user-preview.php:56
 msgid "Current role"
 msgstr ""
 
@@ -93,7 +105,7 @@ msgstr ""
 msgid ".json skips media files and is best for quick edits. .wpbkp packs media + checksum."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:188 includes/Chunking/ChunkRestController.php:210
+#: includes/Database/FullDatabaseExporter.php:307 includes/Filesystem/FullContentExporter.php:270 includes/Chunking/ChunkRestController.php:210
 msgid "Check free disk space, hosting quota, and PHP temp directory (sys_temp_dir / upload_tmp_dir)."
 msgstr ""
 
@@ -101,7 +113,7 @@ msgstr ""
 msgid "Invalid file type detected."
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:266
+#: includes/Admin/Services/ServerBackupScanner.php:272
 msgid "Import file is not readable."
 msgstr ""
 
@@ -109,31 +121,35 @@ msgstr ""
 msgid "User selection cancelled."
 msgstr ""
 
-#: views/admin/preflight-report.php:175
-msgid "Slug check"
+#: views/admin/preflight-report.php:297
+msgid "Content to import"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:365
+#: includes/Admin/AdminPageController.php:413
 msgid "WordPress REST API is not reachable (HTTP 404). Chunked transfers need working permalinks: open Settings → Permalinks and click Save without changes. If the problem remains, ask your host to fix /wp-json/ routing."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:143
+#: includes/Filesystem/FullContentExporter.php:155
 msgid "Detail: %s"
 msgstr ""
 
-#: views/admin/selected-content-export-section.php:15
+#: includes/Admin/Views/AdminPageView.php:71
 msgid "Selected Content Export"
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:62
+#: includes/Admin/AdminPageController.php:355
+msgid "Please select a file to delete."
+msgstr ""
+
+#: includes/Admin/Services/ServerBackupScanner.php:64
 msgid "Imports directory does not exist. Please reactivate the plugin to create required directories."
 msgstr ""
 
-#: views/admin/user-preview.php:27
+#: views/admin/user-preview.php:29
 msgid "Users detected"
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:156
+#: includes/Admin/Services/ImportPreflightService.php:150
 msgid "Payload has no slug; the importer may generate one at run time."
 msgstr ""
 
@@ -141,35 +157,39 @@ msgstr ""
 msgid "Job ID is required."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:301
+#: includes/Filesystem/FullContentImporter.php:304
 msgid "Insufficient memory: JSON file is %1$s MB and requires at least %2$s MB, but current limit is %3$s. Please increase PHP memory_limit in php.ini or wp-config.php."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:267 includes/Admin/Services/FullSiteImportService.php:408 includes/Services/ErrorHandler.php:132
+#: includes/Admin/Services/ThemeImportService.php:265 includes/Admin/Services/FullSiteImportService.php:420 includes/Services/ErrorHandler.php:129
 msgid "Chunked upload is incomplete. Please retry."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:158 includes/Filesystem/ThemeImporter.php:112
+#: includes/Filesystem/FullContentImporter.php:159 includes/Filesystem/ThemeImporter.php:106
 msgid "Opening archive..."
 msgstr ""
 
-#: views/admin/unified-import-form.php:61
+#: includes/Admin/Views/AdminPageView.php:145
 msgid "Upload file"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:394
+#: views/admin/preflight-report.php:219
+msgid "File change counts"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:442
 msgid "The server returned an invalid response during export."
 msgstr ""
 
-#: views/admin/unified-import-form.php:84
+#: views/admin/unified-import-form.php:110
 msgid "This step only analyzes the file. No database or file changes are made yet."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:167 includes/Admin/AdminPageController.php:168
+#: includes/Admin/AdminPageController.php:168 includes/Admin/AdminPageController.php:169
 msgid "Migrate Content"
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:157
+#: includes/Services/ErrorHandler.php:154
 msgid "Export operation failed. Please try again."
 msgstr ""
 
@@ -177,47 +197,87 @@ msgstr ""
 msgid "Unknown export type: %s"
 msgstr ""
 
-#: includes/Admin/Services/SelectedContentImportService.php:189
+#: includes/Admin/Services/SelectedContentImportService.php:191
 msgid "Invalid preflight file path."
 msgstr ""
 
-#: includes/Filesystem/FullArchivePayload.php:173
+#: views/admin/preflight-report.php:216
+msgid "New"
+msgstr ""
+
+#: includes/Filesystem/FullArchivePayload.php:78 includes/Filesystem/FullArchivePayload.php:103 includes/Filesystem/FullArchivePayload.php:137
 msgid "Full archive payload not found."
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:300 includes/Admin/Services/UnifiedImportOrchestrator.php:311 includes/Admin/Services/UnifiedImportOrchestrator.php:319 includes/Admin/Services/UnifiedImportOrchestrator.php:345
+#: includes/Database/FullDatabaseExporter.php:228
+msgid "Failed to encode a row from table %s as JSON."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:361 includes/Admin/Services/UnifiedImportOrchestrator.php:372 includes/Admin/Services/UnifiedImportOrchestrator.php:380 includes/Admin/Services/UnifiedImportOrchestrator.php:406
 msgid "Preflight session expired or invalid. Run preflight again."
+msgstr ""
+
+#: views/admin/preflight-report.php:238
+msgid "No new files — all archive paths already exist."
+msgstr ""
+
+#: includes/Filesystem/FullArchivePayload.php:168
+msgid "Import file is too large (%1$s MB). Maximum supported size is %2$s MB."
+msgstr ""
+
+#: includes/Filesystem/FullContentExporter.php:217
+msgid "Unable to open temporary file for export payload."
 msgstr ""
 
 #: includes/Validation/FileValidator.php:85
 msgid "Invalid file extension. Expected: %s"
 msgstr ""
 
-#: includes/Admin/Services/FullSiteImportService.php:331
+#: includes/Admin/Services/FullSiteImportService.php:343
 msgid "No users available for selection."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:289 includes/Admin/Services/FullSiteImportService.php:430 includes/Admin/Services/FullSiteImportService.php:448
+#: includes/Admin/Services/ThemeImportService.php:287 includes/Admin/Services/FullSiteImportService.php:442 includes/Admin/Services/FullSiteImportService.php:460
 msgid "Please select a .wpbkp archive generated by this plugin."
+msgstr ""
+
+#: views/admin/user-preview.php:97 views/admin/user-preview.php:98
+msgid "—"
+msgstr ""
+
+#: includes/Filesystem/FullContentExporter.php:107
+msgid "Failed to encode full-site manifest."
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php:368
+msgid "Some themes already exist on this site. Merge overwrites matching files; Replace removes the whole theme directory first."
 msgstr ""
 
 #: views/admin/theme-preview.php:20
 msgid "Choose theme import mode"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:441
+#: includes/Database/FullDatabaseExporter.php:198 includes/Filesystem/ContentCollector.php:95
+msgid "A full-site export that exhausts RAM can trigger the Linux OOM killer and stop PHP-FPM for the whole site."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:498
 msgid "User selection data is empty. Restart the import."
 msgstr ""
 
-#: views/admin/preflight-report.php:131
+#: views/admin/preflight-report.php:214
+msgid "Installed"
+msgstr ""
+
+#: views/admin/preflight-report.php:135
 msgid "Media files in archive: %d"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:377
+#: includes/Admin/AdminPageController.php:425
 msgid "Upload finished. Processing…"
 msgstr ""
 
-#: views/admin/user-preview.php:39
+#: views/admin/user-preview.php:54
 msgid "Email"
 msgstr ""
 
@@ -225,11 +285,11 @@ msgstr ""
 msgid "Archive file is not readable."
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:220
+#: includes/Admin/Services/ImportPreflightService.php:315
 msgid "Full import will replace database content and files from the archive."
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:293
+#: includes/Admin/Services/ImportPreflightService.php:396
 msgid "Use “Start import” below; theme import will show its confirmation step."
 msgstr ""
 
@@ -237,31 +297,36 @@ msgstr ""
 msgid "Chunked upload"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:390
+#: includes/Admin/AdminPageController.php:438
 msgid "Streaming archive… %d%"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:397
+#: includes/Admin/AdminPageController.php:445
 msgid "Chunk download failed."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:333 views/admin/unified-import-form.php:77
+#: includes/Admin/AdminPageController.php:381 includes/Admin/AdminPageController.php:452
+msgctxt "kilobytes unit abbreviation"
+msgid "KB"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:348 views/admin/unified-import-form.php:100
 msgid "Select a file..."
 msgstr ""
 
-#: views/admin/preflight-report.php:51
+#: includes/Admin/Services/NotificationService.php:397 views/admin/preflight-report.php:52
 msgid "Bundle (multiple items)"
 msgstr ""
 
-#: views/admin/user-preview.php:40
+#: views/admin/user-preview.php:55
 msgid "Archive role"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:514 includes/Admin/Services/ThemeImportService.php:136
+#: includes/Admin/AdminPageController.php:571 includes/Admin/Services/ThemeImportService.php:134
 msgid "You are not allowed to continue this theme import."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:540 includes/Admin/AdminPageController.php:591
+#: includes/Admin/AdminPageController.php:597 includes/Admin/AdminPageController.php:624 includes/Admin/AdminPageController.php:687
 msgid "Insufficient permissions."
 msgstr ""
 
@@ -269,11 +334,19 @@ msgstr ""
 msgid "Warning:"
 msgstr ""
 
+#: includes/Admin/AdminPageController.php:325
+msgid "Import request failed. Check PHP error logs and try again."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:632
+msgid "No backup file specified."
+msgstr ""
+
 #: includes/Archive/Extractor.php:169 includes/Archive/Extractor.php:198
 msgid "Media file not found inside archive."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:374
+#: includes/Admin/AdminPageController.php:422
 msgid "Selected %1$s (planned chunk %2$s)."
 msgstr ""
 
@@ -281,15 +354,15 @@ msgstr ""
 msgid "Archive type is missing."
 msgstr ""
 
-#: views/admin/preflight-report.php:108
+#: views/admin/preflight-report.php:109
 msgid "Size: %s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:334
+#: includes/Admin/AdminPageController.php:349
 msgid "No backup files found"
 msgstr ""
 
-#: views/admin/full-site-export-section.php:14
+#: views/admin/full-site-export-section.php:13
 msgid "Pack the database and wp-content (uploads, plugins, mu-plugins, themes) into a .wpbkp archive. Large sites need free disk space in the PHP temp directory and may run for several minutes. Chunked download is used when available; direct download is used only for client or transport fallback."
 msgstr ""
 
@@ -301,7 +374,7 @@ msgstr ""
 msgid "No themes selected for export."
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:133
+#: includes/Services/ErrorHandler.php:130
 msgid "Unable to allocate a temporary file."
 msgstr ""
 
@@ -309,11 +382,19 @@ msgstr ""
 msgid "Unable to write chunk."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:369
+#: includes/Admin/AdminPageController.php:417
 msgid "You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:139
+#: includes/Users/UserDiffBuilder.php:307
+msgid "Unknown role"
+msgstr ""
+
+#: views/admin/preflight-report.php:235
+msgid "Files to add (%d)"
+msgstr ""
+
+#: includes/Filesystem/FullContentExporter.php:151
 msgid "Failed to finalize the export archive."
 msgstr ""
 
@@ -325,23 +406,27 @@ msgstr ""
 msgid "Selected content"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:569
+#: includes/Admin/AdminPageController.php:447
+msgid "File read error"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:665
 msgid "Import lock released successfully."
 msgstr ""
 
-#: includes/Filesystem/FullArchivePayload.php:38
+#: includes/Filesystem/FullArchivePayload.php:33
 msgid "Archive payload is missing on disk."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:430
+#: includes/Admin/AdminPageController.php:487
 msgid "User selection session expired. Please upload the archive again."
 msgstr ""
 
-#: includes/Admin/Services/SelectedContentImportService.php:195
+#: includes/Admin/Services/SelectedContentImportService.php:197
 msgid "Preflight staged file is not readable."
 msgstr ""
 
-#: includes/Admin/Services/SelectedContentImportService.php:146
+#: includes/Admin/Services/SelectedContentImportService.php:148
 msgid "Invalid chunked file path."
 msgstr ""
 
@@ -349,15 +434,11 @@ msgstr ""
 msgid "Operation failed. Check logs for details."
 msgstr ""
 
-#: views/admin/unified-import-form.php:72
+#: views/admin/unified-import-form.php:94
 msgid "Archives (.wpbkp) include media and integrity checks. JSON imports skip media restoration."
 msgstr ""
 
-#: views/admin/unified-import-form.php:70
-msgid "Upload .wpbkp or .json file:"
-msgstr ""
-
-#: includes/Admin/Views/AdminPageView.php:140 views/admin/preflight-report.php:49
+#: includes/Admin/Views/AdminPageView.php:200 includes/Admin/Services/NotificationService.php:395 views/admin/preflight-report.php:50
 msgid "Page"
 msgstr ""
 
@@ -365,11 +446,25 @@ msgstr ""
 msgid "MksDdn Migrate Content requires WordPress 6.2+ and PHP 8.0+."
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:214
+#: includes/Admin/AdminPageController.php:380 includes/Admin/AdminPageController.php:451
+msgctxt "bytes unit abbreviation"
+msgid "B"
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:648
+msgid "Import failed due to insufficient PHP memory. Increase memory_limit in php.ini or wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) and try again."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:379 includes/Admin/AdminPageController.php:450
+msgctxt "file size: value and unit"
+msgid "%1$s %2$s"
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php:309
 msgid "Archive contains WordPress users; you may see a merge step during real import."
 msgstr ""
 
-#: includes/Database/FullDatabaseImporter.php:44
+#: includes/Database/FullDatabaseImporter.php:45
 msgid "Database dump is empty or invalid."
 msgstr ""
 
@@ -377,11 +472,11 @@ msgstr ""
 msgid "Invalid request."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:560 includes/Admin/Handlers/UserMergeRequestHandler.php:62 includes/Admin/Handlers/ThemePreviewRequestHandler.php:62
+#: includes/Admin/AdminPageController.php:656 includes/Admin/Handlers/UserMergeRequestHandler.php:62 includes/Admin/Handlers/ThemePreviewRequestHandler.php:62
 msgid "Sorry, you are not allowed to perform this action."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:609
+#: includes/Admin/AdminPageController.php:705
 msgid "Invalid post type."
 msgstr ""
 
@@ -393,15 +488,15 @@ msgstr ""
 msgid "Unable to read JSON file."
 msgstr ""
 
-#: includes/Admin/Services/ImportFileValidator.php:86 includes/Admin/Services/ImportPayloadPreparer.php:80 includes/Admin/Services/UnifiedImportOrchestrator.php:278 includes/Admin/Services/ImportTypeDetector.php:66
+#: includes/Admin/Services/ImportFileValidator.php:86 includes/Admin/Services/ImportPayloadPreparer.php:80 includes/Admin/Services/UnifiedImportOrchestrator.php:339 includes/Admin/Services/ImportTypeDetector.php:66
 msgid "Unsupported file extension. Use .wpbkp or .json."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:435
+#: includes/Admin/AdminPageController.php:492
 msgid "You are not allowed to continue this user selection."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:204 includes/Filesystem/ThemeImporter.php:229
+#: includes/Filesystem/ThemeImporter.php:198 includes/Filesystem/ThemeImporter.php:223
 msgid "Invalid theme path detected: %s"
 msgstr ""
 
@@ -409,11 +504,19 @@ msgstr ""
 msgid "Hold Cmd/Ctrl to pick multiple entries inside each list."
 msgstr ""
 
-#: views/admin/preflight-report.php:80
+#: includes/Database/FullDatabaseExporter.php:193
+msgid "Export aborted while reading table %s: PHP memory usage is critically high. Free server memory, raise memory_limit modestly (not multi-GB on small VPS), or export from staging."
+msgstr ""
+
+#: views/admin/preflight-report.php:326
+msgid "Update"
+msgstr ""
+
+#: views/admin/preflight-report.php:81
 msgid "Detected type: %1$s · Source: %2$s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:308 includes/Admin/AdminPageController.php:332
+#: includes/Admin/AdminPageController.php:309 includes/Admin/AdminPageController.php:347
 msgid "Loading..."
 msgstr ""
 
@@ -421,15 +524,15 @@ msgstr ""
 msgid "Sorry, you are not allowed to export."
 msgstr ""
 
-#: views/admin/user-preview.php:96
+#: views/admin/user-preview.php:111
 msgid "Replace with archive"
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:329 includes/Admin/Services/FullSiteImportService.php:491 includes/Admin/Services/UnifiedImportOrchestrator.php:456 includes/Admin/Services/UnifiedImportOrchestrator.php:567 includes/Services/ErrorHandler.php:134
+#: includes/Admin/Services/ThemeImportService.php:327 includes/Admin/Services/FullSiteImportService.php:503 includes/Admin/Services/UnifiedImportOrchestrator.php:492 includes/Admin/Services/UnifiedImportOrchestrator.php:604 includes/Services/ErrorHandler.php:131
 msgid "Failed to move uploaded file. Check permissions."
 msgstr ""
 
-#: includes/Database/FullDatabaseImporter.php:244
+#: includes/Database/FullDatabaseImporter.php:245
 msgid "Failed to insert rows into %s."
 msgstr ""
 
@@ -441,11 +544,15 @@ msgstr ""
 msgid "ABSPATH is not defined."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:509 includes/Admin/Services/ThemeImportService.php:131
+#: views/admin/unified-import-form.php:104
+msgid "Select an import file from the server directory. You can delete unused backups from the server."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:566 includes/Admin/Services/ThemeImportService.php:129
 msgid "Theme import session expired. Please upload the archive again."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:402
+#: includes/Filesystem/FullContentImporter.php:405
 msgid "Corrupted payload inside archive."
 msgstr ""
 
@@ -453,27 +560,35 @@ msgstr ""
 msgid "Preview identifier is missing."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:602 includes/Filesystem/ThemeImporter.php:244
+#: views/admin/full-site-export-section.php:18
+msgid "Full-site export is heavy. On small VPS hosts (low RAM, no swap) it can exhaust memory and take PHP-FPM offline for the whole site. Prefer staging, ensure free disk space, and avoid raising PHP memory_limit to multi-GB values on 1–2 GB servers. The exporter streams the database in chunks and refuses to start when disk/memory checks fail."
+msgstr ""
+
+#: includes/Filesystem/FullContentImporter.php:605 includes/Filesystem/ThemeImporter.php:238
 msgid "Unable to read \"%s\" from archive."
 msgstr ""
 
-#: views/admin/preflight-report.php:233
+#: views/admin/preflight-report.php:374
 msgid "Dismiss report"
 msgstr ""
 
-#: views/admin/theme-export-section.php:50
+#: views/admin/theme-export-section.php:49
 msgid "Export Selected Themes (.wpbkp)"
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:206
+#: includes/Filesystem/FullContentExporter.php:288
 msgid "Check file permissions and make sure files are not being changed while the export is running."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:316 includes/Admin/Services/FullSiteImportService.php:478
+#: views/admin/preflight-report.php:267
+msgid "No overwrites — theme is new or paths do not collide."
+msgstr ""
+
+#: includes/Admin/Services/ThemeImportService.php:314 includes/Admin/Services/FullSiteImportService.php:490
 msgid "Please upload a .wpbkp archive generated by this plugin."
 msgstr ""
 
-#: views/admin/preflight-report.php:123
+#: views/admin/preflight-report.php:124
 msgid "Payload type: %s"
 msgstr ""
 
@@ -485,12 +600,24 @@ msgstr ""
 msgid "Invalid file type. Upload a JSON export created by this plugin."
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:107
+#: includes/Support/ExportPreflight.php:132
+msgid "Do not set multi-GB memory_limit on small VPS hosts — that can trigger the OOM killer and stop PHP-FPM for all sites."
+msgstr ""
+
+#: includes/Admin/Services/ServerBackupScanner.php:109
 msgid "Failed to scan imports directory."
 msgstr ""
 
-#: includes/Admin/Services/SelectedContentImportService.php:285
+#: includes/Admin/Services/SelectedContentImportService.php:287
 msgid "Failed to import content."
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:707
+msgid "Continue"
+msgstr ""
+
+#: views/admin/preflight-report.php:251 views/admin/preflight-report.php:280
+msgid "Showing %1$d of %2$d paths."
 msgstr ""
 
 #: views/admin/theme-preview.php:40
@@ -501,8 +628,12 @@ msgstr ""
 msgid "Uploaded archive not found."
 msgstr ""
 
-#: views/admin/theme-export-section.php:18
+#: views/admin/theme-export-section.php:17
 msgid "Select Themes"
+msgstr ""
+
+#: includes/Admin/Services/ServerBackupScanner.php:313
+msgid "Uploaded backup file is not readable."
 msgstr ""
 
 #: includes/Archive/Packer.php:34
@@ -513,16 +644,20 @@ msgstr ""
 msgid "Theme archive"
 msgstr ""
 
-#: views/admin/unified-import-form.php:86
+#: views/admin/unified-import-form.php:112
 msgid "Run preflight"
 msgstr ""
 
-#: includes/Admin/Services/SelectedContentImportService.php:230 includes/Admin/Services/UnifiedImportOrchestrator.php:270
+#: includes/Admin/Services/SelectedContentImportService.php:232 includes/Admin/Services/UnifiedImportOrchestrator.php:331
 msgid "File upload security check failed."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:367
+#: includes/Admin/AdminPageController.php:415
 msgid "The chunk transfer request was redirected (often http↔https or www mismatch). Open WordPress admin using the same URL as Settings → General → Site Address, refresh the page, and try again."
+msgstr ""
+
+#: includes/Support/ExportPreflight.php:55
+msgid "Full-site export writes a large temporary JSON dump and ZIP. Running out of disk or RAM can take down PHP-FPM for the whole site."
 msgstr ""
 
 #: includes/Validation/ArchiveValidator.php:91
@@ -537,7 +672,7 @@ msgstr ""
 msgid "Browser upload"
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:161
+#: includes/Admin/Services/ImportPreflightService.php:167
 msgid "Some slugs already exist on this site; existing posts may be updated."
 msgstr ""
 
@@ -545,15 +680,15 @@ msgstr ""
 msgid "Replace removes the existing theme directory before importing. If the theme is active, the site may be temporarily unavailable until import completes. Consider switching to a safe theme or using Merge."
 msgstr ""
 
-#: views/admin/user-preview.php:100
+#: views/admin/user-preview.php:115
 msgid "Will be created"
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:240
+#: includes/Admin/Services/ServerBackupScanner.php:245
 msgid "Imports directory path is invalid."
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:406
+#: includes/Admin/Services/ImportPreflightService.php:600
 msgid "Fix the issues above, then try again."
 msgstr ""
 
@@ -561,31 +696,47 @@ msgstr ""
 msgid "Invalid JSON structure."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:59 includes/Filesystem/ThemeExporter.php:61 includes/Chunking/ChunkRestController.php:192
+#: includes/Filesystem/FullContentExporter.php:74 includes/Filesystem/ThemeExporter.php:61 includes/Chunking/ChunkRestController.php:192
 msgid "Unable to create export directory."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:325 includes/Admin/Services/FullSiteImportService.php:487 includes/Validation/FileValidator.php:55
+#: includes/Admin/AdminPageController.php:376
+msgid "Could not attach the selected file. Please use Browse instead."
+msgstr ""
+
+#: views/admin/unified-import-form.php:89
+msgid "Remove"
+msgstr ""
+
+#: includes/Admin/Services/ThemeImportService.php:323 includes/Admin/Services/FullSiteImportService.php:499 includes/Validation/FileValidator.php:55
 msgid "Uploaded file could not be verified."
+msgstr ""
+
+#: views/admin/preflight-report.php:132
+msgid "Items to import: %d"
 msgstr ""
 
 #: includes/Archive/Extractor.php:160
 msgid "Media file path missing in archive."
 msgstr ""
 
-#: includes/Filesystem/ContentCollector.php:98
+#: includes/Filesystem/ContentCollector.php:113
 msgid "Could not add directory to the export archive: %s"
 msgstr ""
 
-#: views/admin/preflight-report.php:180
+#: views/admin/preflight-report.php:303
 msgid "Post type"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:398
+#: includes/Admin/AdminPageController.php:446
 msgid "Invalid chunk data from server."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:384
+#: views/admin/unified-import-form.php:82
+msgid "Drop .wpbkp or .json here"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:432
 msgid "Downloading chunks… %d%"
 msgstr ""
 
@@ -593,35 +744,56 @@ msgstr ""
 msgid "Failed to encode manifest for export."
 msgstr ""
 
-#: includes/Admin/Handlers/ImportRequestHandler.php:128 includes/Admin/Services/ThemeImportService.php:88 includes/Admin/Services/FullSiteImportService.php:83
+#: includes/Filesystem/FullContentExporter.php:228
+msgid "Failed to write export payload header."
+msgstr ""
+
+#: includes/Admin/Handlers/ImportRequestHandler.php:123 includes/Admin/Services/ThemeImportService.php:86 includes/Admin/Services/FullSiteImportService.php:86
 msgid "Sorry, you are not allowed to import."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:108
+#: includes/Filesystem/ThemeImporter.php:102
 msgid "Insufficient disk space for theme import. Please free up space and try again."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:192
+#: includes/Filesystem/FullContentImporter.php:193
 msgid "Finalizing..."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:363
+#: includes/Filesystem/FullContentExporter.php:279
+msgid "Full-site export streams the database to disk in chunks. If it still fails, free RAM on the server, avoid multi-GB memory_limit on small VPS hosts, or export from staging / WP-CLI."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:411
 msgid "Uploading chunks… %d%"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:396
+#: includes/Admin/AdminPageController.php:377 includes/Admin/AdminPageController.php:448
+msgid "0 B"
+msgstr ""
+
+#: views/admin/preflight-report.php:184
+msgid "Counts use Merge semantics: new paths are added, matching paths are overwritten. Replace mode removes the whole theme directory first, then writes all archive files."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:444
 msgid "Invalid export response from server."
 msgstr ""
 
-#: views/admin/user-preview.php:76
+#: includes/Admin/AdminPageController.php:384 includes/Admin/AdminPageController.php:455
+msgctxt "terabytes unit abbreviation"
+msgid "TB"
+msgstr ""
+
+#: views/admin/user-preview.php:91
 msgid "Include %s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:604
+#: includes/Admin/AdminPageController.php:700
 msgid "Post type is required."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:311 includes/Admin/Services/ImportFileValidator.php:41 includes/Admin/Services/FullSiteImportService.php:473 includes/Services/ErrorHandler.php:130 includes/Validation/FileValidator.php:61
+#: includes/Admin/Services/ThemeImportService.php:309 includes/Admin/Services/ImportFileValidator.php:41 includes/Admin/Services/FullSiteImportService.php:485 includes/Services/ErrorHandler.php:127 includes/Validation/FileValidator.php:61
 msgid "Invalid file size."
 msgstr ""
 
@@ -637,59 +809,79 @@ msgstr ""
 msgid "Unable to create directory."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:215
+#: includes/Filesystem/ThemeImporter.php:209
 msgid "Failed to remove existing theme: %s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:336
+#: includes/Admin/AdminPageController.php:351
 msgid "Please select a file from the server."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:337
+#: includes/Admin/AdminPageController.php:324
+msgid "The server timed out while waiting for the import response. The import may still be running; check the site before starting it again."
+msgstr ""
+
+#: includes/Filesystem/FullContentImporter.php:340
 msgid "Unable to read database payload from archive."
+msgstr ""
+
+#: includes/Filesystem/FullContentExporter.php:207
+msgid "Unable to create temporary file for export payload."
 msgstr ""
 
 #: includes/Archive/Packer.php:191
 msgid "Unable to allocate temporary directory."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:386
+#: includes/Admin/AdminPageController.php:434
 msgid "Chunked download failed. Falling back to direct download."
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:352 includes/Filesystem/ThemeImporter.php:188
+#: views/admin/full-site-export-section.php:17
+msgid "Production warning:"
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php:513 includes/Filesystem/ThemeImporter.php:182
 msgid "No themes found in archive."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:191 includes/Admin/Services/SelectedContentImportService.php:125 includes/Admin/Services/FullSiteImportService.php:229
+#: includes/Admin/Services/ThemeImportService.php:189 includes/Admin/Services/SelectedContentImportService.php:127 includes/Admin/Services/FullSiteImportService.php:241
 msgid "Another import is already running. Please wait for it to finish."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:171
+#: includes/Admin/Services/ServerBackupScanner.php:384
+msgid "Import file is not writable and cannot be deleted."
+msgstr ""
+
+#: includes/Filesystem/FullContentExporter.php:183
 msgid "Export file is empty after writing."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:368
+#: includes/Admin/AdminPageController.php:416
 msgid "Chunk transfer endpoints are not reachable yet. Refresh this page before uploading or exporting. If the warning remains, check permalinks and security plugins blocking /wp-json/."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:385
+#: includes/Admin/AdminPageController.php:433
 msgid "Download complete."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:388
+#: includes/Admin/AdminPageController.php:436
 msgid "Preparing archive…"
 msgstr ""
 
-#: views/admin/theme-export-section.php:45
+#: views/admin/theme-export-section.php:44
 msgid "No themes found."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:311
+#: includes/Admin/AdminPageController.php:323
+msgid "Import request finished."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:312
 msgid "Type at least 2 characters to search"
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:69
+#: includes/Filesystem/FullContentExporter.php:89
 msgid "Unable to create archive for full export."
 msgstr ""
 
@@ -697,19 +889,31 @@ msgstr ""
 msgid "Import themes"
 msgstr ""
 
-#: views/admin/preflight-report.php:211
+#: views/admin/preflight-report.php:352
 msgid "Errors"
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:185
+#: views/admin/unified-import-form.php:70
+msgid "Upload backup file. Drop a .wpbkp or .json file here, or press Enter to browse."
+msgstr ""
+
+#: includes/Filesystem/FullContentImporter.php:186
 msgid "Extracting files..."
 msgstr ""
 
-#: views/admin/preflight-report.php:143
+#: views/admin/preflight-report.php:221
+msgid "%d files"
+msgstr ""
+
+#: includes/Database/FullDatabaseExporter.php:41
+msgid "Invalid stream for database export."
+msgstr ""
+
+#: views/admin/preflight-report.php:147
 msgid "Themes in archive: %d"
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:282
+#: includes/Admin/Services/ServerBackupScanner.php:288
 msgid "Unable to determine import file size."
 msgstr ""
 
@@ -717,11 +921,7 @@ msgstr ""
 msgid "Service Unavailable"
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:393
-msgid "Could not create directory for the next import step."
-msgstr ""
-
-#: includes/Admin/AdminPageController.php:474
+#: includes/Admin/AdminPageController.php:531
 msgid "Preflight report expired or not found. Run preflight again."
 msgstr ""
 
@@ -729,15 +929,15 @@ msgstr ""
 msgid "Export file not found."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:376
+#: includes/Admin/AdminPageController.php:424
 msgid "Uploading archive… %d%"
 msgstr ""
 
-#: views/admin/theme-export-section.php:15
+#: views/admin/theme-export-section.php:14
 msgid "Export selected themes (active theme is pre-selected)."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:392
+#: includes/Admin/AdminPageController.php:440
 msgid "Falling back to classic download…"
 msgstr ""
 
@@ -745,43 +945,47 @@ msgstr ""
 msgid "No content selected for export."
 msgstr ""
 
-#: includes/Filesystem/FullArchivePayload.php:78
+#: includes/Filesystem/FullArchivePayload.php:57
 msgid "Archive payload is corrupted or unreadable."
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:233 includes/Admin/Services/ServerBackupScanner.php:259
+#: includes/Admin/Services/ServerBackupScanner.php:238 includes/Admin/Services/ServerBackupScanner.php:265
 msgid "Invalid file path."
 msgstr ""
 
-#: views/admin/unified-import-form.php:65
+#: includes/Admin/Views/AdminPageView.php:146
 msgid "Select from server"
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:187 includes/Admin/Services/ImportPreflightService.php:240
+#: includes/Admin/Services/ImportPreflightService.php:195 includes/Admin/Services/ImportPreflightService.php:335
 msgid "Use “Start import” below to run the real import with the same file (no upload needed)."
 msgstr ""
 
-#: includes/Admin/Services/ImportFileValidator.php:33 includes/Admin/Services/SelectedContentImportService.php:223 includes/Admin/Services/UnifiedImportOrchestrator.php:264 includes/Validation/FileValidator.php:50
+#: includes/Admin/Services/ImportFileValidator.php:33 includes/Admin/Services/SelectedContentImportService.php:225 includes/Admin/Services/UnifiedImportOrchestrator.php:325 includes/Validation/FileValidator.php:50
 msgid "Failed to upload file."
 msgstr ""
 
-#: views/admin/preflight-report.php:179
+#: views/admin/preflight-report.php:302
 msgid "Slug"
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:301 includes/Admin/Services/FullSiteImportService.php:464 includes/Services/ErrorHandler.php:129
+#: includes/Admin/Services/ThemeImportService.php:299 includes/Admin/Services/FullSiteImportService.php:476 includes/Services/ErrorHandler.php:126
 msgid "No file uploaded."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:210
+#: includes/Filesystem/ThemeImporter.php:204
 msgid "Removing existing theme: %s"
 msgstr ""
 
-#: includes/Database/FullDatabaseImporter.php:158
+#: includes/Database/FullDatabaseImporter.php:159
 msgid "Unable to truncate table %s."
 msgstr ""
 
-#: views/admin/full-site-export-section.php:21
+#: views/admin/preflight-report.php:182
+msgid "Theme file changes"
+msgstr ""
+
+#: views/admin/full-site-export-section.php:28
 msgid "Export Full Site (.wpbkp)"
 msgstr ""
 
@@ -789,27 +993,40 @@ msgstr ""
 msgid "Invalid export format."
 msgstr ""
 
-#: views/admin/preflight-report.php:75
+#: views/admin/preflight-report.php:76
 msgid "Preflight report (no changes were made)"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:379
+#: includes/Admin/AdminPageController.php:375
+msgid "Only .wpbkp and .json files are supported."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:427
 msgid "Upload failed. Please retry."
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:69
+#: includes/Admin/Services/ServerBackupScanner.php:71
 msgid "Imports directory is not readable."
+msgstr ""
+
+#: includes/Admin/Services/ServerBackupScanner.php:395
+msgid "Failed to delete import file."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:382 includes/Admin/AdminPageController.php:453
+msgctxt "megabytes unit abbreviation"
+msgid "MB"
 msgstr ""
 
 #: views/admin/format-selector.php:17
 msgid ".json (content only, editable)"
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:611 includes/Filesystem/ThemeImporter.php:252
+#: includes/Filesystem/FullContentImporter.php:614 includes/Filesystem/ThemeImporter.php:246
 msgid "Unable to write \"%s\". Check permissions."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:321 includes/Admin/Services/FullSiteImportService.php:483 includes/Admin/Services/UnifiedImportOrchestrator.php:452 includes/Admin/Services/UnifiedImportOrchestrator.php:563
+#: includes/Admin/Services/ThemeImportService.php:319 includes/Admin/Services/FullSiteImportService.php:495 includes/Admin/Services/UnifiedImportOrchestrator.php:488 includes/Admin/Services/UnifiedImportOrchestrator.php:600
 msgid "Unable to allocate a temporary file for import."
 msgstr ""
 
@@ -817,7 +1034,7 @@ msgstr ""
 msgid "Subscriber"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:189 includes/Admin/AdminPageController.php:190 includes/Admin/AdminPageController.php:239 views/admin/unified-import-form.php:18
+#: includes/Admin/AdminPageController.php:190 includes/Admin/AdminPageController.php:191 includes/Admin/AdminPageController.php:240
 msgid "Import"
 msgstr ""
 
@@ -825,11 +1042,11 @@ msgstr ""
 msgid "Select how the theme archive should be applied to this site."
 msgstr ""
 
-#: includes/Admin/Services/SelectedContentImportService.php:207
+#: includes/Admin/Services/SelectedContentImportService.php:209
 msgid "Unsupported file extension."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:694
+#: includes/Admin/AdminPageController.php:790
 msgid "Release Lock"
 msgstr ""
 
@@ -837,31 +1054,31 @@ msgstr ""
 msgid "Server file"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:423 includes/Admin/AdminPageController.php:469 includes/Admin/AdminPageController.php:502
+#: includes/Admin/AdminPageController.php:480 includes/Admin/AdminPageController.php:526 includes/Admin/AdminPageController.php:559
 msgid "You do not have permission to access this page."
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:415
+#: views/admin/preflight-report.php:264
+msgid "Files to overwrite (%d)"
+msgstr ""
+
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:446
 msgid "Invalid file source."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:378
+#: includes/Admin/AdminPageController.php:322 includes/Admin/AdminPageController.php:426
 msgid "Server is processing the archive…"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:418 includes/Admin/AdminPageController.php:465 includes/Admin/AdminPageController.php:497 includes/Admin/Services/ThemeImportService.php:103 includes/Admin/Services/UnifiedImportOrchestrator.php:141
+#: includes/Admin/AdminPageController.php:475 includes/Admin/AdminPageController.php:522 includes/Admin/AdminPageController.php:554 includes/Admin/Services/ThemeImportService.php:101 includes/Admin/Services/UnifiedImportOrchestrator.php:169
 msgid "Security check failed."
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:380
-msgid "Unable to prepare import storage. Check uploads directory permissions."
-msgstr ""
-
-#: views/admin/user-preview.php:114
+#: views/admin/user-preview.php:129
 msgid "Apply selection and import"
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:207
+#: includes/Admin/Services/ServerBackupScanner.php:212
 msgid "Import file not found."
 msgstr ""
 
@@ -873,15 +1090,23 @@ msgstr ""
 msgid "Unable to extract media file to temporary storage."
 msgstr ""
 
-#: views/admin/preflight-report.php:137
+#: includes/Admin/Services/ServerBackupScanner.php:357
+msgid "Could not save uploaded backup to the imports directory."
+msgstr ""
+
+#: views/admin/preflight-report.php:141
 msgid "Users in archive: %d"
+msgstr ""
+
+#: includes/Database/FullDatabaseExporter.php:154
+msgid "Failed to decode streamed database export."
 msgstr ""
 
 #: includes/Validation/ImportDataValidator.php:99
 msgid "Post type is missing."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:370
+#: includes/Admin/AdminPageController.php:418
 msgid "The server returned an error during chunked transfer. Check PHP error logs or try again later."
 msgstr ""
 
@@ -893,20 +1118,24 @@ msgstr ""
 msgid "Archive is missing required files."
 msgstr ""
 
-#: includes/Admin/Services/FullSiteImportService.php:142
+#: includes/Admin/Services/FullSiteImportService.php:154
 msgid "You are not allowed to complete this user selection."
 msgstr ""
 
-#: views/admin/user-preview.php:68
+#: views/admin/user-preview.php:83
 msgid "New user"
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:272
-msgid "These theme directories already exist; replace mode would remove them before import."
+#: includes/Admin/AdminPageController.php:352
+msgid "Delete this backup file from the server? This cannot be undone."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:366
+#: includes/Admin/AdminPageController.php:414
 msgid "Migration REST endpoints are unavailable for this request. Hard-refresh the page (Ctrl+F5), open admin with the same URL as Settings → General → Site Address (http/https, www), save Permalinks once, and allow /wp-json/mksddn/v1/ in security or caching plugins."
+msgstr ""
+
+#: includes/Admin/Views/AdminPageView.php:194
+msgid "Content type: %s"
 msgstr ""
 
 #: includes/Chunking/ChunkRestController.php:259
@@ -917,31 +1146,47 @@ msgstr ""
 msgid "Site maintenance: database import in progress. Please try again shortly."
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:386
-msgid "Invalid preflight session."
+#: views/admin/nav-tabs.php:32
+msgid "Section tabs"
+msgstr ""
+
+#: views/admin/preflight-report.php:304
+msgid "Action"
 msgstr ""
 
 #: views/admin/selected-export-card.php:62
 msgid "Export selected"
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:95
-msgid "Failed to encode full-site payload."
+#: includes/Admin/AdminPageController.php:356
+msgid "Deleting..."
 msgstr ""
 
-#: includes/Archive/Extractor.php:106 includes/Admin/Services/ImportPreflightService.php:306 includes/Admin/Services/ImportTypeDetector.php:81
+#: includes/Support/ExportPreflight.php:45
+msgid "Not enough free disk space for full-site export. About %1$s is required in the temp directory, but only %2$s is available (%3$s). Free disk space or export on a larger server / staging copy."
+msgstr ""
+
+#: includes/Archive/Extractor.php:106 includes/Admin/Services/ImportPreflightService.php:409 includes/Admin/Services/ImportTypeDetector.php:81
 msgid "Unable to open archive."
+msgstr ""
+
+#: views/admin/preflight-report.php:328
+msgid "Create"
+msgstr ""
+
+#: includes/Support/ExportPreflight.php:126
+msgid "PHP memory_limit is too low for full-site export (%1$s). Raise it to at least %2$s (wp-config.php / php.ini) or run the export on a staging server with more resources."
 msgstr ""
 
 #: includes/Chunking/ChunkRestController.php:248
 msgid "Chunk index out of bounds."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:395
+#: includes/Admin/AdminPageController.php:443
 msgid "Export request failed."
 msgstr ""
 
-#: includes/Filesystem/ContentCollector.php:121
+#: includes/Filesystem/ContentCollector.php:136
 msgid "Could not add file to the export archive: %s"
 msgstr ""
 
@@ -949,11 +1194,11 @@ msgstr ""
 msgid "%s imported successfully!"
 msgstr ""
 
-#: views/admin/preflight-report.php:140
+#: views/admin/preflight-report.php:144
 msgid "Potential user email conflicts: %d"
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:172
+#: includes/Filesystem/FullContentImporter.php:173
 msgid "Importing database..."
 msgstr ""
 
@@ -969,27 +1214,31 @@ msgstr ""
 msgid "Cancel theme import"
 msgstr ""
 
-#: views/admin/preflight-report.php:202
+#: views/admin/preflight-report.php:343
 msgid "Warnings"
+msgstr ""
+
+#: includes/Database/FullDatabaseExporter.php:144
+msgid "Unable to read temporary database export file."
 msgstr ""
 
 #: includes/Validation/ImportDataValidator.php:71
 msgid "Bundle items are missing or invalid."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:257
+#: includes/Filesystem/ThemeImporter.php:251
 msgid "Imported theme: %s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:310
+#: includes/Admin/AdminPageController.php:311
 msgid "Error loading entries"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:690
+#: includes/Admin/AdminPageController.php:786
 msgid "An import operation appears to be running or was interrupted. Lock age: %s minutes."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:694
+#: includes/Filesystem/FullContentImporter.php:697
 msgid "Unable to prepare theme backup directory."
 msgstr ""
 
@@ -1001,19 +1250,31 @@ msgstr ""
 msgid "Invalid manifest in archive."
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:170
+#: includes/Services/ErrorHandler.php:167
 msgid "An unexpected error occurred."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:687
+#: views/admin/preflight-report.php:227
+msgid "~%d overwrite"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:357 views/admin/unified-import-form.php:102
+msgid "Delete"
+msgstr ""
+
+#: views/admin/user-preview.php:24
+msgid "%1$d of %2$d users selected"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:783
 msgid "Import is currently locked"
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:704
+#: includes/Filesystem/FullContentImporter.php:707
 msgid "Failed to backup existing theme: %s"
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:154
+#: includes/Services/ErrorHandler.php:151
 msgid "File operation failed. Please check file permissions."
 msgstr ""
 
@@ -1021,95 +1282,91 @@ msgstr ""
 msgid "Unable to create temporary archive file."
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:158 includes/Admin/Services/FullSiteImportService.php:167
+#: includes/Admin/Services/ThemeImportService.php:156 includes/Admin/Services/FullSiteImportService.php:179
 msgid "Import file is missing. Restart the upload."
 msgstr ""
 
-#: views/admin/full-site-export-section.php:13
+#: includes/Admin/Views/AdminPageView.php:70
 msgid "Full Site Export"
 msgstr ""
 
-#: views/admin/user-preview.php:95
+#: views/admin/user-preview.php:110
 msgid "Keep current user"
-msgstr ""
-
-#: views/admin/preflight-report.php:164
-msgid "Already installed themes (may be replaced): %s"
 msgstr ""
 
 #: includes/Validation/ArchiveValidator.php:86
 msgid "Manifest is empty."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:128
+#: includes/Filesystem/ThemeImporter.php:122
 msgid "Theme import complete"
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:198
+#: includes/Filesystem/FullContentImporter.php:199
 msgid "Import complete"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:309
+#: includes/Admin/AdminPageController.php:310
 msgid "No entries found"
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:153
+#: includes/Services/ErrorHandler.php:150
 msgid "Validation failed. Please check your input."
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:328
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:389
 msgid "Staged import file is missing. Run preflight again."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:571
+#: includes/Admin/AdminPageController.php:667
 msgid "No active import lock found."
-msgstr ""
-
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:403
-msgid "Could not stash import file for the next step."
 msgstr ""
 
 #: views/admin/selected-export-card.php:43
 msgid "Start typing to search..."
 msgstr ""
 
-#: views/admin/user-preview.php:68
+#: views/admin/user-preview.php:83
 msgid "Existing user"
 msgstr ""
 
-#: includes/Filesystem/ContentCollector.php:110
+#: includes/Filesystem/ContentCollector.php:125
 msgid "Could not read source file for export: %s"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:364
+#: includes/Database/FullDatabaseExporter.php:304
+msgid "Failed to write database export data to temporary storage. Check free disk space."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:412
 msgid "Chunked upload failed. Please try again."
+msgstr ""
+
+#: views/admin/preflight-report.php:301
+msgid "Title"
 msgstr ""
 
 #: includes/Archive/Packer.php:49
 msgid "Failed to encode payload for export."
 msgstr ""
 
-#: views/admin/user-preview.php:26 views/admin/theme-preview.php:22
+#: views/admin/user-preview.php:28 views/admin/theme-preview.php:22
 msgid "uploaded file"
 msgstr ""
 
-#: views/admin/theme-preview.php:38
+#: views/admin/theme-preview.php:39
 msgid "Replace"
 msgstr ""
 
-#: views/admin/preflight-report.php:151
-msgid "Theme slugs: %s"
-msgstr ""
-
-#: views/admin/preflight-report.php:50
+#: includes/Admin/Services/NotificationService.php:396 views/admin/preflight-report.php:51
 msgid "Post"
 msgstr ""
 
-#: includes/Admin/Services/ThemeImportService.php:259 includes/Admin/Services/FullSiteImportService.php:400 includes/Services/ErrorHandler.php:131
+#: includes/Admin/Services/ThemeImportService.php:257 includes/Admin/Services/FullSiteImportService.php:412 includes/Services/ErrorHandler.php:128
 msgid "Chunked uploads are disabled on this site."
 msgstr ""
 
-#: views/admin/user-preview.php:42
+#: views/admin/user-preview.php:57
 msgid "Status"
 msgstr ""
 
@@ -1121,15 +1378,19 @@ msgstr ""
 msgid "Archive is missing manifest.json."
 msgstr ""
 
-#: views/admin/preflight-report.php:95
+#: includes/Database/FullDatabaseExporter.php:126
+msgid "Unable to open temporary file for database export."
+msgstr ""
+
+#: views/admin/preflight-report.php:96
 msgid "File: %s"
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:197
-msgid "Increase PHP memory_limit and max_execution_time if possible, or export using server tools for very large sites."
+#: includes/Admin/Services/ImportPreflightService.php:371
+msgid "File counts below assume Merge mode (add new files, overwrite existing paths). Replace would wipe existing theme folders before writing."
 msgstr ""
 
-#: views/admin/preflight-report.php:134
+#: views/admin/preflight-report.php:138
 msgid "Slug overlap with existing content: %d"
 msgstr ""
 
@@ -1141,31 +1402,47 @@ msgstr ""
 msgid "Invalid themes manifest structure."
 msgstr ""
 
-#: includes/Filesystem/FullArchivePayload.php:178
+#: includes/Filesystem/FullArchivePayload.php:142
 msgid "Full archive payload is empty."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:536 includes/Admin/AdminPageController.php:587
+#: includes/Filesystem/FullContentExporter.php:247
+msgid "Failed to finalize export payload file."
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:593 includes/Admin/AdminPageController.php:620 includes/Admin/AdminPageController.php:683
 msgid "Invalid security token."
 msgstr ""
 
-#: views/admin/user-preview.php:26 views/admin/theme-preview.php:22
+#: views/admin/user-preview.php:28 views/admin/theme-preview.php:22
 msgid "Archive"
 msgstr ""
 
-#: includes/Admin/Services/ServerBackupScanner.php:274
+#: views/admin/preflight-report.php:224
+msgid "+%d add"
+msgstr ""
+
+#: includes/Admin/Services/ServerBackupScanner.php:280 includes/Admin/Services/ServerBackupScanner.php:344
 msgid "Invalid import file type. Only .wpbkp and .json files are supported."
 msgstr ""
 
-#: includes/Config/PluginConfig.php:311
+#: includes/Config/PluginConfig.php:449
 msgid "Failed to create required directories: %s"
+msgstr ""
+
+#: includes/Filesystem/FullArchivePayload.php:205
+msgid "Insufficient PHP memory to read the archive payload (%1$s MB). About %2$d MB is required, but the current limit is %3$d MB. Increase memory_limit in php.ini or wp-config.php (define WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT), then try again."
 msgstr ""
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:92 includes/Admin/Handlers/ExportRequestHandler.php:130
 msgid "Unable to create temporary file."
 msgstr ""
 
-#: includes/Admin/Services/ImportPreflightService.php:166
+#: views/admin/theme-export-section.php:39
+msgid "v%s"
+msgstr ""
+
+#: includes/Admin/Services/ImportPreflightService.php:172
 msgid "Archive includes media files; real import will write uploads."
 msgstr ""
 
@@ -1173,24 +1450,32 @@ msgstr ""
 msgid "HTTP redirect status code must be a redirection code, 3xx."
 msgstr ""
 
-#: views/admin/unified-import-form.php:25
+#: views/admin/unified-import-form.php:29
 msgid "Tip:"
 msgstr ""
 
-#: views/admin/user-preview.php:38
+#: views/admin/user-preview.php:53
 msgid "Include"
 msgstr ""
 
-#: views/admin/selected-content-export-section.php:16
+#: views/admin/selected-content-export-section.php:15
 msgid "Pick one or many entries (pages, posts, CPT) and export them with or without media."
 msgstr ""
 
-#: views/admin/user-preview.php:43 views/admin/user-preview.php:91
+#: includes/Database/FullDatabaseExporter.php:117
+msgid "Unable to create temporary file for database export."
+msgstr ""
+
+#: views/admin/user-preview.php:58 views/admin/user-preview.php:106
 msgid "Conflict handling"
 msgstr ""
 
-#: views/admin/user-preview.php:107
+#: views/admin/user-preview.php:122
 msgid "No users detected inside the archive."
+msgstr ""
+
+#: includes/Database/FullDatabaseExporter.php:65
+msgid "Failed to encode export path metadata as JSON."
 msgstr ""
 
 #: includes/Validation/ArchiveValidator.php:62
@@ -1201,23 +1486,27 @@ msgstr ""
 msgid "Unable to create archive for theme export."
 msgstr ""
 
-#: views/admin/unified-import-form.php:79
-msgid "Select an import file from the server directory."
+#: views/admin/preflight-report.php:323
+msgid "Update (#%d)"
 msgstr ""
 
-#: views/admin/user-preview.php:24
+#: views/admin/user-preview.php:26
 msgid "Review users before import"
 msgstr ""
 
-#: views/admin/theme-export-section.php:35
+#: views/admin/theme-export-section.php:34
 msgid "(Active)"
 msgstr ""
 
-#: views/admin/user-preview.php:27
+#: views/admin/preflight-report.php:45 views/admin/preflight-report.php:72
+msgid "Unknown"
+msgstr ""
+
+#: views/admin/user-preview.php:29
 msgid "Conflicts"
 msgstr ""
 
-#: views/admin/user-preview.php:122
+#: views/admin/user-preview.php:137
 msgid "Cancel user selection"
 msgstr ""
 
@@ -1225,15 +1514,15 @@ msgstr ""
 msgid "Unable to create temporary directory."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:98 includes/Validation/ArchiveValidator.php:50
+#: includes/Filesystem/ThemeImporter.php:92 includes/Validation/ArchiveValidator.php:50
 msgid "Archive file not found."
 msgstr ""
 
-#: includes/Admin/Services/FullSiteImportService.php:138
+#: includes/Admin/Services/FullSiteImportService.php:150
 msgid "User selection expired. Please upload the archive again."
 msgstr ""
 
-#: views/admin/preflight-report.php:228
+#: views/admin/preflight-report.php:369
 msgid "Start import"
 msgstr ""
 
@@ -1241,11 +1530,11 @@ msgstr ""
 msgid "Extractor cannot create archives."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:162
+#: includes/Filesystem/FullContentExporter.php:174
 msgid "Export archive was created but cannot be read. Check file permissions on the server temp directory."
 msgstr ""
 
-#: includes/Services/ErrorHandler.php:141
+#: includes/Services/ErrorHandler.php:138
 msgid "An unknown error occurred."
 msgstr ""
 
@@ -1257,11 +1546,16 @@ msgstr ""
 msgid "File not found."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:393
+#: includes/Admin/AdminPageController.php:383 includes/Admin/AdminPageController.php:454
+msgctxt "gigabytes unit abbreviation"
+msgid "GB"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:441
 msgid "Full site export failed."
 msgstr ""
 
-#: views/admin/theme-export-section.php:37
+#: views/admin/theme-export-section.php:36
 msgid "(Parent)"
 msgstr ""
 
@@ -1269,15 +1563,15 @@ msgstr ""
 msgid "Item must have title or slug."
 msgstr ""
 
-#: includes/Filesystem/FullContentExporter.php:115
+#: includes/Filesystem/FullContentExporter.php:127
 msgid "Could not write database payload into the export archive."
 msgstr ""
 
-#: views/admin/unified-import-form.php:19
+#: views/admin/unified-import-form.php:25
 msgid "Upload or select a backup file (.wpbkp or .json). First run preflight; then start the import from the report without uploading again."
 msgstr ""
 
-#: views/admin/user-preview.php:25
+#: views/admin/user-preview.php:27
 msgid "Pick which users from the archive should be added or overwrite existing accounts on this site."
 msgstr ""
 
@@ -1285,7 +1579,7 @@ msgstr ""
 msgid "Search entries"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:372
+#: includes/Admin/AdminPageController.php:420
 msgid "Invalid response when starting chunked upload."
 msgstr ""
 
@@ -1305,15 +1599,11 @@ msgstr ""
 msgid "Failed to write archive via PclZip."
 msgstr ""
 
-#: includes/Filesystem/ThemeImporter.php:119
+#: includes/Filesystem/ThemeImporter.php:113
 msgid "Extracting themes..."
 msgstr ""
 
-#: views/admin/preflight-report.php:181
-msgid "Existing post ID"
-msgstr ""
-
-#: includes/Admin/AdminPageController.php:382
+#: includes/Admin/AdminPageController.php:430
 msgid "Preparing download…"
 msgstr ""
 
@@ -1321,12 +1611,20 @@ msgstr ""
 msgid "Invalid payload in archive."
 msgstr ""
 
-#: views/admin/theme-export-section.php:14
+#: includes/Admin/Views/AdminPageView.php:72
 msgid "Theme Export"
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:381
+#: includes/Admin/AdminPageController.php:429
 msgid "· %s chunks"
+msgstr ""
+
+#: views/admin/preflight-report.php:164
+msgid "Already installed themes: %s"
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:354
+msgid "Failed to delete backup file."
 msgstr ""
 
 #: includes/Archive/Packer.php:93
@@ -1337,30 +1635,50 @@ msgstr ""
 msgid "Operation completed successfully."
 msgstr ""
 
+#: views/admin/preflight-report.php:156
+msgid "Files to overwrite (merge): %d"
+msgstr ""
+
 #: includes/Core/View/ViewRenderer.php:54
 msgid "Template not found: "
+msgstr ""
+
+#: includes/Admin/AdminPageController.php:353 includes/Admin/AdminPageController.php:643
+msgid "Backup file deleted."
 msgstr ""
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:162
 msgid "Export file exists but is not readable."
 msgstr ""
 
-#: includes/Admin/AdminPageController.php:387
+#: includes/Admin/AdminPageController.php:435
 msgid "Ready for full export."
+msgstr ""
+
+#: views/admin/preflight-report.php:153
+msgid "Files to add (merge): %d"
 msgstr ""
 
 #: views/admin/selected-export-card.php:39
 msgid "Search..."
 msgstr ""
 
+#: includes/Filesystem/FullContentExporter.php:256
+msgid "Export payload file is empty after writing."
+msgstr ""
+
 #: views/admin/format-selector.php:14
 msgid "Choose file format:"
 msgstr ""
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:215
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:272
 msgid "Chunked upload job not found."
 msgstr ""
 
-#: includes/Filesystem/FullContentImporter.php:163 includes/Filesystem/ThemeImporter.php:116
+#: includes/Filesystem/FullContentImporter.php:164 includes/Filesystem/ThemeImporter.php:110
 msgid "Unable to open archive for import."
+msgstr ""
+
+#: views/admin/unified-import-form.php:83
+msgid "or click to browse"
 msgstr ""

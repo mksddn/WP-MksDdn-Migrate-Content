@@ -354,6 +354,7 @@ class AdminPageController {
 					'deleteError'     => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
 					'deleteSelect'    => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
 					'deleting'        => __( 'Deleting...', 'mksddn-migrate-content' ),
+					'deleteButton'    => __( 'Delete', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -373,6 +374,14 @@ class AdminPageController {
 				'i18n' => array(
 					'invalidType' => __( 'Only .wpbkp and .json files are supported.', 'mksddn-migrate-content' ),
 					'assignError' => __( 'Could not attach the selected file. Please use Browse instead.', 'mksddn-migrate-content' ),
+					'bytesZero'   => __( '0 B', 'mksddn-migrate-content' ),
+					/* translators: 1: numeric value, 2: unit abbreviation (B, KB, etc.). */
+					'bytesFormat' => _x( '%1$s %2$s', 'file size: value and unit', 'mksddn-migrate-content' ),
+					'unitB'       => _x( 'B', 'bytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitKB'      => _x( 'KB', 'kilobytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitMB'      => _x( 'MB', 'megabytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitGB'      => _x( 'GB', 'gigabytes unit abbreviation', 'mksddn-migrate-content' ),
+					'unitTB'      => _x( 'TB', 'terabytes unit abbreviation', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -435,6 +444,15 @@ class AdminPageController {
 						'exportInvalidInit' => __( 'Invalid export response from server.', 'mksddn-migrate-content' ),
 						'exportChunkError' => __( 'Chunk download failed.', 'mksddn-migrate-content' ),
 						'exportInvalidChunk' => __( 'Invalid chunk data from server.', 'mksddn-migrate-content' ),
+						'fileReadError'    => __( 'File read error', 'mksddn-migrate-content' ),
+						'bytesZero'        => __( '0 B', 'mksddn-migrate-content' ),
+						/* translators: 1: numeric value, 2: unit abbreviation (B, KB, etc.). */
+						'bytesFormat'      => _x( '%1$s %2$s', 'file size: value and unit', 'mksddn-migrate-content' ),
+						'unitB'            => _x( 'B', 'bytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitKB'           => _x( 'KB', 'kilobytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitMB'           => _x( 'MB', 'megabytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitGB'           => _x( 'GB', 'gigabytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitTB'           => _x( 'TB', 'terabytes unit abbreviation', 'mksddn-migrate-content' ),
 					),
 				)
 			);

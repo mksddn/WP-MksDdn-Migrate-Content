@@ -189,7 +189,11 @@ class AdminPageView {
 			if ( in_array( $type, array( 'attachment', 'revision', 'nav_menu_item' ), true ) ) {
 				continue;
 			}
-			$types[ $type ] = $object->labels->singular_name ?? $object->label ?? ucfirst( $type );
+			$types[ $type ] = $object->labels->singular_name ?? $object->label ?? sprintf(
+				/* translators: %s: post type slug */
+				__( 'Content type: %s', 'mksddn-migrate-content' ),
+				$type
+			);
 		}
 
 		if ( ! isset( $types['page'] ) ) {

@@ -368,7 +368,7 @@ class NotificationService implements NotificationServiceInterface {
 				$display_message = $message ?: sprintf(
 					// translators: %s is imported item type.
 					__( '%s imported successfully!', 'mksddn-migrate-content' ),
-					ucfirst( $import_type )
+					$this->resolve_import_type_label( $import_type, $import_post_type )
 				);
 				$this->show_success_with_actions( $display_message, 'selected', $import_type, $import_slug, $import_title, $import_post_type );
 			} else {
@@ -380,6 +380,33 @@ class NotificationService implements NotificationServiceInterface {
 		if ( 'error' === $notice_status ) {
 			$this->show_error( $message ?: __( 'Operation failed. Check logs for details.', 'mksddn-migrate-content' ) );
 		}
+	}
+
+	/**
+	 * Resolve a human-readable label for an imported content type slug.
+	 *
+	 * @param string $type      Import type slug (page, post, bundle, etc.).
+	 * @param string $post_type Related post type when available.
+	 * @return string
+	 * @since 2.5.0
+	 */
+	private function resolve_import_type_label( string $type, string $post_type = 'page' ): string {
+		$labels = array(
+			'page'   => __( 'Page', 'mksddn-migrate-content' ),
+			'post'   => __( 'Post', 'mksddn-migrate-content' ),
+			'bundle' => __( 'Bundle (multiple items)', 'mksddn-migrate-content' ),
+		);
+
+		if ( isset( $labels[ $type ] ) ) {
+			return $labels[ $type ];
+		}
+
+		$object = get_post_type_object( $post_type );
+		if ( $object && ! empty( $object->labels->singular_name ) ) {
+			return $object->labels->singular_name;
+		}
+
+		return $type;
 	}
 
 }
