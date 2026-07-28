@@ -45,24 +45,9 @@ class Plugin {
 	 * @since 1.0.0
 	 */
 	public function register(): void {
-		add_action( 'plugins_loaded', array( $this, 'load_textdomain' ) );
 		add_action( 'plugins_loaded', array( $this, 'boot_rest' ), 5 );
 		add_action( 'init', array( FullImportMaintenance::class, 'maybe_block_public_requests' ), 0 );
 		add_action( 'init', array( $this, 'boot_admin' ) );
-	}
-
-	/**
-	 * Load plugin translations from the languages directory.
-	 *
-	 * @return void
-	 * @since 2.5.0
-	 */
-	public function load_textdomain(): void {
-		load_plugin_textdomain(
-			MKSDDN_MC_TEXT_DOMAIN,
-			false,
-			dirname( plugin_basename( MKSDDN_MC_FILE ) ) . '/languages'
-		);
 	}
 
 	/**

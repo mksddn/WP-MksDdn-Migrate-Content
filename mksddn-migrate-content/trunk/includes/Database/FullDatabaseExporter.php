@@ -201,15 +201,14 @@ class FullDatabaseExporter {
 				}
 			}
 
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name sanitized via detect_tables(); LIMIT/OFFSET are integers
-			$rows = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT * FROM `{$table_name}` LIMIT %d OFFSET %d",
-					$chunk_size,
-					$offset
-				),
-				ARRAY_A
+			$query_template = sprintf(
+				'SELECT * FROM `%s` LIMIT %%d OFFSET %%d',
+				esc_sql( $table_name )
 			);
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- query template contains placeholders; LIMIT/OFFSET are passed to prepare()
+			$prepared_query = $wpdb->prepare( $query_template, $chunk_size, $offset );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name sanitized via detect_tables(); query prepared above
+			$rows = $wpdb->get_results( $prepared_query, ARRAY_A );
 
 			if ( ! is_array( $rows ) || array() === $rows ) {
 				break;
