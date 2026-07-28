@@ -8,15 +8,11 @@
 	'use strict';
 
 	/**
-	 * Server file selector handler.
+	 * Server file selector handler (server-source import tab).
 	 *
 	 * @param {Object} options Configuration options.
 	 * @param {HTMLElement} options.form Form element.
-	 * @param {HTMLElement} options.uploadRadio Upload radio button.
-	 * @param {HTMLElement} options.serverRadio Server radio button.
-	 * @param {HTMLElement} options.uploadDiv Upload container.
 	 * @param {HTMLElement} options.serverDiv Server container.
-	 * @param {HTMLElement} options.fileInput File input.
 	 * @param {HTMLElement} options.serverSelect Server file select.
 	 * @param {HTMLElement|null} options.deleteButton Delete backup button.
 	 * @param {string} options.ajaxAction AJAX action name.
@@ -26,11 +22,7 @@
 	 */
 	function ServerFileSelector(options) {
 		this.form = options.form;
-		this.uploadRadio = options.uploadRadio;
-		this.serverRadio = options.serverRadio;
-		this.uploadDiv = options.uploadDiv;
 		this.serverDiv = options.serverDiv;
-		this.fileInput = options.fileInput;
 		this.serverSelect = options.serverSelect;
 		this.deleteButton = options.deleteButton || null;
 		this.ajaxAction = options.ajaxAction;
@@ -49,14 +41,6 @@
 	ServerFileSelector.prototype.init = function() {
 		var self = this;
 
-		this.uploadRadio.addEventListener('change', function() {
-			self.toggleSource();
-		});
-
-		this.serverRadio.addEventListener('change', function() {
-			self.toggleSource();
-		});
-
 		this.serverSelect.addEventListener('change', function() {
 			self.updateDeleteButtonState();
 			self.clearNotice();
@@ -73,29 +57,8 @@
 			self.handleSubmit(e);
 		});
 
+		this.loadServerFiles();
 		this.updateDeleteButtonState();
-	};
-
-	/**
-	 * Toggle between upload and server source.
-	 */
-	ServerFileSelector.prototype.toggleSource = function() {
-		if (this.uploadRadio.checked) {
-			this.uploadDiv.style.display = 'block';
-			this.serverDiv.style.display = 'none';
-			this.fileInput.required = true;
-			this.serverSelect.required = false;
-			this.serverSelect.value = '';
-			this.updateDeleteButtonState();
-			this.clearNotice();
-		} else {
-			this.uploadDiv.style.display = 'none';
-			this.serverDiv.style.display = 'block';
-			this.fileInput.required = false;
-			this.fileInput.value = '';
-			this.serverSelect.required = true;
-			this.loadServerFiles();
-		}
 	};
 
 	/**
@@ -319,16 +282,10 @@
 	 * @param {Event} e Submit event.
 	 */
 	ServerFileSelector.prototype.handleSubmit = function(e) {
-		if (this.serverRadio.checked) {
-			if (!this.serverSelect.value) {
-				e.preventDefault();
-				alert(this.i18n.pleaseSelect || 'Please select a file from the server.');
-				return false;
-			}
-			this.fileInput.removeAttribute('required');
-			this.fileInput.disabled = true;
-		} else {
-			this.serverSelect.removeAttribute('required');
+		if (!this.serverSelect.value) {
+			e.preventDefault();
+			alert(this.i18n.pleaseSelect || 'Please select a file from the server.');
+			return false;
 		}
 	};
 
@@ -351,15 +308,14 @@
 				return;
 			}
 
-			var uploadRadio = form.querySelector('input[name="import_source"][value="upload"]');
-			var serverRadio = form.querySelector('input[name="import_source"][value="server"]');
-			var uploadDiv = form.querySelector('.mksddn-mc-import-source-upload');
+			var sourceInput = form.querySelector('input[name="import_source"]');
+			var source = sourceInput ? sourceInput.value : '';
 			var serverDiv = form.querySelector('.mksddn-mc-import-source-server');
-			var fileInput = form.querySelector('input[type="file"]');
 			var serverSelect = form.querySelector('select[name="server_file"]');
 			var deleteButton = form.querySelector('.mksddn-mc-delete-server-file');
 
-			if (!uploadRadio || !serverRadio || !uploadDiv || !serverDiv || !fileInput || !serverSelect) {
+			// Page-level tabs render only the active source panel.
+			if ('server' !== source || !serverDiv || !serverSelect) {
 				return;
 			}
 
@@ -369,11 +325,7 @@
 
 			new ServerFileSelector({
 				form: form,
-				uploadRadio: uploadRadio,
-				serverRadio: serverRadio,
-				uploadDiv: uploadDiv,
 				serverDiv: serverDiv,
-				fileInput: fileInput,
 				serverSelect: serverSelect,
 				deleteButton: deleteButton,
 				ajaxAction: defaultConfig.ajaxAction,

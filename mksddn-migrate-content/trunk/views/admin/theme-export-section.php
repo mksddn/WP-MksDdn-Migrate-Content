@@ -11,7 +11,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 <section class="mksddn-mc-section">
-	<h2><?php esc_html_e( 'Theme Export', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Export selected themes (active theme is pre-selected).', 'mksddn-migrate-content' ); ?></p>
 	<div class="mksddn-mc-grid">
 		<div class="mksddn-mc-card">

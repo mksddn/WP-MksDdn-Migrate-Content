@@ -35,8 +35,8 @@ $selection_count_label = __( '%1$d of %2$d users selected', 'mksddn-migrate-cont
 
 	<div class="tablenav top mksddn-mc-user-toolbar">
 		<div class="alignleft actions">
-			<button type="button" class="button mksddn-mc-user-select-all"><?php esc_html_e( 'Select all', 'mksddn-migrate-content' ); ?></button>
-			<button type="button" class="button mksddn-mc-user-deselect-all"><?php esc_html_e( 'Deselect all', 'mksddn-migrate-content' ); ?></button>
+			<button type="button" class="button button-secondary mksddn-mc-user-select-all"><?php esc_html_e( 'Select all', 'mksddn-migrate-content' ); ?></button>
+			<button type="button" class="button button-secondary mksddn-mc-user-deselect-all"><?php esc_html_e( 'Deselect all', 'mksddn-migrate-content' ); ?></button>
 		</div>
 		<div class="tablenav-pages one-page mksddn-mc-user-selection-summary">
 			<span

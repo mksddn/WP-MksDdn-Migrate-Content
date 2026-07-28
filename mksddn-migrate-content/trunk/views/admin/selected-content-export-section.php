@@ -12,7 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 <section class="mksddn-mc-section">
-	<h2><?php esc_html_e( 'Selected Content Export', 'mksddn-migrate-content' ); ?></h2>
 	<p><?php esc_html_e( 'Pick one or many entries (pages, posts, CPT) and export them with or without media.', 'mksddn-migrate-content' ); ?></p>
 	<div class="mksddn-mc-grid">
 		<?php

@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<option value="archive" selected><?php esc_html_e( '.wpbkp (archive with manifest)', 'mksddn-migrate-content' ); ?></option>
 			<option value="json"><?php esc_html_e( '.json (content only, editable)', 'mksddn-migrate-content' ); ?></option>
 		</select>
-		<p class="description"><?php esc_html_e( '.json skips media files and is best for quick edits. .wpbkp packs media + checksum.', 'mksddn-migrate-content' ); ?></p><br>
+		<p class="description"><?php esc_html_e( '.json skips media files and is best for quick edits. .wpbkp packs media + checksum.', 'mksddn-migrate-content' ); ?></p>
 	</div>
 </div>
 

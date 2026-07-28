@@ -358,6 +358,25 @@ class AdminPageController {
 			)
 		);
 
+		wp_enqueue_script(
+			'mksddn-file-dropzone',
+			PluginConfig::assets_url() . 'js/file-dropzone.js',
+			array(),
+			PluginConfig::version(),
+			true
+		);
+
+		wp_localize_script(
+			'mksddn-file-dropzone',
+			'mksddnFileDropzone',
+			array(
+				'i18n' => array(
+					'invalidType' => __( 'Only .wpbkp and .json files are supported.', 'mksddn-migrate-content' ),
+					'assignError' => __( 'Could not attach the selected file. Please use Browse instead.', 'mksddn-migrate-content' ),
+				),
+			)
+		);
+
 		if ( ! PluginConfig::is_chunked_disabled() ) {
 			wp_enqueue_script(
 				'mksddn-chunk-transfer',

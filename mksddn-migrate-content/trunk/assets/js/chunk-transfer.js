@@ -473,8 +473,9 @@ function hideProgressLabel( delay = 0 ) {
 
 		form.addEventListener( 'submit', async ( event ) => {
 			// Skip chunked upload if server file is selected.
-			const serverRadio = form.querySelector( 'input[name="import_source"][value="server"]' );
-			if ( serverRadio && serverRadio.checked ) {
+			const sourceInput = form.querySelector( 'input[name="import_source"]:checked' )
+				|| form.querySelector( 'input[name="import_source"]' );
+			if ( sourceInput && 'server' === sourceInput.value ) {
 				return;
 			}
 
