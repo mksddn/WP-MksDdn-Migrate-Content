@@ -150,6 +150,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_cancel_theme_preview', array( $this->theme_preview_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
+		add_action( 'wp_ajax_mksddn_mc_delete_server_backup', array( $this, 'handle_ajax_delete_server_backup' ) );
 		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
 	}
 
@@ -339,14 +340,20 @@ class AdminPageController {
 			'mksddn-server-file-selector',
 			'mksddnServerFileSelector',
 			array(
-				'ajaxAction' => 'mksddn_mc_get_server_backups',
-				'nonce'     => wp_create_nonce( 'mksddn_mc_admin' ),
-				'i18n'      => array(
-					'loading'     => __( 'Loading...', 'mksddn-migrate-content' ),
-					'selectFile'  => __( 'Select a file...', 'mksddn-migrate-content' ),
-					'noFiles'     => __( 'No backup files found', 'mksddn-migrate-content' ),
-					'loadError'   => __( 'Error loading files', 'mksddn-migrate-content' ),
-					'pleaseSelect' => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+				'ajaxAction'       => 'mksddn_mc_get_server_backups',
+				'deleteAjaxAction' => 'mksddn_mc_delete_server_backup',
+				'nonce'            => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'             => array(
+					'loading'         => __( 'Loading...', 'mksddn-migrate-content' ),
+					'selectFile'      => __( 'Select a file...', 'mksddn-migrate-content' ),
+					'noFiles'         => __( 'No backup files found', 'mksddn-migrate-content' ),
+					'loadError'       => __( 'Error loading files', 'mksddn-migrate-content' ),
+					'pleaseSelect'    => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+					'deleteConfirm'   => __( 'Delete this backup file from the server? This cannot be undone.', 'mksddn-migrate-content' ),
+					'deleteSuccess'   => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
+					'deleteError'     => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
+					'deleteSelect'    => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
+					'deleting'        => __( 'Deleting...', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -560,6 +567,45 @@ class AdminPageController {
 		}
 
 		wp_send_json_success( array( 'files' => $files ) );
+	}
+
+	/**
+	 * Handle AJAX request to delete a server backup file.
+	 *
+	 * @return void
+	 * @since 2.5.0
+	 */
+	public function handle_ajax_delete_server_backup(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+		$filename = isset( $_POST['filename'] ) ? sanitize_text_field( wp_unslash( $_POST['filename'] ) ) : '';
+		$filename = basename( $filename );
+
+		if ( '' === $filename ) {
+			wp_send_json_error( array( 'message' => __( 'No backup file specified.', 'mksddn-migrate-content' ) ) );
+		}
+
+		$result = $this->server_scanner->delete_file( $filename );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		wp_send_json_success(
+			array(
+				'message' => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
+			)
+		);
 	}
 
 	/**

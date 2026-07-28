@@ -364,6 +364,49 @@ class ServerBackupScanner {
 	}
 
 	/**
+	 * Delete an import backup file from the server imports directory.
+	 *
+	 * @param string $filename Import filename (basename only).
+	 * @return true|WP_Error True on success, WP_Error on failure.
+	 * @since 2.5.0
+	 */
+	public function delete_file( string $filename ): true|WP_Error {
+		$file = $this->get_file( $filename );
+		if ( is_wp_error( $file ) ) {
+			return $file;
+		}
+
+		$file_path = $file['path'];
+
+		if ( ! is_writable( $file_path ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- path already validated via get_file().
+			return new WP_Error(
+				'mksddn_mc_import_file_not_writable',
+				__( 'Import file is not writable and cannot be deleted.', 'mksddn-migrate-content' )
+			);
+		}
+
+		if ( ! FilesystemHelper::delete( $file_path ) ) {
+			PluginLogger::log(
+				sprintf( 'Failed to delete import file: %s', $file_path ),
+				'ServerBackupScanner'
+			);
+			return new WP_Error(
+				'mksddn_mc_import_file_delete_failed',
+				__( 'Failed to delete import file.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$this->invalidate_cache();
+
+		PluginLogger::log(
+			sprintf( 'Deleted import file: %s', $file['name'] ),
+			'ServerBackupScanner'
+		);
+
+		return true;
+	}
+
+	/**
 	 * Clear cached server backup list.
 	 *
 	 * @return void

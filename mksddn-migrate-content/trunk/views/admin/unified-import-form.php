@@ -73,10 +73,13 @@ $mksddn_mc_preflight_report_id = isset( $mksddn_mc_preflight_report_id ) ? (stri
 				</div>
 
 				<div class="mksddn-mc-import-source-server" style="display: none;">
-					<select name="server_file" id="mksddn-mc-unified-server-file" style="width: 100%; max-width: 500px;">
-						<option value=""><?php esc_html_e( 'Select a file...', 'mksddn-migrate-content' ); ?></option>
-					</select>
-					<p class="description"><?php esc_html_e( 'Select an import file from the server directory.', 'mksddn-migrate-content' ); ?></p>
+					<div class="mksddn-mc-server-file-row">
+						<select name="server_file" id="mksddn-mc-unified-server-file">
+							<option value=""><?php esc_html_e( 'Select a file...', 'mksddn-migrate-content' ); ?></option>
+						</select>
+						<button type="button" class="button button-secondary mksddn-mc-delete-server-file" disabled><?php esc_html_e( 'Delete', 'mksddn-migrate-content' ); ?></button>
+					</div>
+					<p class="description"><?php esc_html_e( 'Select an import file from the server directory. You can delete unused backups from the server.', 'mksddn-migrate-content' ); ?></p>
 					<div class="mksddn-mc-server-file-notice notice notice-error" style="display: none; margin-top: 0.5rem;"></div>
 				</div>
 			</div>

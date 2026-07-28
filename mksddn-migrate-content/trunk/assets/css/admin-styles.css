@@ -270,7 +270,34 @@
 }
 
 .mksddn-mc-import-source-server select {
+	margin-bottom: 0;
+}
+
+.mksddn-mc-server-file-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
 	margin-bottom: 0.5rem;
+	max-width: 620px;
+}
+
+.mksddn-mc-server-file-row select {
+	flex: 1 1 280px;
+	width: auto;
+	max-width: 500px;
+	box-sizing: border-box;
+	min-height: 40px;
+	height: 40px;
+	margin: 0;
+	padding: 0 8px;
+	font-size: 13px;
+	line-height: 2;
+}
+
+.mksddn-mc-server-file-row .mksddn-mc-delete-server-file {
+	flex: 0 0 auto;
+	margin: 0;
 }
 
 /* Theme selection styles */
