@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.4.1
+Stable tag: 2.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 
 = Why MksDdn Migrate Content? =
 
-* **Dual export modes** – choose Full Site (database + uploads/plugins/mu-plugins/themes) or Selected Content (multi-select posts/pages/CPTs) with or without referenced media.
+* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (multi-select posts/pages/CPTs with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
@@ -29,14 +29,17 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
 - File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/mu-plugins`, `wp-content/themes` with filters to skip VCS/system files.
 - Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
-- Server file import - select backup files directly from `wp-content/uploads/mksddn-mc/imports/` directory without browser uploads.
-- Custom `.wpbkp` drag-and-drop uploader with checksum guardrails (UI polish deferred to next milestone, functionality already complete).
+- Server file import — select backup files from `wp-content/uploads/mksddn-mc/imports/` without browser uploads; delete unused server backups from the import UI.
+- Theme export and import with replace vs merge preview before applying changes.
+- Export preflight — disk space and memory checks before full-site export starts.
+- Drag-and-drop `.wpbkp` / `.json` uploader with MIME validation and checksum guardrails (`file-dropzone.js`).
+- Centralized `PluginLogger` — dedicated log file with rotation; disable via `MKSDDN_MC_DISABLE_LOGGING` in `wp-config.php`.
 
 == Installation ==
 
 1. Upload the `mksddn-migrate-content` folder to the `/wp-content/plugins/` directory, or install via the Plugins page in WordPress.
 2. Activate the plugin through the 'Plugins' menu in WordPress.
-3. Go to Tools → Migrate Content to run exports and imports.
+3. Open the top-level **Migrate Content** menu in the WordPress admin (Export and Import subpages).
 
 == Frequently Asked Questions ==
 
@@ -53,7 +56,7 @@ Yes. Any public post type plus Advanced Custom Fields metadata is exported/impor
 The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via REST API endpoints (`mksddn/v1/chunk/*`). If the browser reloads, the resume token restarts from the last confirmed chunk.
 
 = How do I import a backup file from the server? =
-You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
+You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. You can also delete unused backup files from the server via the **Delete** button next to the file selector. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = What is cleaned up when the plugin is deactivated? =
 Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
@@ -75,9 +78,11 @@ Step 1 runs file detection and read-only analysis (payload parsing, user diff sc
 
 == Screenshots ==
 
-1. Export dashboard with “Full Site” and “Selected Content” cards.
+1. Export page with Full Site, Selected Content, and Theme Export tabs.
 2. Selected Content picker with multi-select lists and media toggles.
-3. User merge dialog showing archive/current comparison.
+3. Unified import form with drag-and-drop upload and server file selector.
+4. Import preflight report before the real import starts.
+5. User merge dialog showing archive/current comparison.
 
 == Architecture ==
 
@@ -97,27 +102,56 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ChunkRestController` - REST API controller for chunked upload/download operations
 * All handlers implement corresponding interfaces for testability
 
-= Service Layer =
-* `SelectedContentImportService` - handles selected content imports
-* `FullSiteImportService` - manages full site imports
-* `ThemeImportService` - handles theme archive imports
-* `UnifiedImportOrchestrator` - orchestrates unified import with automatic type detection; step 1 is always preflight, step 2 runs the real import using a stored file reference
-* `ImportPreflightService` - read-only analysis for unified import preflight
-* `PreflightReportStore` - short-lived transient storage for preflight reports and follow-up import handles (staged browser uploads under `wp-content/uploads/mksddn-mc/preflight/`, or chunk/server identifiers)
-* `ImportTypeDetector` - detects import type (full site or selected content) from archive file
-* `ImportFileValidator` - validates uploaded files
-* `ImportPayloadPreparer` - prepares import payloads
-* `ServerBackupScanner` - scans and validates backup files on the server
-* `ResponseHandler` - manages redirects and status messages
-* `NotificationService` - handles user notifications
-* `ProgressService` - tracks operation progress
-* `ErrorHandler` - centralized error handling and logging
-* `UserDiffBuilder` - builds user difference comparison
-* `UserMergeApplier` - applies user merge operations
-* `ThemePreviewStore` - stores pending theme import previews
-* `DeactivationCleanup` - clears temporary upload state and service directories when the plugin is deactivated
-* `PostImportMaintenance` - centralizes cache/rewrite cleanup after full import and emergency purge if the database was partially updated; performs global flush plus targeted `wp_cache_flush_group()` when supported, bumps posts/terms/comments last_changed hooks, exposes `mksddn_mc_post_import_object_cache_flush_groups` filter, integrates page-cache plugins via best-effort function calls and hooks
-* `FullImportMaintenance` - file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
+= Admin UI =
+* Top-level **Migrate Content** menu with **Export** and **Import** subpages
+* Export tabs: Full Site, Selected Content, Theme Export (`AdminPageView`, `views/admin/*`)
+* Unified import form with preflight report, user preview, and theme preview screens
+* Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `admin-scripts.js`, `admin-styles.css`
+
+= Export & Import Core =
+* `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF)
+* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF)
+* `SelectionBuilder`, `ContentSelection` — build export selections from admin input
+* `FullContentExporter`, `FullContentImporter` — full-site archive assembly and restore
+* `FullDatabaseExporter`, `FullDatabaseImporter` — streaming database export/import
+* `ThemeExporter`, `ThemeImporter` — theme archive export and filesystem apply
+* `OptionsExporter`, `OptionsImporter`, `OptionsHelper` — WordPress options slices
+* `AttachmentCollector`, `AttachmentRestorer`, `AttachmentCollection` — media pipeline
+* `ExportPreflight`, `ExportMemoryHelper` — pre-export disk/memory checks and memory budgeting
+* `FilenameBuilder` — deterministic archive filenames
+
+= Service Layer (Admin) =
+* `SelectedContentImportService` — handles selected content imports
+* `FullSiteImportService` — manages full site imports
+* `ThemeImportService` — handles theme archive imports
+* `UnifiedImportOrchestrator` — orchestrates unified import with automatic type detection; step 1 is always preflight, step 2 runs the real import using a stored file reference
+* `ImportPreflightService` — read-only analysis for unified import preflight
+* `PreflightReportStore` — short-lived transient storage for preflight reports and follow-up import handles (staged browser uploads under `wp-content/uploads/mksddn-mc/preflight/`, or chunk/server identifiers)
+* `ImportTypeDetector` — detects import type (full site, selected content, or theme) from archive file
+* `ImportFileValidator` — validates uploaded files
+* `ImportPayloadPreparer` — prepares import payloads
+* `ServerBackupScanner` — scans, validates, and deletes backup files on the server
+* `ResponseHandler` — manages redirects and status messages
+* `NotificationService` — handles user notifications
+* `ProgressService` — tracks operation progress
+* `ErrorHandler`, `PluginLogger` — centralized error handling and file logging
+* `UserDiffBuilder`, `UserMergeApplier`, `UserPreviewStore` — user merge workflow
+* `ThemePreviewStore` (`Themes\ThemePreviewStore`) — stores pending theme import previews
+
+= Support & Maintenance =
+* `DeactivationCleanup` — clears temporary upload state and service directories when the plugin is deactivated
+* `PostImportMaintenance` — cache/rewrite cleanup after full import and emergency purge if the database was partially updated; global flush plus targeted `wp_cache_flush_group()` when supported; filter `mksddn_mc_post_import_object_cache_flush_groups`
+* `FullImportMaintenance` — file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
+* `ImportLock` — prevents concurrent import operations
+* `PreflightStagingPath` — validates staged preflight file paths
+* `ThemeArchivePathHelper` — normalizes theme archive entry paths
+* `DomainReplacer`, `SiteUrlGuard`, `FilesystemHelper`, `MimeTypeHelper`
+
+= Archive Layer =
+* `Packer`, `Extractor` — `.wpbkp` archive pack/unpack
+* `FullArchivePayload` — memory-efficient JSON payload handling
+* `ContentCollector` — filesystem content collection for exports
+* `ArchiveValidator`, `ValidationResult` — manifest and checksum validation
 
 = Contracts (Interfaces) =
 All key components implement interfaces:
@@ -136,11 +170,11 @@ All key components implement interfaces:
 
 = Performance =
 * `BatchLoader` for optimized database queries (prevents N+1 problems)
-* Efficient media collection with batch processing (`AttachmentCollector`)
-* Chunked transfer for large files via REST API (`ChunkRestController`)
-* Memory-efficient streaming for large archives
-* `FullArchivePayload` for efficient archive payload handling
+* Efficient media collection with batch processing (`AttachmentCollector`, `AttachmentRestorer`)
+* Chunked transfer for large files via REST API (`ChunkRestController`, `ChunkJobRepository`)
+* Memory-efficient streaming for large archives (`FullArchivePayload`, `ExportMemoryHelper`)
 * `ContentCollector` for filesystem content collection
+* Streaming `FullDatabaseExporter` with adaptive batch sizes
 
 = Security =
 * All admin operations check `current_user_can('manage_options')`
@@ -149,13 +183,18 @@ All key components implement interfaces:
 * Input sanitization using WordPress sanitization functions
 * Output escaping with `esc_html()`, `esc_attr()`, `esc_url()`
 * File upload validation with MIME type checking
-* Path traversal protection for server file access (`ServerBackupScanner`)
+* Path traversal protection for server file access and deletion (`ServerBackupScanner`)
 * Path traversal protection for archive extraction (full site + theme import)
 * `SiteUrlGuard` prevents accidental site URL changes during import
 * `ImportLock` prevents concurrent import operations
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.5.0 =
+* Added: Delete unused backup files from the server imports directory.
+* Improved: Import UI — drag-and-drop upload, shared nav tabs, clearer server file selector.
+* Improved: Import error feedback and full-site database export query handling.
 
 = 2.4.1 =
 * Enhanced: Full-site export — streaming database export to JSON, lower memory use on large sites.
@@ -307,8 +346,6 @@ All key components implement interfaces:
 * Added ensure_directory() method to FilesystemHelper for consistent directory creation with proper error handling.
 * Refactored directory creation logic in ChunkJobRepository, ChunkRestController, and FullContentExporter to utilize FilesystemHelper for improved error handling and consistency.
 * Improved file permissions handling in put_stream() method to ensure proper chmod after streaming operations.
-
-= 1.2.2 =
 
 = 1.2.1 =
 * Updated PHPCS ignore comments for set_time_limit and ini_set to current standards.
