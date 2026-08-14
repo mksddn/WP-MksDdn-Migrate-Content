@@ -206,9 +206,20 @@ class ChunkRestController {
 
 		$job_id = $job->get_data()['id'];
 
-		$scheduled = wp_schedule_single_event( time(), FullExportBuilder::CRON_HOOK, array( $job_id ) );
-		if ( is_wp_error( $scheduled ) ) {
-			PluginLogger::log( 'Failed to schedule full export build: ' . $scheduled->get_error_message(), 'ChunkRestController' );
+		$scheduled = wp_schedule_single_event( time(), FullExportBuilder::CRON_HOOK, array( $job_id ), true );
+		if ( true !== $scheduled ) {
+			$message = is_wp_error( $scheduled )
+				? $scheduled->get_error_message()
+				: __( 'WordPress could not schedule the export task.', 'mksddn-migrate-content' );
+
+			$job->delete();
+			PluginLogger::log( 'Failed to schedule full export build: ' . $message, 'ChunkRestController' );
+
+			return new WP_Error(
+				'mksddn_export_schedule_failed',
+				__( 'Could not start the background export. Please check that WordPress Cron is available and try again.', 'mksddn-migrate-content' ),
+				array( 'status' => 500 )
+			);
 		}
 
 		if ( function_exists( 'spawn_cron' ) ) {
@@ -273,6 +284,18 @@ class ChunkRestController {
 		}
 
 		$job = $this->repository->get( $job_id );
+
+		$data = $job->get_data();
+		if ( 'download' === ( $data['mode'] ?? '' ) && in_array( $data['status'] ?? '', array( 'pending', 'building' ), true ) ) {
+			if ( $job->update_if_status( array( 'pending', 'building' ), array( 'status' => 'cancelled' ) ) ) {
+				return array(
+					'cancelled' => true,
+				);
+			}
+
+			$job = $this->repository->get( $job_id );
+		}
+
 		$job->delete();
 
 		return array(

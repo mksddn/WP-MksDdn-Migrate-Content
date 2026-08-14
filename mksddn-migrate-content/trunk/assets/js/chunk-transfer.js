@@ -416,6 +416,12 @@ function hideProgressLabel( delay = 0 ) {
 				);
 			}
 
+			if ( 'cancelled' === status.status ) {
+				throw createExportFailure(
+					( settings.i18n && settings.i18n.exportCancelled ) || ''
+				);
+			}
+
 			setProgressLabel( 5, settings.i18n.exportBusy );
 			await yieldThread( pollIntervalMs );
 		}
