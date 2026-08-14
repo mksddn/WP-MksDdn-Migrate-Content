@@ -390,6 +390,41 @@ function hideProgressLabel( delay = 0 ) {
 		return jobId;
 	}
 
+	/**
+	 * Poll job status until the background archive build finishes.
+	 *
+	 * @param {string} jobId Chunk job identifier.
+	 * @returns {Promise<Object>} Resolves with job status payload once ready.
+	 */
+	async function waitForExportReady( jobId ) {
+		const pollIntervalMs = 3000;
+		const maxAttempts = 600; // Up to 30 minutes of building.
+
+		for ( let attempt = 0; attempt < maxAttempts; attempt++ ) {
+			const status = await fetchChunkJson(
+				`chunk/status?job_id=${ encodeURIComponent( jobId ) }`,
+				{ headers: { 'X-WP-Nonce': settings.nonce } }
+			);
+
+			if ( 'ready' === status.status && status.total_chunks ) {
+				return status;
+			}
+
+			if ( 'error' === status.status ) {
+				throw createExportFailure(
+					status.error || ( settings.i18n && settings.i18n.exportUnknownError ) || ''
+				);
+			}
+
+			setProgressLabel( 5, settings.i18n.exportBusy );
+			await yieldThread( pollIntervalMs );
+		}
+
+		throw createExportFailure(
+			( settings.i18n && settings.i18n.exportTimeout ) || ''
+		);
+	}
+
 	async function downloadFullSite() {
 		let jobId = null;
 		try {
@@ -405,7 +440,7 @@ function hideProgressLabel( delay = 0 ) {
 				body: JSON.stringify( {} ),
 			} );
 
-			if ( ! init.job_id || ! init.total_chunks ) {
+			if ( ! init.job_id ) {
 				throw createExportFailure(
 					( settings.i18n && settings.i18n.exportInvalidInit ) || ''
 				);
@@ -414,7 +449,9 @@ function hideProgressLabel( delay = 0 ) {
 			jobId = init.job_id;
 			currentJobId = jobId;
 			downloadInProgress = true;
-			const totalChunks = init.total_chunks;
+
+			const ready = await waitForExportReady( jobId );
+			const totalChunks = ready.total_chunks;
 			const parts = [];
 
 			for ( let i = 0; i < totalChunks; i++ ) {

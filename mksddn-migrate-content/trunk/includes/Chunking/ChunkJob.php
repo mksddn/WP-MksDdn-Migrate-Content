@@ -67,6 +67,8 @@ class ChunkJob {
 			'chunk_size'       => 5 * 1024 * 1024,
 			'mode'             => 'upload',
 			'size'             => 0,
+			'status'           => '',
+			'error'            => '',
 		);
 
 		$this->save();

@@ -9,6 +9,7 @@ namespace MksDdn\MigrateContent;
 
 use MksDdn\MigrateContent\Admin\AdminPageController;
 use MksDdn\MigrateContent\Chunking\ChunkRestController;
+use MksDdn\MigrateContent\Chunking\FullExportBuilder;
 use MksDdn\MigrateContent\Core\ServiceContainerFactory;
 use MksDdn\MigrateContent\Support\FullImportMaintenance;
 
@@ -58,6 +59,9 @@ class Plugin {
 	 */
 	public function boot_rest(): void {
 		$this->container->get( ChunkRestController::class );
+		// Always resolved (including on wp-cron.php requests) so the background
+		// full-export build hook is registered even outside admin context.
+		$this->container->get( FullExportBuilder::class );
 	}
 
 	/**

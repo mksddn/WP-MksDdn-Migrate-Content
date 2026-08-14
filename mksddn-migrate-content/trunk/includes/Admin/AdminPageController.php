@@ -444,6 +444,7 @@ class AdminPageController {
 						'exportInvalidInit' => __( 'Invalid export response from server.', 'mksddn-migrate-content' ),
 						'exportChunkError' => __( 'Chunk download failed.', 'mksddn-migrate-content' ),
 						'exportInvalidChunk' => __( 'Invalid chunk data from server.', 'mksddn-migrate-content' ),
+						'exportTimeout'    => __( 'Archive preparation is taking too long. Check server disk space and PHP-FPM/cron availability, then try again.', 'mksddn-migrate-content' ),
 						'fileReadError'    => __( 'File read error', 'mksddn-migrate-content' ),
 						'bytesZero'        => __( '0 B', 'mksddn-migrate-content' ),
 						/* translators: 1: numeric value, 2: unit abbreviation (B, KB, etc.). */
