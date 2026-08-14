@@ -39,6 +39,57 @@ class ChunkJob {
 		$this->save();
 	}
 
+	/**
+	 * Update a job only when its current status matches one of the allowed values.
+	 *
+	 * The metadata file is locked while it is read and written to prevent a
+	 * cancellation request from being overwritten by the background export worker.
+	 *
+	 * @param string|string[] $expected_status Allowed current status value(s).
+	 * @param array           $payload         Values to persist.
+	 * @return bool Whether the job was updated.
+	 */
+	public function update_if_status( string|array $expected_status, array $payload ): bool {
+		$path    = $this->dir . $this->id . '.json';
+		$allowed = (array) $expected_status;
+		$handle  = fopen( $path, 'c+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- an exclusive lock is required for atomic job status updates.
+
+		if ( ! $handle || ! flock( $handle, LOCK_EX ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_flock -- paired with fopen to synchronize job state.
+			if ( $handle ) {
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen.
+			}
+			return false;
+		}
+
+		rewind( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rewind -- paired with fopen.
+		$json = stream_get_contents( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_stream_get_contents -- paired with fopen.
+		$data = json_decode( $json ?: '', true );
+
+		if ( ! is_array( $data ) || ! in_array( $data['status'] ?? '', $allowed, true ) ) {
+			flock( $handle, LOCK_UN ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_flock -- paired with fopen.
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen.
+			return false;
+		}
+
+		$this->data = array_merge( $data, $payload );
+		$encoded    = wp_json_encode( $this->data );
+
+		if ( false === $encoded ) {
+			flock( $handle, LOCK_UN ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_flock -- paired with fopen.
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen.
+			return false;
+		}
+
+		rewind( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rewind -- paired with fopen.
+		ftruncate( $handle, 0 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_ftruncate -- paired with fopen.
+		$written = fwrite( $handle, $encoded ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- paired with fopen.
+		fflush( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fflush -- paired with fopen.
+		flock( $handle, LOCK_UN ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_flock -- paired with fopen.
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- paired with fopen.
+
+		return false !== $written;
+	}
+
 	public function get_file_path(): string {
 		return $this->dir . $this->id . '.tmp';
 	}
@@ -67,6 +118,8 @@ class ChunkJob {
 			'chunk_size'       => 5 * 1024 * 1024,
 			'mode'             => 'upload',
 			'size'             => 0,
+			'status'           => '',
+			'error'            => '',
 		);
 
 		$this->save();

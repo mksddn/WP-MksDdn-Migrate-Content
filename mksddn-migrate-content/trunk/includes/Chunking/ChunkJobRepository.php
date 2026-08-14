@@ -31,6 +31,10 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 			);
 		}
 
+		if ( is_dir( $this->storage_dir ) ) {
+			FilesystemHelper::protect_directory_from_web( $this->storage_dir );
+		}
+
 		$this->cleanup_expired();
 	}
 

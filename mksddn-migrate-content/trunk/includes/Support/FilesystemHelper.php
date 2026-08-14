@@ -256,8 +256,45 @@ final class FilesystemHelper {
 				)
 			);
 		}
-		
+
 		return true;
+	}
+
+	/**
+	 * Add basic web-server protection (.htaccess, web.config, index.php).
+	 *
+	 * Safe to call repeatedly; existing guard files are left unchanged.
+	 *
+	 * @param string $dir Directory path.
+	 * @return void
+	 * @since 2.6.0
+	 */
+	public static function protect_directory_from_web( string $dir ): void {
+		$dir = untrailingslashit( wp_normalize_path( $dir ) );
+		if ( '' === $dir || ! is_dir( $dir ) ) {
+			return;
+		}
+
+		$htaccess = $dir . '/.htaccess';
+		if ( ! file_exists( $htaccess ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			@file_put_contents( $htaccess, "Deny from all\n" );
+		}
+
+		$web_config = $dir . '/web.config';
+		if ( ! file_exists( $web_config ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			@file_put_contents(
+				$web_config,
+				"<configuration>\n<system.webServer>\n<authorization>\n<deny users=\"*\" />\n</authorization>\n</system.webServer>\n</configuration>\n"
+			);
+		}
+
+		$index = $dir . '/index.php';
+		if ( ! file_exists( $index ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			@file_put_contents( $index, "<?php\n// Silence is golden.\n" );
+		}
 	}
 }
 

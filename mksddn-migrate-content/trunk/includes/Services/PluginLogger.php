@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Services;
 
 use MksDdn\MigrateContent\Config\PluginConfig;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -114,7 +115,7 @@ class PluginLogger {
 				continue;
 			}
 
-			self::protect_directory( $dir );
+			FilesystemHelper::protect_directory_from_web( $dir );
 
 			$path = trailingslashit( $dir ) . self::LOG_FILENAME;
 			self::maybe_rotate( $path );
@@ -146,37 +147,6 @@ class PluginLogger {
 				)
 			)
 		);
-	}
-
-	/**
-	 * Add basic web-server protection for the logs directory.
-	 *
-	 * @param string $dir Logs directory path.
-	 * @return void
-	 */
-	private static function protect_directory( string $dir ): void {
-		$htaccess = trailingslashit( $dir ) . '.htaccess';
-
-		if ( ! file_exists( $htaccess ) ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-			@file_put_contents( $htaccess, "Deny from all\n" );
-		}
-
-		$web_config = trailingslashit( $dir ) . 'web.config';
-		if ( ! file_exists( $web_config ) ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-			@file_put_contents(
-				$web_config,
-				"<configuration>\n<system.webServer>\n<authorization>\n<deny users=\"*\" />\n</authorization>\n</system.webServer>\n</configuration>\n"
-			);
-		}
-
-		$index = trailingslashit( $dir ) . 'index.php';
-
-		if ( ! file_exists( $index ) ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-			@file_put_contents( $index, "<?php\n// Silence is golden.\n" );
-		}
 	}
 
 	/**

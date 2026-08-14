@@ -17,6 +17,7 @@ use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\PreflightStagingPath;
 use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use WP_Error;
 
@@ -383,7 +384,7 @@ class UnifiedImportOrchestrator {
 
 		if ( 'staged' === $st ) {
 			$path = isset( $h['staged_path'] ) ? (string) $h['staged_path'] : '';
-			if ( '' === $path || ! file_exists( $path ) ) {
+			if ( '' === $path || ! PreflightStagingPath::is_allowed_path( $path ) ) {
 				return new WP_Error(
 					'mksddn_mc_staged_missing',
 					__( 'Staged import file is missing. Run preflight again.', 'mksddn-migrate-content' )

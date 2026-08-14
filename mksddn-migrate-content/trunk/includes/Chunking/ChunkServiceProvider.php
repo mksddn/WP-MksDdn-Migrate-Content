@@ -54,6 +54,16 @@ class ChunkServiceProvider implements ServiceProviderInterface {
 				);
 			}
 		);
+
+		// Register FullExportBuilder (background archive builder).
+		$container->register(
+			FullExportBuilder::class,
+			function ( ServiceContainer $container ) {
+				return new FullExportBuilder(
+					$container->get( ChunkJobRepositoryInterface::class )
+				);
+			}
+		);
 	}
 }
 

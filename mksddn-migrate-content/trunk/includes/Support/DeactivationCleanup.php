@@ -31,7 +31,8 @@ final class DeactivationCleanup {
 	 */
 	public static function run(): void {
 		self::delete_path_if_safe( self::jobs_directory_path() );
-		self::delete_path_if_safe( self::theme_backups_root() );
+		FullImportMaintenance::deactivate();
+		WpContentRuntimeStorage::cleanup_if_idle();
 
 		/**
 		 * Whether to delete the server-side imports directory on deactivation.
@@ -50,7 +51,6 @@ final class DeactivationCleanup {
 
 		delete_transient( 'mksddn_mc_import_lock' );
 		delete_transient( 'mksddn_mc_server_backups' );
-		FullImportMaintenance::deactivate();
 		delete_option( 'mksddn_mc_storage_path' );
 
 		self::purge_user_preview_transients();
@@ -76,15 +76,6 @@ final class DeactivationCleanup {
 	}
 
 	/**
-	 * Theme backup directory under wp-content (full-site import).
-	 *
-	 * @return string
-	 */
-	private static function theme_backups_root(): string {
-		return trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups/';
-	}
-
-	/**
 	 * Remove a directory tree only if it resolves under an allowed plugin root.
 	 *
 	 * @param string $path Absolute directory path (trailing slash optional).
@@ -106,7 +97,7 @@ final class DeactivationCleanup {
 
 		$allowed = array(
 			trailingslashit( wp_normalize_path( PluginConfig::uploads_base_dir() ) ),
-			trailingslashit( wp_normalize_path( trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc' ) ),
+			trailingslashit( wp_normalize_path( WpContentRuntimeStorage::root() ) ),
 		);
 
 		$ok = false;

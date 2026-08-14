@@ -8,7 +8,7 @@
 namespace MksDdn\MigrateContent\Chunking;
 
 use MksDdn\MigrateContent\Contracts\ChunkJobRepositoryInterface;
-use MksDdn\MigrateContent\Filesystem\FullContentExporter;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 use WP_REST_Request;
@@ -182,52 +182,53 @@ class ChunkRestController {
 		);
 	}
 
+	/**
+	 * Create a download job and schedule the archive build in the background.
+	 *
+	 * The heavy work (DB dump + wp-content zip) happens outside this request via
+	 * WP-Cron, so the response returns immediately and never triggers a
+	 * reverse-proxy/PHP-FPM read timeout on large sites. The client polls
+	 * `chunk/status` until the job becomes `ready`, then downloads chunks.
+	 *
+	 * @param WP_REST_Request $request REST request.
+	 * @return array{job_id:string,status:string}
+	 */
 	public function init_download( WP_REST_Request $request ) {
-		$job    = $this->repository->create();
-		$file   = $job->get_file_path();
-		
-		$dir_result = FilesystemHelper::ensure_directory( $file );
-		if ( is_wp_error( $dir_result ) ) {
-			$job->delete();
-			return new WP_Error( 'mksddn_dir_create', __( 'Unable to create export directory.', 'mksddn-migrate-content' ), array( 'status' => 500 ) );
-		}
+		$job = $this->repository->create();
 
-		$export = new FullContentExporter();
-		$result = $export->export_to( $file );
+		$job->update(
+			array(
+				'mode'       => 'download',
+				'status'     => 'pending',
+				'chunk_size' => $this->chunk_size,
+			)
+		);
 
-		if ( is_wp_error( $result ) ) {
-			$job->delete();
-			return $this->prepare_export_rest_error( $result );
-		}
+		$job_id = $job->get_data()['id'];
 
-		$size = filesize( $file );
-		if ( false === $size || 0 === $size ) {
+		$scheduled = wp_schedule_single_event( time(), FullExportBuilder::CRON_HOOK, array( $job_id ), true );
+		if ( true !== $scheduled ) {
+			$message = is_wp_error( $scheduled )
+				? $scheduled->get_error_message()
+				: __( 'WordPress could not schedule the export task.', 'mksddn-migrate-content' );
+
 			$job->delete();
+			PluginLogger::log( 'Failed to schedule full export build: ' . $message, 'ChunkRestController' );
+
 			return new WP_Error(
-				'mksddn_chunk_size',
-				__( 'Export file is empty or cannot be read.', 'mksddn-migrate-content' )
-				. ' '
-				. __( 'Check free disk space, hosting quota, and PHP temp directory (sys_temp_dir / upload_tmp_dir).', 'mksddn-migrate-content' ),
+				'mksddn_export_schedule_failed',
+				__( 'Could not start the background export. Please check that WordPress Cron is available and try again.', 'mksddn-migrate-content' ),
 				array( 'status' => 500 )
 			);
 		}
 
-		$total_chunks = (int) max( 1, ceil( $size / $this->chunk_size ) );
-
-		$job->update(
-			array(
-				'total_chunks' => $total_chunks,
-				'chunk_size'   => $this->chunk_size,
-				'mode'         => 'download',
-				'size'         => $size,
-			)
-		);
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
 
 		return array(
-			'job_id'       => $job->get_data()['id'],
-			'total_chunks' => $total_chunks,
-			'chunk_size'   => $this->chunk_size,
-			'size'         => $size,
+			'job_id' => $job_id,
+			'status' => 'pending',
 		);
 	}
 
@@ -243,6 +244,10 @@ class ChunkRestController {
 		$data  = $job->get_data();
 		$file  = $job->get_file_path();
 		$total = (int) ( $data['total_chunks'] ?? 0 );
+
+		if ( 'download' === ( $data['mode'] ?? '' ) && 'ready' !== ( $data['status'] ?? '' ) ) {
+			return new WP_Error( 'mksddn_job_not_ready', __( 'Export archive is not ready yet.', 'mksddn-migrate-content' ), array( 'status' => 409 ) );
+		}
 
 		if ( $total && $index >= $total ) {
 			return new WP_Error( 'mksddn_chunk_oob', __( 'Chunk index out of bounds.', 'mksddn-migrate-content' ), array( 'status' => 400 ) );
@@ -279,6 +284,18 @@ class ChunkRestController {
 		}
 
 		$job = $this->repository->get( $job_id );
+
+		$data = $job->get_data();
+		if ( 'download' === ( $data['mode'] ?? '' ) && in_array( $data['status'] ?? '', array( 'pending', 'building' ), true ) ) {
+			if ( $job->update_if_status( array( 'pending', 'building' ), array( 'status' => 'cancelled' ) ) ) {
+				return array(
+					'cancelled' => true,
+				);
+			}
+
+			$job = $this->repository->get( $job_id );
+		}
+
 		$job->delete();
 
 		return array(
@@ -294,34 +311,6 @@ class ChunkRestController {
 
 		$job = $this->repository->get( $job_id );
 		return $job->get_data();
-	}
-
-	/**
-	 * Ensure REST error responses include HTTP status and full user-facing message (with hint).
-	 *
-	 * @param WP_Error $error Export error from FullContentExporter or related.
-	 * @return WP_Error
-	 */
-	private function prepare_export_rest_error( WP_Error $error ): WP_Error {
-		$code    = $error->get_error_code();
-		$message = $error->get_error_message();
-		$data    = $error->get_error_data();
-
-		if ( ! is_array( $data ) ) {
-			$data = array();
-		}
-
-		if ( ! isset( $data['status'] ) || ! is_numeric( $data['status'] ) ) {
-			$data['status'] = 500;
-		} else {
-			$data['status'] = (int) $data['status'];
-		}
-
-		if ( ! empty( $data['hint'] ) && is_string( $data['hint'] ) ) {
-			$message .= ' ' . $data['hint'];
-		}
-
-		return new WP_Error( $code, $message, $data );
 	}
 
 }

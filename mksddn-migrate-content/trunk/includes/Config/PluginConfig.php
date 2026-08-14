@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Config;
 
 use MksDdn\MigrateContent\Services\PluginLogger;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -415,7 +416,7 @@ class PluginConfig {
 			'base'    => $base,
 			'jobs'    => $base . 'jobs/',
 			'imports' => $base . 'imports/',
-			'logs'    => self::logs_dir(),
+			'logs'    => $base . 'logs/',
 		);
 	}
 
@@ -430,14 +431,17 @@ class PluginConfig {
 		$failed = array();
 
 		foreach ( $directories as $key => $dir ) {
-			if ( ! is_dir( $dir ) ) {
-				if ( ! wp_mkdir_p( $dir ) ) {
-					$failed[ $key ] = $dir;
-					PluginLogger::log(
-						sprintf( 'Failed to create directory: %s', $dir ),
-						'PluginConfig'
-					);
-				}
+			if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+				$failed[ $key ] = $dir;
+				PluginLogger::log(
+					sprintf( 'Failed to create directory: %s', $dir ),
+					'PluginConfig'
+				);
+				continue;
+			}
+
+			if ( is_dir( $dir ) ) {
+				FilesystemHelper::protect_directory_from_web( $dir );
 			}
 		}
 
@@ -454,6 +458,52 @@ class PluginConfig {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Apply web-server guards to existing plugin storage directories.
+	 *
+	 * Idempotent; safe to run on every request for sites upgraded in place.
+	 *
+	 * @return void
+	 * @since 2.6.0
+	 */
+	public static function protect_existing_directories(): void {
+		$dirs = array_values( self::get_required_directories() );
+
+		foreach ( self::log_directory_candidates() as $dir ) {
+			$dirs[] = $dir;
+		}
+
+		foreach ( array_unique( array_filter( $dirs ) ) as $dir ) {
+			if ( is_dir( $dir ) ) {
+				FilesystemHelper::protect_directory_from_web( $dir );
+			}
+		}
+	}
+
+	/**
+	 * Resolve log directory paths that may be used (without creating them).
+	 *
+	 * Mirrors {@see logs_dir()} candidates so custom `mksddn_mc_logs_dir` paths
+	 * receive web guards after in-place upgrades.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function log_directory_candidates(): array {
+		$uploads_default = trailingslashit( self::uploads_base_dir() ) . 'logs/';
+		$private_default = trailingslashit( sys_get_temp_dir() ) . 'mksddn-mc-logs/';
+		$preferred_dir   = (string) apply_filters( 'mksddn_mc_logs_dir', $uploads_default );
+
+		if ( '' === $preferred_dir ) {
+			$preferred_dir = $uploads_default;
+		}
+
+		return array(
+			trailingslashit( wp_normalize_path( $preferred_dir ) ),
+			trailingslashit( wp_normalize_path( $uploads_default ) ),
+			trailingslashit( wp_normalize_path( $private_default ) ),
+		);
 	}
 }
 

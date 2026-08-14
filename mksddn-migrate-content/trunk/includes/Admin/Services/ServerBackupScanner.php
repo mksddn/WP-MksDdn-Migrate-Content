@@ -370,7 +370,7 @@ class ServerBackupScanner {
 	 * @return true|WP_Error True on success, WP_Error on failure.
 	 * @since 2.5.0
 	 */
-	public function delete_file( string $filename ): true|WP_Error {
+	public function delete_file( string $filename ): bool|WP_Error {
 		$file = $this->get_file( $filename );
 		if ( is_wp_error( $file ) ) {
 			return $file;

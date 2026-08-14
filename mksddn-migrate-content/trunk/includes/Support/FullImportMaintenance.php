@@ -36,11 +36,11 @@ class FullImportMaintenance {
 		$path = self::lock_path();
 		$dir  = dirname( $path );
 
-		if ( ! is_dir( $dir ) ) {
-			wp_mkdir_p( $dir );
+		if ( ! WpContentRuntimeStorage::ensure_protected_directory( $dir ) ) {
+			return;
 		}
 
-		if ( is_dir( $dir ) && wp_is_writable( $dir ) ) {
+		if ( wp_is_writable( $dir ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Small runtime lock outside the database.
 			file_put_contents( $path, (string) time(), LOCK_EX );
 		}
@@ -61,6 +61,7 @@ class FullImportMaintenance {
 		}
 
 		self::deactivate_core_maintenance();
+		WpContentRuntimeStorage::cleanup_if_idle();
 	}
 
 	/**
@@ -139,8 +140,7 @@ class FullImportMaintenance {
 	 * @return string
 	 */
 	private static function lock_path(): string {
-		$base = defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : ABSPATH . 'wp-content';
-		$path = trailingslashit( $base ) . 'mksddn-mc/runtime/' . self::LOCK_FILENAME;
+		$path = trailingslashit( WpContentRuntimeStorage::runtime_dir() ) . self::LOCK_FILENAME;
 
 		/**
 		 * Filters the full import runtime lock path.
