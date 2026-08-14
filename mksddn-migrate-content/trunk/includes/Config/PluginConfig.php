@@ -474,22 +474,6 @@ class PluginConfig {
 				FilesystemHelper::protect_directory_from_web( $dir );
 			}
 		}
-
-		if ( ! defined( 'WP_CONTENT_DIR' ) ) {
-			return;
-		}
-
-		$wp_content_roots = array(
-			trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc',
-			trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups',
-			trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/runtime',
-		);
-
-		foreach ( $wp_content_roots as $dir ) {
-			if ( is_dir( $dir ) ) {
-				FilesystemHelper::protect_directory_from_web( $dir );
-			}
-		}
 	}
 }
 

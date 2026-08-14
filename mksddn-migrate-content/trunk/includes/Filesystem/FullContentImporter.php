@@ -12,6 +12,7 @@ use MksDdn\MigrateContent\Database\FullDatabaseImporter;
 use MksDdn\MigrateContent\Support\DomainReplacer;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Support\SiteUrlGuard;
+use MksDdn\MigrateContent\Support\WpContentRuntimeStorage;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Users\UserMergeApplier;
 use WP_Error;
@@ -618,10 +619,12 @@ class FullContentImporter {
 
 		if ( $error ) {
 			$this->restore_theme_backups( $theme_backups );
+			WpContentRuntimeStorage::cleanup_theme_backups();
 			return $error;
 		}
 
 		$this->cleanup_theme_backups( $theme_backups );
+		WpContentRuntimeStorage::cleanup_theme_backups();
 
 		return true;
 	}
@@ -692,14 +695,10 @@ class FullContentImporter {
 			}
 
 			if ( '' === $backup_root ) {
-				$backup_root = trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups/' . gmdate( 'Ymd-His' );
-				if ( ! wp_mkdir_p( $backup_root ) ) {
+				$backup_root = trailingslashit( WpContentRuntimeStorage::theme_backups_dir() ) . gmdate( 'Ymd-His' );
+				if ( ! WpContentRuntimeStorage::ensure_protected_directory( $backup_root ) ) {
 					return new WP_Error( 'mksddn_mc_theme_backup_dir', __( 'Unable to prepare theme backup directory.', 'mksddn-migrate-content' ) );
 				}
-
-				FilesystemHelper::protect_directory_from_web( trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc' );
-				FilesystemHelper::protect_directory_from_web( trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups' );
-				FilesystemHelper::protect_directory_from_web( $backup_root );
 			}
 
 			$backup_path = trailingslashit( $backup_root ) . $slug;
