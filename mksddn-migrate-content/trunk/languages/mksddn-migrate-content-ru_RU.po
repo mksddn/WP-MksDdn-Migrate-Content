@@ -3,8 +3,8 @@ msgstr ""
 "Project-Id-Version: MksDdn Migrate Content\n"
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/"
 "issues\n"
-"POT-Creation-Date: 2026-07-28 11:33+0000\n"
-"PO-Revision-Date: 2026-07-06 13:56+0000\n"
+"POT-Creation-Date: 2026-08-14 11:22+0000\n"
+"PO-Revision-Date: 2026-08-14 11:22+0000\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
 "Language: ru_RU\n"
@@ -19,7 +19,9 @@ msgstr ""
 msgid ""
 "Export aborted while packing files: PHP memory usage is critically high. "
 "Free server memory or export from staging."
-msgstr "Экспорт прерван при упаковке файлов: использование памяти PHP критически высокое. Освободите память на сервере или выполните экспорт на staging."
+msgstr ""
+"Экспорт прерван при упаковке файлов: использование памяти PHP критически "
+"высокое. Освободите память на сервере или выполните экспорт на staging."
 
 #: includes/Admin/AdminPageController.php:180
 #: includes/Admin/AdminPageController.php:181
@@ -31,7 +33,7 @@ msgstr "Экспорт"
 
 #: includes/Admin/Services/ImportPreflightService.php:312
 msgid "Some user emails may conflict with existing accounts."
-msgstr "Некоторые адреса email могут конфликтовать с уже существующими учётными записями."
+msgstr ""
 "Некоторые адреса email могут конфликтовать с уже существующими учётными "
 "записями."
 
@@ -39,7 +41,7 @@ msgstr "Некоторые адреса email могут конфликтова�
 msgid "The server returned an unexpected response during chunked transfer."
 msgstr "Сервер вернул неожиданный ответ при чанковой передаче."
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:277
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:278
 msgid "Chunked upload file not found."
 msgstr "Файл чанковой загрузки не найден."
 
@@ -58,6 +60,14 @@ msgstr "Архив загружен."
 #: views/admin/user-preview.php:38
 msgid "Select all"
 msgstr "Выбрать все"
+
+#: includes/Admin/AdminPageController.php:448
+msgid ""
+"Archive preparation is taking too long. Check server disk space and PHP-FPM/"
+"cron availability, then try again."
+msgstr ""
+"Подготовка архива занимает слишком много времени. Проверьте свободное место "
+"на диске и доступность PHP-FPM/cron, затем повторите попытку."
 
 #: includes/Services/ErrorHandler.php:152
 msgid "Database operation failed. Please try again."
@@ -79,7 +89,7 @@ msgstr "Файлов темы в архиве: %d"
 msgid "Could not write manifest into the export archive."
 msgstr "Не удалось записать манифест в архив экспорта."
 
-#: includes/Filesystem/FullContentImporter.php:371
+#: includes/Filesystem/FullContentImporter.php:372
 msgid ""
 "Import file is too large (%1$s MB). Maximum supported size is %2$s MB. "
 "Please split the export or contact support."
@@ -132,9 +142,9 @@ msgstr ""
 ".json без медиа, удобен для правок. .wpbkp включает медиа и контрольную "
 "сумму."
 
-#: includes/Database/FullDatabaseExporter.php:307
+#: includes/Database/FullDatabaseExporter.php:306
 #: includes/Filesystem/FullContentExporter.php:270
-#: includes/Chunking/ChunkRestController.php:210
+#: includes/Chunking/FullExportBuilder.php:103
 msgid ""
 "Check free disk space, hosting quota, and PHP temp directory (sys_temp_dir / "
 "upload_tmp_dir)."
@@ -194,16 +204,18 @@ msgstr "Обнаружены пользователи"
 
 #: includes/Admin/Services/ImportPreflightService.php:150
 msgid "Payload has no slug; the importer may generate one at run time."
-msgstr "У полезной нагрузки нет slug; импортёр может сгенерировать его при выполнении."
-"В данных нет slug; при импорте он может быть сгенерирован автоматически."
+msgstr ""
+"У полезной нагрузки нет slug; импортёр может сгенерировать его при "
+"выполнении.В данных нет slug; при импорте он может быть сгенерирован "
+"автоматически."
 
-#: includes/Chunking/ChunkRestController.php:239
-#: includes/Chunking/ChunkRestController.php:278
-#: includes/Chunking/ChunkRestController.php:292
+#: includes/Chunking/ChunkRestController.php:240
+#: includes/Chunking/ChunkRestController.php:283
+#: includes/Chunking/ChunkRestController.php:309
 msgid "Job ID is required."
 msgstr "Требуется ID задачи."
 
-#: includes/Filesystem/FullContentImporter.php:304
+#: includes/Filesystem/FullContentImporter.php:305
 msgid ""
 "Insufficient memory: JSON file is %1$s MB and requires at least %2$s MB, but "
 "current limit is %3$s. Please increase PHP memory_limit in php.ini or wp-"
@@ -213,12 +225,12 @@ msgstr ""
 "%3$s. Увеличьте memory_limit в php.ini или wp-config.php."
 
 #: includes/Admin/Services/ThemeImportService.php:265
-#: includes/Admin/Services/FullSiteImportService.php:420
+#: includes/Admin/Services/FullSiteImportService.php:419
 #: includes/Services/ErrorHandler.php:129
 msgid "Chunked upload is incomplete. Please retry."
 msgstr "Чанковая загрузка не завершена. Повторите попытку."
 
-#: includes/Filesystem/FullContentImporter.php:159
+#: includes/Filesystem/FullContentImporter.php:160
 #: includes/Filesystem/ThemeImporter.php:106
 msgid "Opening archive..."
 msgstr "Открытие архива..."
@@ -231,7 +243,7 @@ msgstr "Загрузить файл"
 msgid "File change counts"
 msgstr "Счётчики изменений файлов"
 
-#: includes/Admin/AdminPageController.php:442
+#: includes/Admin/AdminPageController.php:443
 msgid "The server returned an invalid response during export."
 msgstr "Сервер вернул недопустимый ответ при экспорте."
 
@@ -269,18 +281,19 @@ msgstr "Новый"
 msgid "Full archive payload not found."
 msgstr "Полезная нагрузка полного архива не найдена."
 
-#: includes/Database/FullDatabaseExporter.php:228
+#: includes/Database/FullDatabaseExporter.php:227
 msgid "Failed to encode a row from table %s as JSON."
 msgstr "Не удалось закодировать строку из таблицы %s в JSON."
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:361
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:372
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:380
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:406
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:362
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:373
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:381
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:407
 msgid "Preflight session expired or invalid. Run preflight again."
-msgstr "Сессия preflight истекла или недействительна. Запустите preflight снова."
-"Сессия предпроверки устарела или недействительна. Выполните предпроверку "
-"снова."
+msgstr ""
+"Сессия preflight истекла или недействительна. Запустите preflight "
+"снова.Сессия предпроверки устарела или недействительна. Выполните "
+"предпроверку снова."
 
 #: views/admin/preflight-report.php:238
 msgid "No new files — all archive paths already exist."
@@ -298,13 +311,13 @@ msgstr "Не удалось открыть временный файл для п
 msgid "Invalid file extension. Expected: %s"
 msgstr "Недопустимое расширение файла. Ожидается: %s"
 
-#: includes/Admin/Services/FullSiteImportService.php:343
+#: includes/Admin/Services/FullSiteImportService.php:342
 msgid "No users available for selection."
 msgstr "Нет пользователей для выбора."
 
 #: includes/Admin/Services/ThemeImportService.php:287
-#: includes/Admin/Services/FullSiteImportService.php:442
-#: includes/Admin/Services/FullSiteImportService.php:460
+#: includes/Admin/Services/FullSiteImportService.php:441
+#: includes/Admin/Services/FullSiteImportService.php:459
 msgid "Please select a .wpbkp archive generated by this plugin."
 msgstr "Выберите .wpbkp архив, созданный этим плагином."
 
@@ -320,7 +333,9 @@ msgstr "Не удалось закодировать манифест полно
 msgid ""
 "Some themes already exist on this site. Merge overwrites matching files; "
 "Replace removes the whole theme directory first."
-msgstr "Некоторые темы уже установлены на этом сайте. Merge перезаписывает совпадающие файлы; Replace сначала удаляет всю директорию темы."
+msgstr ""
+"Некоторые темы уже установлены на этом сайте. Merge перезаписывает "
+"совпадающие файлы; Replace сначала удаляет всю директорию темы."
 
 #: views/admin/theme-preview.php:20
 msgid "Choose theme import mode"
@@ -331,9 +346,11 @@ msgstr "Выберите режим импорта темы"
 msgid ""
 "A full-site export that exhausts RAM can trigger the Linux OOM killer and "
 "stop PHP-FPM for the whole site."
-msgstr "Экспорт всего сайта, исчерпывающий RAM, может вызвать OOM killer в Linux и остановить PHP-FPM для всего сайта."
+msgstr ""
+"Экспорт всего сайта, исчерпывающий RAM, может вызвать OOM killer в Linux и "
+"остановить PHP-FPM для всего сайта."
 
-#: includes/Admin/AdminPageController.php:498
+#: includes/Admin/AdminPageController.php:500
 msgid "User selection data is empty. Restart the import."
 msgstr "Данные выбора пользователей пусты. Запустите импорт заново."
 
@@ -359,8 +376,9 @@ msgstr "Файл архива не читается."
 
 #: includes/Admin/Services/ImportPreflightService.php:315
 msgid "Full import will replace database content and files from the archive."
-msgstr "Полный импорт заменит содержимое БД и файлы из архива."
-"Полный импорт заменит содержимое базы данных и файлы данными из архива."
+msgstr ""
+"Полный импорт заменит содержимое БД и файлы из архива.Полный импорт заменит "
+"содержимое базы данных и файлы данными из архива."
 
 #: includes/Admin/Services/ImportPreflightService.php:396
 msgid "Use “Start import” below; theme import will show its confirmation step."
@@ -374,12 +392,12 @@ msgstr "Чанковая загрузка"
 msgid "Streaming archive… %d%"
 msgstr "Передача архива… %d%"
 
-#: includes/Admin/AdminPageController.php:445
+#: includes/Admin/AdminPageController.php:446
 msgid "Chunk download failed."
 msgstr "Не удалось скачать фрагмент архива."
 
 #: includes/Admin/AdminPageController.php:381
-#: includes/Admin/AdminPageController.php:452
+#: includes/Admin/AdminPageController.php:454
 msgctxt "kilobytes unit abbreviation"
 msgid "KB"
 msgstr "КБ"
@@ -398,14 +416,14 @@ msgstr "Пакет (несколько элементов)"
 msgid "Archive role"
 msgstr "Роль в архиве"
 
-#: includes/Admin/AdminPageController.php:571
+#: includes/Admin/AdminPageController.php:573
 #: includes/Admin/Services/ThemeImportService.php:134
 msgid "You are not allowed to continue this theme import."
 msgstr "У вас нет прав для продолжения импорта темы."
 
-#: includes/Admin/AdminPageController.php:597
-#: includes/Admin/AdminPageController.php:624
-#: includes/Admin/AdminPageController.php:687
+#: includes/Admin/AdminPageController.php:599
+#: includes/Admin/AdminPageController.php:626
+#: includes/Admin/AdminPageController.php:689
 msgid "Insufficient permissions."
 msgstr "Недостаточно прав."
 
@@ -417,7 +435,7 @@ msgstr "Внимание:"
 msgid "Import request failed. Check PHP error logs and try again."
 msgstr "Запрос импорта не удался. Проверьте логи PHP и попробуйте снова."
 
-#: includes/Admin/AdminPageController.php:632
+#: includes/Admin/AdminPageController.php:634
 msgid "No backup file specified."
 msgstr "Файл резервной копии не указан."
 
@@ -456,8 +474,10 @@ msgstr ""
 
 #: includes/Admin/Services/ImportFileValidator.php:81
 msgid "Invalid file type. Upload a .wpbkp archive created by this plugin."
-msgstr "Недопустимый тип файла. Загрузите архив .wpbkp, созданный этим плагином."
-"Недопустимый тип файла. Загрузите .wpbkp архив, созданный этим плагином."
+msgstr ""
+"Недопустимый тип файла. Загрузите архив .wpbkp, созданный этим "
+"плагином.Недопустимый тип файла. Загрузите .wpbkp архив, созданный этим "
+"плагином."
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:125
 #: includes/Filesystem/ThemeExporter.php:56
@@ -500,11 +520,11 @@ msgstr "Пакет пуст."
 msgid "Selected content"
 msgstr "Выбранный контент"
 
-#: includes/Admin/AdminPageController.php:447
+#: includes/Admin/AdminPageController.php:449
 msgid "File read error"
 msgstr "Ошибка чтения файла"
 
-#: includes/Admin/AdminPageController.php:665
+#: includes/Admin/AdminPageController.php:667
 msgid "Import lock released successfully."
 msgstr "Блокировка импорта успешно снята."
 
@@ -512,7 +532,7 @@ msgstr "Блокировка импорта успешно снята."
 msgid "Archive payload is missing on disk."
 msgstr "Полезная нагрузка архива отсутствует на диске."
 
-#: includes/Admin/AdminPageController.php:487
+#: includes/Admin/AdminPageController.php:489
 msgid "User selection session expired. Please upload the archive again."
 msgstr "Сессия выбора пользователей истекла. Загрузите архив снова."
 
@@ -547,20 +567,22 @@ msgid "MksDdn Migrate Content requires WordPress 6.2+ and PHP 8.0+."
 msgstr "Для MksDdn Migrate Content нужны WordPress 6.2+ и PHP 8.0+."
 
 #: includes/Admin/AdminPageController.php:380
-#: includes/Admin/AdminPageController.php:451
+#: includes/Admin/AdminPageController.php:453
 msgctxt "bytes unit abbreviation"
 msgid "B"
 msgstr "Б"
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:648
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:649
 msgid ""
 "Import failed due to insufficient PHP memory. Increase memory_limit in "
 "php.ini or wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) and try "
 "again."
-msgstr "Импорт не удался из-за нехватки памяти PHP. Увеличьте memory_limit в php.ini или wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) и попробуйте снова."
+msgstr ""
+"Импорт не удался из-за нехватки памяти PHP. Увеличьте memory_limit в php.ini "
+"или wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) и попробуйте снова."
 
 #: includes/Admin/AdminPageController.php:379
-#: includes/Admin/AdminPageController.php:450
+#: includes/Admin/AdminPageController.php:452
 msgctxt "file size: value and unit"
 msgid "%1$s %2$s"
 msgstr "%1$s %2$s"
@@ -581,13 +603,13 @@ msgstr "Дамп БД пуст или некорректен."
 msgid "Invalid request."
 msgstr "Недопустимый запрос."
 
-#: includes/Admin/AdminPageController.php:656
+#: includes/Admin/AdminPageController.php:658
 #: includes/Admin/Handlers/UserMergeRequestHandler.php:62
 #: includes/Admin/Handlers/ThemePreviewRequestHandler.php:62
 msgid "Sorry, you are not allowed to perform this action."
 msgstr "У вас нет прав для этого действия."
 
-#: includes/Admin/AdminPageController.php:705
+#: includes/Admin/AdminPageController.php:707
 msgid "Invalid post type."
 msgstr "Недопустимый тип записи."
 
@@ -601,12 +623,12 @@ msgstr "Не удалось прочитать JSON файл."
 
 #: includes/Admin/Services/ImportFileValidator.php:86
 #: includes/Admin/Services/ImportPayloadPreparer.php:80
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:339
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:340
 #: includes/Admin/Services/ImportTypeDetector.php:66
 msgid "Unsupported file extension. Use .wpbkp or .json."
 msgstr "Неподдерживаемое расширение. Используйте .wpbkp или .json."
 
-#: includes/Admin/AdminPageController.php:492
+#: includes/Admin/AdminPageController.php:494
 msgid "You are not allowed to continue this user selection."
 msgstr "У вас нет прав для продолжения выбора пользователей."
 
@@ -624,7 +646,10 @@ msgid ""
 "Export aborted while reading table %s: PHP memory usage is critically high. "
 "Free server memory, raise memory_limit modestly (not multi-GB on small VPS), "
 "or export from staging."
-msgstr "Экспорт прерван при чтении таблицы %s: использование памяти PHP критически высокое. Освободите память, умеренно увеличьте memory_limit (не до многих ГБ на маленьком VPS) или экспортируйте со staging."
+msgstr ""
+"Экспорт прерван при чтении таблицы %s: использование памяти PHP критически "
+"высокое. Освободите память, умеренно увеличьте memory_limit (не до многих ГБ "
+"на маленьком VPS) или экспортируйте со staging."
 
 #: views/admin/preflight-report.php:326
 msgid "Update"
@@ -649,10 +674,14 @@ msgstr "У вас нет прав на экспорт."
 msgid "Replace with archive"
 msgstr "Заменить данными из архива"
 
+#: includes/Admin/AdminPageController.php:442
+msgid "Full site export was cancelled."
+msgstr "Экспорт всего сайта отменён."
+
 #: includes/Admin/Services/ThemeImportService.php:327
-#: includes/Admin/Services/FullSiteImportService.php:503
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:492
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:604
+#: includes/Admin/Services/FullSiteImportService.php:502
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:493
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:605
 #: includes/Services/ErrorHandler.php:131
 msgid "Failed to move uploaded file. Check permissions."
 msgstr "Не удалось переместить загруженный файл. Проверьте права."
@@ -673,14 +702,16 @@ msgstr "ABSPATH не определён."
 msgid ""
 "Select an import file from the server directory. You can delete unused "
 "backups from the server."
-msgstr "Выберите файл импорта из директории на сервере. Неиспользуемые резервные копии можно удалить с сервера."
+msgstr ""
+"Выберите файл импорта из директории на сервере. Неиспользуемые резервные "
+"копии можно удалить с сервера."
 
-#: includes/Admin/AdminPageController.php:566
+#: includes/Admin/AdminPageController.php:568
 #: includes/Admin/Services/ThemeImportService.php:129
 msgid "Theme import session expired. Please upload the archive again."
 msgstr "Сессия импорта темы истекла. Загрузите архив снова."
 
-#: includes/Filesystem/FullContentImporter.php:405
+#: includes/Filesystem/FullContentImporter.php:406
 msgid "Corrupted payload inside archive."
 msgstr "Повреждённая полезная нагрузка в архиве."
 
@@ -697,13 +728,13 @@ msgid ""
 "values on 1–2 GB servers. The exporter streams the database in chunks and "
 "refuses to start when disk/memory checks fail."
 msgstr ""
-"Экспорт всего сайта — тяжёлая операция. На маленьких VPS (мало RAM, нет swap) "
-"она может исчерпать память и вывести PHP-FPM из строя для всего сайта. "
+"Экспорт всего сайта — тяжёлая операция. На маленьких VPS (мало RAM, нет "
+"swap) она может исчерпать память и вывести PHP-FPM из строя для всего сайта. "
 "Предпочитайте staging, обеспечьте свободное место на диске и не поднимайте "
 "memory_limit до многих ГБ на серверах с 1–2 ГБ RAM. Экспортёр стримит БД "
 "чанками и отказывается стартовать при неудачных проверках диска/памяти."
 
-#: includes/Filesystem/FullContentImporter.php:605
+#: includes/Filesystem/FullContentImporter.php:606
 #: includes/Filesystem/ThemeImporter.php:238
 msgid "Unable to read \"%s\" from archive."
 msgstr "Не удалось прочитать «%s» из архива."
@@ -729,7 +760,7 @@ msgid "No overwrites — theme is new or paths do not collide."
 msgstr "Перезаписей нет — тема новая или пути не пересекаются."
 
 #: includes/Admin/Services/ThemeImportService.php:314
-#: includes/Admin/Services/FullSiteImportService.php:490
+#: includes/Admin/Services/FullSiteImportService.php:489
 msgid "Please upload a .wpbkp archive generated by this plugin."
 msgstr "Загрузите .wpbkp архив, созданный этим плагином."
 
@@ -737,7 +768,7 @@ msgstr "Загрузите .wpbkp архив, созданный этим пла
 msgid "Payload type: %s"
 msgstr "Тип данных: %s"
 
-#: includes/Chunking/ChunkRestController.php:252
+#: includes/Chunking/ChunkRestController.php:257
 msgid "Job data not found."
 msgstr "Данные задачи не найдены."
 
@@ -750,8 +781,8 @@ msgid ""
 "Do not set multi-GB memory_limit on small VPS hosts — that can trigger the "
 "OOM killer and stop PHP-FPM for all sites."
 msgstr ""
-"Не задавайте memory_limit в несколько ГБ на маленьких VPS — это может вызвать "
-"OOM killer и остановить PHP-FPM для всех сайтов."
+"Не задавайте memory_limit в несколько ГБ на маленьких VPS — это может "
+"вызвать OOM killer и остановить PHP-FPM для всех сайтов."
 
 #: includes/Admin/Services/ServerBackupScanner.php:109
 msgid "Failed to scan imports directory."
@@ -761,7 +792,7 @@ msgstr "Не удалось просканировать каталог импо
 msgid "Failed to import content."
 msgstr "Не удалось импортировать контент."
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:707
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:708
 msgid "Continue"
 msgstr "Продолжить"
 
@@ -798,7 +829,7 @@ msgid "Run preflight"
 msgstr "Запустить предпроверку"
 
 #: includes/Admin/Services/SelectedContentImportService.php:232
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:331
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:332
 msgid "File upload security check failed."
 msgstr "Проверка безопасности загрузки не пройдена."
 
@@ -816,7 +847,9 @@ msgstr ""
 msgid ""
 "Full-site export writes a large temporary JSON dump and ZIP. Running out of "
 "disk or RAM can take down PHP-FPM for the whole site."
-msgstr "Экспорт всего сайта создаёт большой временный JSON-дамп и ZIP. Нехватка диска или RAM может вывести PHP-FPM из строя для всего сайта."
+msgstr ""
+"Экспорт всего сайта создаёт большой временный JSON-дамп и ZIP. Нехватка "
+"диска или RAM может вывести PHP-FPM из строя для всего сайта."
 
 #: includes/Validation/ArchiveValidator.php:91
 msgid "Manifest version is missing."
@@ -836,9 +869,10 @@ msgstr "Загрузка из браузера"
 
 #: includes/Admin/Services/ImportPreflightService.php:167
 msgid "Some slugs already exist on this site; existing posts may be updated."
-msgstr "Некоторые slug уже существуют на этом сайте; существующие записи могут быть обновлены."
-"Некоторые slug уже есть на этом сайте; существующие записи могут быть "
-"обновлены."
+msgstr ""
+"Некоторые slug уже существуют на этом сайте; существующие записи могут быть "
+"обновлены.Некоторые slug уже есть на этом сайте; существующие записи могут "
+"быть обновлены."
 
 #: views/admin/theme-preview.php:26
 msgid ""
@@ -868,7 +902,6 @@ msgstr "Некорректная структура JSON."
 
 #: includes/Filesystem/FullContentExporter.php:74
 #: includes/Filesystem/ThemeExporter.php:61
-#: includes/Chunking/ChunkRestController.php:192
 msgid "Unable to create export directory."
 msgstr "Не удалось создать каталог экспорта."
 
@@ -881,7 +914,7 @@ msgid "Remove"
 msgstr "Убрать"
 
 #: includes/Admin/Services/ThemeImportService.php:323
-#: includes/Admin/Services/FullSiteImportService.php:499
+#: includes/Admin/Services/FullSiteImportService.php:498
 #: includes/Validation/FileValidator.php:55
 msgid "Uploaded file could not be verified."
 msgstr "Загруженный файл не прошёл проверку."
@@ -902,7 +935,7 @@ msgstr "Не удалось добавить каталог в архив экс
 msgid "Post type"
 msgstr "Тип записи"
 
-#: includes/Admin/AdminPageController.php:446
+#: includes/Admin/AdminPageController.php:447
 msgid "Invalid chunk data from server."
 msgstr "С сервера получены некорректные данные фрагмента."
 
@@ -933,7 +966,7 @@ msgid ""
 "Insufficient disk space for theme import. Please free up space and try again."
 msgstr "Недостаточно места для импорта темы. Освободите место и повторите."
 
-#: includes/Filesystem/FullContentImporter.php:193
+#: includes/Filesystem/FullContentImporter.php:194
 msgid "Finalizing..."
 msgstr "Завершение..."
 
@@ -942,14 +975,17 @@ msgid ""
 "Full-site export streams the database to disk in chunks. If it still fails, "
 "free RAM on the server, avoid multi-GB memory_limit on small VPS hosts, or "
 "export from staging / WP-CLI."
-msgstr "Экспорт всего сайта стримит БД на диск чанками. Если всё равно не удаётся — освободите RAM, не поднимайте memory_limit до многих ГБ на маленьком VPS или экспортируйте со staging / WP-CLI."
+msgstr ""
+"Экспорт всего сайта стримит БД на диск чанками. Если всё равно не удаётся — "
+"освободите RAM, не поднимайте memory_limit до многих ГБ на маленьком VPS или "
+"экспортируйте со staging / WP-CLI."
 
 #: includes/Admin/AdminPageController.php:411
 msgid "Uploading chunks… %d%"
 msgstr "Загрузка чанков… %d%"
 
 #: includes/Admin/AdminPageController.php:377
-#: includes/Admin/AdminPageController.php:448
+#: includes/Admin/AdminPageController.php:450
 msgid "0 B"
 msgstr "0 Б"
 
@@ -958,14 +994,17 @@ msgid ""
 "Counts use Merge semantics: new paths are added, matching paths are "
 "overwritten. Replace mode removes the whole theme directory first, then "
 "writes all archive files."
-msgstr "Счётчики используют семантику Merge: новые пути добавляются, совпадающие перезаписываются. Replace сначала удаляет всю директорию темы, затем записывает файлы из архива."
+msgstr ""
+"Счётчики используют семантику Merge: новые пути добавляются, совпадающие "
+"перезаписываются. Replace сначала удаляет всю директорию темы, затем "
+"записывает файлы из архива."
 
-#: includes/Admin/AdminPageController.php:444
+#: includes/Admin/AdminPageController.php:445
 msgid "Invalid export response from server."
 msgstr "Недопустимый ответ сервера при экспорте."
 
 #: includes/Admin/AdminPageController.php:384
-#: includes/Admin/AdminPageController.php:455
+#: includes/Admin/AdminPageController.php:457
 msgctxt "terabytes unit abbreviation"
 msgid "TB"
 msgstr "ТБ"
@@ -974,13 +1013,13 @@ msgstr "ТБ"
 msgid "Include %s"
 msgstr "Включить %s"
 
-#: includes/Admin/AdminPageController.php:700
+#: includes/Admin/AdminPageController.php:702
 msgid "Post type is required."
 msgstr "Тип записи обязателен."
 
 #: includes/Admin/Services/ThemeImportService.php:309
 #: includes/Admin/Services/ImportFileValidator.php:41
-#: includes/Admin/Services/FullSiteImportService.php:485
+#: includes/Admin/Services/FullSiteImportService.php:484
 #: includes/Services/ErrorHandler.php:127
 #: includes/Validation/FileValidator.php:61
 msgid "Invalid file size."
@@ -1010,9 +1049,11 @@ msgstr "Выберите файл на сервере."
 msgid ""
 "The server timed out while waiting for the import response. The import may "
 "still be running; check the site before starting it again."
-msgstr "Сервер не дождался ответа импорта. Импорт может ещё выполняться — проверьте сайт, прежде чем запускать снова."
+msgstr ""
+"Сервер не дождался ответа импорта. Импорт может ещё выполняться — проверьте "
+"сайт, прежде чем запускать снова."
 
-#: includes/Filesystem/FullContentImporter.php:340
+#: includes/Filesystem/FullContentImporter.php:341
 msgid "Unable to read database payload from archive."
 msgstr "Не удалось прочитать данные БД из архива."
 
@@ -1097,9 +1138,11 @@ msgstr "Ошибки"
 msgid ""
 "Upload backup file. Drop a .wpbkp or .json file here, or press Enter to "
 "browse."
-msgstr "Загрузите файл резервной копии. Перетащите .wpbkp или .json сюда или нажмите Enter для выбора."
+msgstr ""
+"Загрузите файл резервной копии. Перетащите .wpbkp или .json сюда или нажмите "
+"Enter для выбора."
 
-#: includes/Filesystem/FullContentImporter.php:186
+#: includes/Filesystem/FullContentImporter.php:187
 msgid "Extracting files..."
 msgstr "Извлечение файлов..."
 
@@ -1115,19 +1158,23 @@ msgstr "Недопустимый поток для экспорта базы д�
 msgid "Themes in archive: %d"
 msgstr "Тем в архиве: %d"
 
+#: includes/Chunking/ChunkRestController.php:249
+msgid "Export archive is not ready yet."
+msgstr "Архив экспорта ещё не готов."
+
 #: includes/Admin/Services/ServerBackupScanner.php:288
 msgid "Unable to determine import file size."
 msgstr "Не удалось определить размер файла импорта."
 
-#: includes/Support/FullImportMaintenance.php:131
+#: includes/Support/FullImportMaintenance.php:132
 msgid "Service Unavailable"
 msgstr "Сервис недоступен"
 
-#: includes/Admin/AdminPageController.php:531
+#: includes/Admin/AdminPageController.php:533
 msgid "Preflight report expired or not found. Run preflight again."
-msgstr "Отчёт preflight истёк или не найден. Запустите preflight снова."
-"Срок действия отчёта проверки истёк или отчёт не найден. Запустите проверку "
-"снова."
+msgstr ""
+"Отчёт preflight истёк или не найден. Запустите preflight снова.Срок действия "
+"отчёта проверки истёк или отчёт не найден. Запустите проверку снова."
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:155
 msgid "Export file not found."
@@ -1158,6 +1205,14 @@ msgstr "Полезная нагрузка архива повреждена ил
 msgid "Invalid file path."
 msgstr "Недопустимый путь к файлу."
 
+#: includes/Chunking/ChunkRestController.php:220
+msgid ""
+"Could not start the background export. Please check that WordPress Cron is "
+"available and try again."
+msgstr ""
+"Не удалось запустить фоновый экспорт. Убедитесь, что WordPress Cron "
+"доступен, и повторите попытку."
+
 #: includes/Admin/Views/AdminPageView.php:146
 msgid "Select from server"
 msgstr "Выбрать с сервера"
@@ -1171,7 +1226,7 @@ msgstr "Нажмите «Начать импорт» ниже, чтобы вып
 
 #: includes/Admin/Services/ImportFileValidator.php:33
 #: includes/Admin/Services/SelectedContentImportService.php:225
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:325
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:326
 #: includes/Validation/FileValidator.php:50
 msgid "Failed to upload file."
 msgstr "Не удалось загрузить файл."
@@ -1181,7 +1236,7 @@ msgid "Slug"
 msgstr "Ярлык"
 
 #: includes/Admin/Services/ThemeImportService.php:299
-#: includes/Admin/Services/FullSiteImportService.php:476
+#: includes/Admin/Services/FullSiteImportService.php:475
 #: includes/Services/ErrorHandler.php:126
 msgid "No file uploaded."
 msgstr "Файл не загружен."
@@ -1214,6 +1269,10 @@ msgstr "Отчёт проверки (изменения не вносились)
 msgid "Only .wpbkp and .json files are supported."
 msgstr "Поддерживаются только файлы .wpbkp и .json."
 
+#: includes/Chunking/ChunkRestController.php:213
+msgid "WordPress could not schedule the export task."
+msgstr "WordPress не смог запланировать задачу экспорта."
+
 #: includes/Admin/AdminPageController.php:427
 msgid "Upload failed. Please retry."
 msgstr "Загрузка не удалась. Повторите попытку."
@@ -1227,24 +1286,28 @@ msgid "Failed to delete import file."
 msgstr "Не удалось удалить файл импорта."
 
 #: includes/Admin/AdminPageController.php:382
-#: includes/Admin/AdminPageController.php:453
+#: includes/Admin/AdminPageController.php:455
 msgctxt "megabytes unit abbreviation"
 msgid "MB"
 msgstr "МБ"
+
+#: includes/Chunking/FullExportBuilder.php:128
+msgid "Unexpected error while building the export archive."
+msgstr "Непредвиденная ошибка при сборке архива экспорта."
 
 #: views/admin/format-selector.php:17
 msgid ".json (content only, editable)"
 msgstr ".json (только контент, редактируемый)"
 
-#: includes/Filesystem/FullContentImporter.php:614
+#: includes/Filesystem/FullContentImporter.php:615
 #: includes/Filesystem/ThemeImporter.php:246
 msgid "Unable to write \"%s\". Check permissions."
 msgstr "Не удалось записать «%s». Проверьте права."
 
 #: includes/Admin/Services/ThemeImportService.php:319
-#: includes/Admin/Services/FullSiteImportService.php:495
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:488
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:600
+#: includes/Admin/Services/FullSiteImportService.php:494
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:489
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:601
 msgid "Unable to allocate a temporary file for import."
 msgstr "Не удалось создать временный файл для импорта."
 
@@ -1266,7 +1329,7 @@ msgstr "Выберите, как применить архив темы к эт�
 msgid "Unsupported file extension."
 msgstr "Неподдерживаемое расширение файла."
 
-#: includes/Admin/AdminPageController.php:790
+#: includes/Admin/AdminPageController.php:792
 msgid "Release Lock"
 msgstr "Снять блокировку"
 
@@ -1274,9 +1337,9 @@ msgstr "Снять блокировку"
 msgid "Server file"
 msgstr "Файл на сервере"
 
-#: includes/Admin/AdminPageController.php:480
-#: includes/Admin/AdminPageController.php:526
-#: includes/Admin/AdminPageController.php:559
+#: includes/Admin/AdminPageController.php:482
+#: includes/Admin/AdminPageController.php:528
+#: includes/Admin/AdminPageController.php:561
 msgid "You do not have permission to access this page."
 msgstr "У вас нет доступа к этой странице."
 
@@ -1284,7 +1347,7 @@ msgstr "У вас нет доступа к этой странице."
 msgid "Files to overwrite (%d)"
 msgstr "Файлов для перезаписи (%d)"
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:446
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:447
 msgid "Invalid file source."
 msgstr "Недопустимый источник файла."
 
@@ -1293,11 +1356,11 @@ msgstr "Недопустимый источник файла."
 msgid "Server is processing the archive…"
 msgstr "Сервер обрабатывает архив…"
 
-#: includes/Admin/AdminPageController.php:475
-#: includes/Admin/AdminPageController.php:522
-#: includes/Admin/AdminPageController.php:554
+#: includes/Admin/AdminPageController.php:477
+#: includes/Admin/AdminPageController.php:524
+#: includes/Admin/AdminPageController.php:556
 #: includes/Admin/Services/ThemeImportService.php:101
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:169
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:170
 msgid "Security check failed."
 msgstr "Проверка безопасности не пройдена."
 
@@ -1359,7 +1422,8 @@ msgstr "Новый пользователь"
 
 #: includes/Admin/AdminPageController.php:352
 msgid "Delete this backup file from the server? This cannot be undone."
-msgstr "Удалить этот файл резервной копии с сервера? Это действие нельзя отменить."
+msgstr ""
+"Удалить этот файл резервной копии с сервера? Это действие нельзя отменить."
 
 #: includes/Admin/AdminPageController.php:414
 msgid ""
@@ -1378,11 +1442,11 @@ msgstr ""
 msgid "Content type: %s"
 msgstr "Тип контента: %s"
 
-#: includes/Chunking/ChunkRestController.php:259
+#: includes/Chunking/ChunkRestController.php:264
 msgid "Unable to read chunk."
 msgstr "Не удалось прочитать чанк."
 
-#: includes/Support/FullImportMaintenance.php:130
+#: includes/Support/FullImportMaintenance.php:131
 msgid ""
 "Site maintenance: database import in progress. Please try again shortly."
 msgstr ""
@@ -1410,7 +1474,10 @@ msgid ""
 "Not enough free disk space for full-site export. About %1$s is required in "
 "the temp directory, but only %2$s is available (%3$s). Free disk space or "
 "export on a larger server / staging copy."
-msgstr "Недостаточно свободного места для экспорта всего сайта. В temp нужно около %1$s, доступно только %2$s (%3$s). Освободите место или экспортируйте на более крупном сервере / staging."
+msgstr ""
+"Недостаточно свободного места для экспорта всего сайта. В temp нужно около "
+"%1$s, доступно только %2$s (%3$s). Освободите место или экспортируйте на "
+"более крупном сервере / staging."
 
 #: includes/Archive/Extractor.php:106
 #: includes/Admin/Services/ImportPreflightService.php:409
@@ -1427,13 +1494,16 @@ msgid ""
 "PHP memory_limit is too low for full-site export (%1$s). Raise it to at "
 "least %2$s (wp-config.php / php.ini) or run the export on a staging server "
 "with more resources."
-msgstr "memory_limit PHP слишком низкий для экспорта всего сайта (%1$s). Поднимите минимум до %2$s (wp-config.php / php.ini) или выполните экспорт на staging с большими ресурсами."
+msgstr ""
+"memory_limit PHP слишком низкий для экспорта всего сайта (%1$s). Поднимите "
+"минимум до %2$s (wp-config.php / php.ini) или выполните экспорт на staging с "
+"большими ресурсами."
 
-#: includes/Chunking/ChunkRestController.php:248
+#: includes/Chunking/ChunkRestController.php:253
 msgid "Chunk index out of bounds."
 msgstr "Индекс чанка вне диапазона."
 
-#: includes/Admin/AdminPageController.php:443
+#: includes/Admin/AdminPageController.php:444
 msgid "Export request failed."
 msgstr "Запрос экспорта не выполнен."
 
@@ -1449,7 +1519,7 @@ msgstr "%s успешно импортирован!"
 msgid "Potential user email conflicts: %d"
 msgstr "Возможных конфликтов email пользователей: %d"
 
-#: includes/Filesystem/FullContentImporter.php:173
+#: includes/Filesystem/FullContentImporter.php:174
 msgid "Importing database..."
 msgstr "Импорт базы данных..."
 
@@ -1485,13 +1555,13 @@ msgstr "Импортирована тема: %s"
 msgid "Error loading entries"
 msgstr "Ошибка загрузки записей"
 
-#: includes/Admin/AdminPageController.php:786
+#: includes/Admin/AdminPageController.php:788
 msgid ""
 "An import operation appears to be running or was interrupted. Lock age: %s "
 "minutes."
 msgstr "Похоже, импорт выполняется или был прерван. Блокировка: %s мин."
 
-#: includes/Filesystem/FullContentImporter.php:697
+#: includes/Filesystem/FullContentImporter.php:700
 msgid "Unable to prepare theme backup directory."
 msgstr "Не удалось подготовить каталог резервной копии темы."
 
@@ -1525,11 +1595,11 @@ msgstr "Удалить"
 msgid "%1$d of %2$d users selected"
 msgstr "Выбрано %1$d из %2$d пользователей"
 
-#: includes/Admin/AdminPageController.php:783
+#: includes/Admin/AdminPageController.php:785
 msgid "Import is currently locked"
 msgstr "Импорт заблокирован"
 
-#: includes/Filesystem/FullContentImporter.php:707
+#: includes/Filesystem/FullContentImporter.php:710
 msgid "Failed to backup existing theme: %s"
 msgstr "Не удалось создать резервную копию существующей темы: %s"
 
@@ -1562,7 +1632,7 @@ msgstr "Манифест пуст."
 msgid "Theme import complete"
 msgstr "Импорт темы завершён"
 
-#: includes/Filesystem/FullContentImporter.php:199
+#: includes/Filesystem/FullContentImporter.php:200
 msgid "Import complete"
 msgstr "Импорт завершён"
 
@@ -1574,12 +1644,14 @@ msgstr "Записи не найдены"
 msgid "Validation failed. Please check your input."
 msgstr "Ошибка проверки. Проверьте введённые данные."
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:389
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:390
 msgid "Staged import file is missing. Run preflight again."
-msgstr "Промежуточный файл импорта отсутствует. Запустите preflight снова."
-"Подготовленный для импорта файл не найден. Выполните предпроверку снова."
+msgstr ""
+"Промежуточный файл импорта отсутствует. Запустите preflight "
+"снова.Подготовленный для импорта файл не найден. Выполните предпроверку "
+"снова."
 
-#: includes/Admin/AdminPageController.php:667
+#: includes/Admin/AdminPageController.php:669
 msgid "No active import lock found."
 msgstr "Активная блокировка импорта не найдена."
 
@@ -1595,11 +1667,13 @@ msgstr "Существующий пользователь"
 msgid "Could not read source file for export: %s"
 msgstr "Не удалось прочитать исходный файл для экспорта: %s"
 
-#: includes/Database/FullDatabaseExporter.php:304
+#: includes/Database/FullDatabaseExporter.php:303
 msgid ""
 "Failed to write database export data to temporary storage. Check free disk "
 "space."
-msgstr "Не удалось записать данные экспорта БД во временное хранилище. Проверьте свободное место на диске."
+msgstr ""
+"Не удалось записать данные экспорта БД во временное хранилище. Проверьте "
+"свободное место на диске."
 
 #: includes/Admin/AdminPageController.php:412
 msgid "Chunked upload failed. Please try again."
@@ -1627,7 +1701,7 @@ msgid "Post"
 msgstr "Запись"
 
 #: includes/Admin/Services/ThemeImportService.php:257
-#: includes/Admin/Services/FullSiteImportService.php:412
+#: includes/Admin/Services/FullSiteImportService.php:411
 #: includes/Services/ErrorHandler.php:128
 msgid "Chunked uploads are disabled on this site."
 msgstr "Чанковая загрузка отключена на этом сайте."
@@ -1656,7 +1730,9 @@ msgstr "Файл: %s"
 msgid ""
 "File counts below assume Merge mode (add new files, overwrite existing "
 "paths). Replace would wipe existing theme folders before writing."
-msgstr "Счётчики файлов ниже предполагают режим Merge (добавление новых, перезапись существующих). Replace сначала удалит папки тем."
+msgstr ""
+"Счётчики файлов ниже предполагают режим Merge (добавление новых, перезапись "
+"существующих). Replace сначала удалит папки тем."
 
 #: views/admin/preflight-report.php:138
 msgid "Slug overlap with existing content: %d"
@@ -1678,9 +1754,9 @@ msgstr "Полезная нагрузка полного архива пуста
 msgid "Failed to finalize export payload file."
 msgstr "Не удалось завершить формирование файла полезной нагрузки экспорта."
 
-#: includes/Admin/AdminPageController.php:593
-#: includes/Admin/AdminPageController.php:620
-#: includes/Admin/AdminPageController.php:683
+#: includes/Admin/AdminPageController.php:595
+#: includes/Admin/AdminPageController.php:622
+#: includes/Admin/AdminPageController.php:685
 msgid "Invalid security token."
 msgstr "Недопустимый токен безопасности."
 
@@ -1697,7 +1773,7 @@ msgstr "+%d добавление"
 msgid "Invalid import file type. Only .wpbkp and .json files are supported."
 msgstr "Недопустимый тип файла. Поддерживаются только .wpbkp и .json."
 
-#: includes/Config/PluginConfig.php:449
+#: includes/Config/PluginConfig.php:453
 msgid "Failed to create required directories: %s"
 msgstr "Не удалось создать каталоги: %s"
 
@@ -1707,7 +1783,10 @@ msgid ""
 "is required, but the current limit is %3$d MB. Increase memory_limit in "
 "php.ini or wp-config.php (define WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT), "
 "then try again."
-msgstr "Недостаточно памяти PHP для чтения полезной нагрузки архива (%1$s МБ). Нужно около %2$d МБ, текущий лимит — %3$d МБ. Увеличьте memory_limit в php.ini или wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) и попробуйте снова."
+msgstr ""
+"Недостаточно памяти PHP для чтения полезной нагрузки архива (%1$s МБ). Нужно "
+"около %2$d МБ, текущий лимит — %3$d МБ. Увеличьте memory_limit в php.ini или "
+"wp-config.php (WP_MEMORY_LIMIT / WP_MAX_MEMORY_LIMIT) и попробуйте снова."
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:92
 #: includes/Admin/Handlers/ExportRequestHandler.php:130
@@ -1720,9 +1799,10 @@ msgstr "v%s"
 
 #: includes/Admin/Services/ImportPreflightService.php:172
 msgid "Archive includes media files; real import will write uploads."
-msgstr "Архив включает медиафайлы; при реальном импорте они будут записаны в uploads."
-"В архиве есть медиафайлы; при реальном импорте файлы будут записаны в "
-"каталог загрузок."
+msgstr ""
+"Архив включает медиафайлы; при реальном импорте они будут записаны в "
+"uploads.В архиве есть медиафайлы; при реальном импорте файлы будут записаны "
+"в каталог загрузок."
 
 #: includes/Admin/Services/NotificationService.php:114
 msgid "HTTP redirect status code must be a redirection code, 3xx."
@@ -1833,7 +1913,7 @@ msgid "File not found."
 msgstr "Файл не найден."
 
 #: includes/Admin/AdminPageController.php:383
-#: includes/Admin/AdminPageController.php:454
+#: includes/Admin/AdminPageController.php:456
 msgctxt "gigabytes unit abbreviation"
 msgid "GB"
 msgstr "ГБ"
@@ -1887,7 +1967,7 @@ msgstr "Не удалось закодировать данные экспорт
 msgid "Invalid full site manifest structure."
 msgstr "Некорректная структура манифеста полного сайта."
 
-#: includes/Chunking/ChunkRestController.php:208
+#: includes/Chunking/FullExportBuilder.php:101
 msgid "Export file is empty or cannot be read."
 msgstr "Файл экспорта пуст или не читается."
 
@@ -1940,7 +2020,7 @@ msgid "Template not found: "
 msgstr "Шаблон не найден: "
 
 #: includes/Admin/AdminPageController.php:353
-#: includes/Admin/AdminPageController.php:643
+#: includes/Admin/AdminPageController.php:645
 msgid "Backup file deleted."
 msgstr "Файл резервной копии удалён."
 
@@ -1968,11 +2048,11 @@ msgstr "Файл полезной нагрузки экспорта пуст п�
 msgid "Choose file format:"
 msgstr "Выберите формат файла:"
 
-#: includes/Admin/Services/UnifiedImportOrchestrator.php:272
+#: includes/Admin/Services/UnifiedImportOrchestrator.php:273
 msgid "Chunked upload job not found."
 msgstr "Задача чанковой загрузки не найдена."
 
-#: includes/Filesystem/FullContentImporter.php:164
+#: includes/Filesystem/FullContentImporter.php:165
 #: includes/Filesystem/ThemeImporter.php:110
 msgid "Unable to open archive for import."
 msgstr "Не удалось открыть архив для импорта."
