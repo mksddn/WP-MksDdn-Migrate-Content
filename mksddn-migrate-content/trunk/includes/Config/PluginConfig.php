@@ -469,11 +469,41 @@ class PluginConfig {
 	 * @since 2.5.0
 	 */
 	public static function protect_existing_directories(): void {
-		foreach ( self::get_required_directories() as $dir ) {
+		$dirs = array_values( self::get_required_directories() );
+
+		foreach ( self::log_directory_candidates() as $dir ) {
+			$dirs[] = $dir;
+		}
+
+		foreach ( array_unique( array_filter( $dirs ) ) as $dir ) {
 			if ( is_dir( $dir ) ) {
 				FilesystemHelper::protect_directory_from_web( $dir );
 			}
 		}
+	}
+
+	/**
+	 * Resolve log directory paths that may be used (without creating them).
+	 *
+	 * Mirrors {@see logs_dir()} candidates so custom `mksddn_mc_logs_dir` paths
+	 * receive web guards after in-place upgrades.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function log_directory_candidates(): array {
+		$uploads_default = trailingslashit( self::uploads_base_dir() ) . 'logs/';
+		$private_default = trailingslashit( sys_get_temp_dir() ) . 'mksddn-mc-logs/';
+		$preferred_dir   = (string) apply_filters( 'mksddn_mc_logs_dir', $uploads_default );
+
+		if ( '' === $preferred_dir ) {
+			$preferred_dir = $uploads_default;
+		}
+
+		return array(
+			trailingslashit( wp_normalize_path( $preferred_dir ) ),
+			trailingslashit( wp_normalize_path( $uploads_default ) ),
+			trailingslashit( wp_normalize_path( $private_default ) ),
+		);
 	}
 }
 
