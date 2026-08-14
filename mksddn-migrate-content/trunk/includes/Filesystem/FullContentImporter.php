@@ -696,6 +696,10 @@ class FullContentImporter {
 				if ( ! wp_mkdir_p( $backup_root ) ) {
 					return new WP_Error( 'mksddn_mc_theme_backup_dir', __( 'Unable to prepare theme backup directory.', 'mksddn-migrate-content' ) );
 				}
+
+				FilesystemHelper::protect_directory_from_web( trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc' );
+				FilesystemHelper::protect_directory_from_web( trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups' );
+				FilesystemHelper::protect_directory_from_web( $backup_root );
 			}
 
 			$backup_path = trailingslashit( $backup_root ) . $slug;

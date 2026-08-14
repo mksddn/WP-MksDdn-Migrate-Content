@@ -10,6 +10,7 @@ namespace MksDdn\MigrateContent;
 use MksDdn\MigrateContent\Admin\AdminPageController;
 use MksDdn\MigrateContent\Chunking\ChunkRestController;
 use MksDdn\MigrateContent\Chunking\FullExportBuilder;
+use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Core\ServiceContainerFactory;
 use MksDdn\MigrateContent\Support\FullImportMaintenance;
 
@@ -47,8 +48,19 @@ class Plugin {
 	 */
 	public function register(): void {
 		add_action( 'plugins_loaded', array( $this, 'boot_rest' ), 5 );
+		add_action( 'plugins_loaded', array( $this, 'ensure_storage_protection' ), 6 );
 		add_action( 'init', array( FullImportMaintenance::class, 'maybe_block_public_requests' ), 0 );
 		add_action( 'init', array( $this, 'boot_admin' ) );
+	}
+
+	/**
+	 * Guard existing plugin storage directories on upgraded installs.
+	 *
+	 * @return void
+	 * @since 2.5.0
+	 */
+	public function ensure_storage_protection(): void {
+		PluginConfig::protect_existing_directories();
 	}
 
 	/**

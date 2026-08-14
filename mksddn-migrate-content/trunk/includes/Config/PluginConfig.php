@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Config;
 
 use MksDdn\MigrateContent\Services\PluginLogger;
+use MksDdn\MigrateContent\Support\FilesystemHelper;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -415,7 +416,7 @@ class PluginConfig {
 			'base'    => $base,
 			'jobs'    => $base . 'jobs/',
 			'imports' => $base . 'imports/',
-			'logs'    => self::logs_dir(),
+			'logs'    => $base . 'logs/',
 		);
 	}
 
@@ -430,14 +431,17 @@ class PluginConfig {
 		$failed = array();
 
 		foreach ( $directories as $key => $dir ) {
-			if ( ! is_dir( $dir ) ) {
-				if ( ! wp_mkdir_p( $dir ) ) {
-					$failed[ $key ] = $dir;
-					PluginLogger::log(
-						sprintf( 'Failed to create directory: %s', $dir ),
-						'PluginConfig'
-					);
-				}
+			if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+				$failed[ $key ] = $dir;
+				PluginLogger::log(
+					sprintf( 'Failed to create directory: %s', $dir ),
+					'PluginConfig'
+				);
+				continue;
+			}
+
+			if ( is_dir( $dir ) ) {
+				FilesystemHelper::protect_directory_from_web( $dir );
 			}
 		}
 
@@ -454,6 +458,38 @@ class PluginConfig {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Apply web-server guards to existing plugin storage directories.
+	 *
+	 * Idempotent; safe to run on every request for sites upgraded in place.
+	 *
+	 * @return void
+	 * @since 2.5.0
+	 */
+	public static function protect_existing_directories(): void {
+		foreach ( self::get_required_directories() as $dir ) {
+			if ( is_dir( $dir ) ) {
+				FilesystemHelper::protect_directory_from_web( $dir );
+			}
+		}
+
+		if ( ! defined( 'WP_CONTENT_DIR' ) ) {
+			return;
+		}
+
+		$wp_content_roots = array(
+			trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc',
+			trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups',
+			trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/runtime',
+		);
+
+		foreach ( $wp_content_roots as $dir ) {
+			if ( is_dir( $dir ) ) {
+				FilesystemHelper::protect_directory_from_web( $dir );
+			}
+		}
 	}
 }
 

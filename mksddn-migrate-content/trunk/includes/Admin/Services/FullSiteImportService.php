@@ -294,7 +294,6 @@ class FullSiteImportService {
 				}
 			} else {
 				$site_url_restored = true;
-				$this->normalize_plugin_storage();
 				$this->run_post_import_maintenance();
 			}
 		} finally {
@@ -508,19 +507,6 @@ class FullSiteImportService {
 		$result['original_name'] = $name;
 
 		return $result;
-	}
-
-
-	/**
-	 * Normalize storage paths for known plugins.
-	 *
-	 * @return void
-	 * @since 1.0.0
-	 */
-	private function normalize_plugin_storage(): void {
-		$target = trailingslashit( WP_CONTENT_DIR ) . 'ai1wm-backups';
-		wp_mkdir_p( $target );
-		update_option( 'mksddn_mc_storage_path', $target );
 	}
 
 	/**

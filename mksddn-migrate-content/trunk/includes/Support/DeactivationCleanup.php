@@ -32,6 +32,7 @@ final class DeactivationCleanup {
 	public static function run(): void {
 		self::delete_path_if_safe( self::jobs_directory_path() );
 		self::delete_path_if_safe( self::theme_backups_root() );
+		self::delete_path_if_safe( self::runtime_directory_path() );
 
 		/**
 		 * Whether to delete the server-side imports directory on deactivation.
@@ -82,6 +83,15 @@ final class DeactivationCleanup {
 	 */
 	private static function theme_backups_root(): string {
 		return trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/theme-backups/';
+	}
+
+	/**
+	 * Runtime directory under wp-content (full-site import lock).
+	 *
+	 * @return string
+	 */
+	private static function runtime_directory_path(): string {
+		return trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc/runtime/';
 	}
 
 	/**

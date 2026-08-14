@@ -40,6 +40,11 @@ class FullImportMaintenance {
 			wp_mkdir_p( $dir );
 		}
 
+		if ( is_dir( $dir ) ) {
+			FilesystemHelper::protect_directory_from_web( trailingslashit( WP_CONTENT_DIR ) . 'mksddn-mc' );
+			FilesystemHelper::protect_directory_from_web( $dir );
+		}
+
 		if ( is_dir( $dir ) && wp_is_writable( $dir ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Small runtime lock outside the database.
 			file_put_contents( $path, (string) time(), LOCK_EX );
