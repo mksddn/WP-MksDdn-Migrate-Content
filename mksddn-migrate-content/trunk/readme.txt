@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 2.5.0
+Stable tag: 2.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,11 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.6.0 =
+* Added: Background full-site export via WP-Cron with cancel from the admin UI.
+* Enhanced: Storage protection for plugin directories and ephemeral import paths.
+* Improved: Import source selector layout.
 
 = 2.5.0 =
 * Added: Delete unused backup files from the server imports directory.

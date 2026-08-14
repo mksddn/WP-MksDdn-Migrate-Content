@@ -466,7 +466,7 @@ class PluginConfig {
 	 * Idempotent; safe to run on every request for sites upgraded in place.
 	 *
 	 * @return void
-	 * @since 2.5.0
+	 * @since 2.6.0
 	 */
 	public static function protect_existing_directories(): void {
 		$dirs = array_values( self::get_required_directories() );

@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Runs the heavy full-site archive build outside the request/response cycle.
  *
- * @since 2.4.0
+ * @since 2.6.0
  */
 class FullExportBuilder {
 
@@ -39,7 +39,7 @@ class FullExportBuilder {
 	 * Constructor.
 	 *
 	 * @param ChunkJobRepositoryInterface $repository Chunk job repository.
-	 * @since 2.4.0
+	 * @since 2.6.0
 	 */
 	public function __construct( ChunkJobRepositoryInterface $repository ) {
 		$this->repository = $repository;
@@ -51,7 +51,7 @@ class FullExportBuilder {
 	 *
 	 * @param string $job_id Chunk job identifier.
 	 * @return void
-	 * @since 2.4.0
+	 * @since 2.6.0
 	 */
 	public function build( string $job_id ): void {
 		$job  = $this->repository->get( $job_id );

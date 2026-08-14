@@ -9,7 +9,7 @@
 Plugin Name: MksDdn Migrate Content
 Plugin URI: https://github.com/mksddn/WP-MksDdn-Migrate-Content
 Description: Reliable chunked WordPress migrations via custom .wpbkp archives — full site, selected content, and themes.
-Version: 2.5.0
+Version: 2.6.0
 Author: mksddn
 Author URI: https://github.com/mksddn
 Text Domain: mksddn-migrate-content
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constants.
-define( 'MKSDDN_MC_VERSION', '2.5.0' );
+define( 'MKSDDN_MC_VERSION', '2.6.0' );
 define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );

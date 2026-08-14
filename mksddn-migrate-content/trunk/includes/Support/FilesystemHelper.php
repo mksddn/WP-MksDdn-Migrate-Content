@@ -267,6 +267,7 @@ final class FilesystemHelper {
 	 *
 	 * @param string $dir Directory path.
 	 * @return void
+	 * @since 2.6.0
 	 */
 	public static function protect_directory_from_web( string $dir ): void {
 		$dir = untrailingslashit( wp_normalize_path( $dir ) );

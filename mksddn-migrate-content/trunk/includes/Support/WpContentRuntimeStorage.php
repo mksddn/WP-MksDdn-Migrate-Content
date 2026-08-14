@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * The tree is created only during full-site import and removed when idle.
  *
- * @since 2.5.0
+ * @since 2.6.0
  */
 final class WpContentRuntimeStorage {
 

@@ -57,7 +57,7 @@ class Plugin {
 	 * Guard existing plugin storage directories on upgraded installs.
 	 *
 	 * @return void
-	 * @since 2.5.0
+	 * @since 2.6.0
 	 */
 	public function ensure_storage_protection(): void {
 		PluginConfig::protect_existing_directories();
