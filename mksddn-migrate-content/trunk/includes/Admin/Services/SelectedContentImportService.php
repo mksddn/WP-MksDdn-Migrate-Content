@@ -123,7 +123,6 @@ class SelectedContentImportService {
 		$lock       = new ImportLock();
 		$lock_token = null;
 		$chunk_job_id = '';
-		$staged_path  = '';
 
 		try {
 			$lock_token = $lock->acquire();
@@ -160,13 +159,11 @@ class SelectedContentImportService {
 					$extension = 'wpbkp'; // Default to wpbkp for chunked uploads.
 				}
 
-				$chunk_name = isset( $_POST['mksddn_mc_import_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['mksddn_mc_import_original_name'] ) ) : '';
-				if ( '' === $chunk_name ) {
-					$chunk_name = isset( $_POST['chunk_job_id'] ) ? sprintf( 'chunk-%s.wpbkp', sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) ) : 'chunked-upload.wpbkp';
-				}
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+				$posted_name = isset( $_POST['mksddn_mc_import_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['mksddn_mc_import_original_name'] ) ) : '';
 
 				$file_data = array(
-					'name'      => $chunk_name,
+					'name'      => ImportArtifactCleanup::preferred_chunk_filename( $chunk_job_id, $posted_name ),
 					'path'      => $real_path,
 					'size'      => filesize( $real_path ),
 					'extension' => $extension,
@@ -196,8 +193,7 @@ class SelectedContentImportService {
 				}
 			} elseif ( $this->has_preflight_staged_request() ) {
 				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-				$raw_path    = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
-				$staged_path = $raw_path;
+				$raw_path = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
 				if ( ! PreflightStagingPath::is_allowed_path( $raw_path ) ) {
 					$this->notifications->redirect_with_notice( 'error', __( 'Invalid preflight file path.', 'mksddn-migrate-content' ) );
 					return;
@@ -250,6 +246,21 @@ class SelectedContentImportService {
 					$this->notifications->redirect_with_notice( 'error', $file_data->get_error_message() );
 					return;
 				}
+
+				$staged = ImportArtifactCleanup::stage_into_preflight(
+					(string) $file_data['path'],
+					(string) $file_data['name'],
+					(string) $file_data['extension']
+				);
+				if ( is_wp_error( $staged ) ) {
+					$this->notifications->redirect_with_notice( 'error', $staged->get_error_message() );
+					return;
+				}
+
+				$file_data['path'] = $staged['path'];
+				$file_data['name'] = $staged['name'];
+				$file_data['size'] = filesize( $staged['path'] );
+				$file_data['mime'] = MimeTypeHelper::detect( $staged['path'], $staged['extension'] );
 			}
 
 			$result = $this->payload_preparer->prepare(
@@ -281,10 +292,7 @@ class SelectedContentImportService {
 			$import_result = $this->process_import( $import_handler, $payload_type, $payload );
 
 			if ( $import_result ) {
-				$job = null;
-				if ( '' !== $chunk_job_id ) {
-					$job = ( new ChunkJobRepository() )->get( $chunk_job_id );
-				}
+				$job = ( '' !== $chunk_job_id ) ? ( new ChunkJobRepository() )->find( $chunk_job_id ) : null;
 				ImportArtifactCleanup::persist_for_reuse(
 					(string) ( $file_data['path'] ?? '' ),
 					(string) ( $file_data['name'] ?? '' ),

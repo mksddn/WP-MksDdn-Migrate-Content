@@ -139,7 +139,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ThemePreviewStore` (`Themes\ThemePreviewStore`) — stores pending theme import previews
 
 = Support & Maintenance =
-* `ImportArtifactCleanup` — after a successful import, renames the ephemeral archive into `imports/` (no second copy) and removes the chunk job
+* `ImportArtifactCleanup` — stages browser uploads into `preflight/`; after success renames ephemeral archives into `imports/` (no second multi-GB copy) and clears chunk job metadata; purges expired preflight files
 * `DeactivationCleanup` — clears temporary upload state and service directories when the plugin is deactivated
 * `PostImportMaintenance` — cache/rewrite cleanup after full import and emergency purge if the database was partially updated; global flush plus targeted `wp_cache_flush_group()` when supported; filter `mksddn_mc_post_import_object_cache_flush_groups`
 * `FullImportMaintenance` — file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
@@ -197,6 +197,7 @@ All key components implement interfaces:
 * Enhanced: Storage protection for plugin directories and ephemeral import paths.
 * Improved: Import source selector layout.
 * Fixed: Successful import keeps a single reusable copy of a browser/chunked backup: rename from `jobs/` or `preflight/` into `imports/` (no second full copy); `jobs/` is cleared. Files already in `imports/` are unchanged.
+* Fixed: Failed user-diff / prepare steps no longer delete staged `preflight/` or chunk job archives (retryable); direct uploads are staged under `preflight/` so promote-to-`imports/` stays same-volume.
 
 = 2.5.0 =
 * Added: Delete unused backup files from the server imports directory.

@@ -2,16 +2,15 @@
 /**
  * @file: UserMergeRequestHandler.php
  * @description: Handler for user merge request operations
- * @dependencies: Users\UserPreviewStore, Admin\Services\NotificationService, Support\FilesystemHelper, Chunking\ChunkJobRepository
+ * @dependencies: Users\UserPreviewStore, Admin\Services\NotificationService, Support\ImportArtifactCleanup
  * @created: 2024-12-15
  */
 
 namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\NotificationService;
-use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
-use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Users\UserPreviewStore;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -86,22 +85,9 @@ class UserMergeRequestHandler implements UserMergeRequestHandlerInterface {
 	 * @since 1.0.0
 	 */
 	private function cleanup_preview_resources( array $preview ): void {
-		$temp    = isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '';
-		$cleanup = ! empty( $preview['cleanup'] );
-		$job     = null;
-
-		if ( ! empty( $preview['chunk_job_id'] ) ) {
-			$repo = new ChunkJobRepository();
-			$job  = $repo->get( sanitize_text_field( (string) $preview['chunk_job_id'] ) );
-		}
-
-		if ( $cleanup && $temp && file_exists( $temp ) ) {
-			FilesystemHelper::delete( $temp );
-		}
-
-		if ( $job && method_exists( $job, 'delete' ) ) {
-			$job->delete();
-		}
+		$temp = isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '';
+		// Keep preflight/jobs/imports for reuse or TTL purge; only drop unmanaged PHP temps.
+		ImportArtifactCleanup::discard_unmanaged_temp( $temp );
 	}
 }
 
