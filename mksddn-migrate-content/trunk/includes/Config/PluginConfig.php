@@ -186,6 +186,19 @@ class PluginConfig {
 	}
 
 	/**
+	 * Get preflight staging directory for ephemeral browser uploads between import steps.
+	 *
+	 * Files here are deleted after import. User-placed backups stay in {@see imports_dir()}.
+	 *
+	 * @return string Preflight directory path.
+	 * @since 2.6.0
+	 */
+	public static function preflight_dir(): string {
+		$default = trailingslashit( self::uploads_base_dir() ) . 'preflight/';
+		return apply_filters( 'mksddn_mc_preflight_dir', $default );
+	}
+
+	/**
 	 * Get base uploads directory for plugin.
 	 *
 	 * @return string Base directory path.
@@ -413,10 +426,11 @@ class PluginConfig {
 		$base = self::uploads_base_dir();
 
 		return array(
-			'base'    => $base,
-			'jobs'    => $base . 'jobs/',
-			'imports' => $base . 'imports/',
-			'logs'    => $base . 'logs/',
+			'base'      => $base,
+			'jobs'      => $base . 'jobs/',
+			'imports'   => $base . 'imports/',
+			'preflight' => $base . 'preflight/',
+			'logs'      => $base . 'logs/',
 		);
 	}
 

@@ -298,7 +298,7 @@ class ServerBackupScanner {
 	}
 
 	/**
-	 * Copy a browser-uploaded backup into the imports directory for reuse.
+	 * Move a backup into the imports directory without copying bytes.
 	 *
 	 * @param string $source_path      Absolute path to the uploaded file.
 	 * @param string $original_name    Desired filename (basename is used).
@@ -351,10 +351,10 @@ class ServerBackupScanner {
 
 		$dest = trailingslashit( $imports_dir ) . wp_unique_filename( $imports_dir, $basename );
 
-		if ( ! FilesystemHelper::copy( $source_path, $dest, true ) ) {
+		if ( ! FilesystemHelper::rename_without_copy( $source_path, $dest ) ) {
 			return new WP_Error(
 				'mksddn_mc_imports_store_failed',
-				__( 'Could not save uploaded backup to the imports directory.', 'mksddn-migrate-content' )
+				__( 'Could not move the backup into the imports directory without copying it. Check that jobs, preflight, and imports are on the same disk.', 'mksddn-migrate-content' )
 			);
 		}
 

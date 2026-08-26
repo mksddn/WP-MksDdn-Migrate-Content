@@ -237,11 +237,24 @@ class FullContentImporter {
 	 * @return bool
 	 */
 	private function should_skip_path( string $path ): bool {
-		$ignored = array( '.git/', '.svn/', '.hg/', '.DS_Store' );
+		$ignored = array(
+			'.git/',
+			'.svn/',
+			'.hg/',
+			'.DS_Store',
+			'/mksddn-mc/',
+			'/mksddn-migrate-jobs/',
+			'/mksddn-migrate-jobs-legacy/',
+		);
 		foreach ( $ignored as $needle ) {
 			if ( false !== strpos( $path, $needle ) ) {
 				return true;
 			}
+		}
+
+		$extension = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+		if ( in_array( $extension, array( 'wpbkp' ), true ) ) {
+			return true;
 		}
 
 		return false;

@@ -59,7 +59,7 @@ The JS client splits files into 5–10 MB chunks (auto-tuned by server limits)
 You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. You can also delete unused backup files from the server via the **Delete** button next to the file selector. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = What is cleaned up when the plugin is deactivated? =
-Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
+Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, preflight staging under `wp-content/uploads/mksddn-mc/preflight/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
 
 = How are caches and maintenance mode handled during import? =
 Full-site import calls `wp_cache_flush()`, then clears core query-related object-cache groups (`posts`, `post-queries`, and related groups) via `wp_cache_flush_group()` when the drop-in reports support (`wp_cache_supports('flush_group')`; WordPress 6.1+). It also bumps posts/terms/comments `last_changed` where available and deletes cached `alloptions` / `notoptions` keys—this reduces stale cached post lists after raw `TRUNCATE`/`INSERT` restores when a persistent Redis/Memcached drop-in behaves imperfectly on global flush. Use the `mksddn_mc_post_import_object_cache_flush_groups` filter (see `Support\PostImportMaintenance`) if your hosting uses extra cache groups or multisite/global keys. Rewrite rule runtime state is cleared, then common page/HTML cache plugins are purged best-effort (WP Rocket, LiteSpeed via hook, W3 Total Cache, WP Super Cache, Autoptimize). Edge CDN or host HTML caches are not purged automatically: hook `mksddn_mc_post_import_cache_purge` (and related actions in code) to integrate your stack. While a full-site import holds the import lock, public front-end and REST requests may receive HTTP 503. The plugin writes both a runtime lock outside the database and WordPress core `.maintenance` file, so parallel requests are blocked even if `wp_options` is being replaced. WP-CLI, cron, and logged-in administrators with `manage_options` are not blocked by the plugin-level gate. If the PHP process fatals after the database was partially written, an emergency cache purge runs on shutdown when possible. Selected content import avoids a global flush and only runs `clean_post_cache()` on posts that were imported or updated, then fires `mksddn_mc_selected_import_completed` with their IDs.
@@ -74,7 +74,7 @@ Yes. The user merge dialog shows archive/current rows with conflict indicators. 
 Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports back up theme directories before replace and restore them if extraction fails.
 
 = How does unified import preflight work? =
-Step 1 runs file detection and read-only analysis (payload parsing, user diff scan for full-site archives, theme list scan) and stores a short-lived report on the Import page. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked and server picks are referenced from the preflight session). Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
+Step 1 runs file detection and read-only analysis (payload parsing, user diff scan for full-site archives, theme list scan) and stores a short-lived report on the Import page. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked jobs stay in `jobs/` until success, then are renamed into `imports/` for reuse). Browser uploads are moved to `preflight/` between steps and renamed into `imports/` after success. Files you place in `imports/` yourself are not deleted. Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
 
 == Screenshots ==
 
@@ -139,6 +139,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ThemePreviewStore` (`Themes\ThemePreviewStore`) — stores pending theme import previews
 
 = Support & Maintenance =
+* `ImportArtifactCleanup` — after a successful import, renames the ephemeral archive into `imports/` (no second copy) and removes the chunk job
 * `DeactivationCleanup` — clears temporary upload state and service directories when the plugin is deactivated
 * `PostImportMaintenance` — cache/rewrite cleanup after full import and emergency purge if the database was partially updated; global flush plus targeted `wp_cache_flush_group()` when supported; filter `mksddn_mc_post_import_object_cache_flush_groups`
 * `FullImportMaintenance` — file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
@@ -195,6 +196,7 @@ All key components implement interfaces:
 * Added: Background full-site export via WP-Cron with cancel from the admin UI.
 * Enhanced: Storage protection for plugin directories and ephemeral import paths.
 * Improved: Import source selector layout.
+* Fixed: Successful import keeps a single reusable copy of a browser/chunked backup: rename from `jobs/` or `preflight/` into `imports/` (no second full copy); `jobs/` is cleared. Files already in `imports/` are unchanged.
 
 = 2.5.0 =
 * Added: Delete unused backup files from the server imports directory.

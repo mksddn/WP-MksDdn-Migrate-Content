@@ -31,6 +31,7 @@ final class DeactivationCleanup {
 	 */
 	public static function run(): void {
 		self::delete_path_if_safe( self::jobs_directory_path() );
+		self::delete_path_if_safe( PluginConfig::preflight_dir() );
 		FullImportMaintenance::deactivate();
 		WpContentRuntimeStorage::cleanup_if_idle();
 

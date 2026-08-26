@@ -9,8 +9,10 @@
 namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Archive\Extractor;
+use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Import\ImportHandler as ImportService;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Support\ImportLock;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
@@ -120,6 +122,8 @@ class SelectedContentImportService {
 
 		$lock       = new ImportLock();
 		$lock_token = null;
+		$chunk_job_id = '';
+		$staged_path  = '';
 
 		try {
 			$lock_token = $lock->acquire();
@@ -139,6 +143,7 @@ class SelectedContentImportService {
 			// Check if chunked file path is provided (from chunked upload).
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 			$chunk_file_path = isset( $_POST['chunk_file_path'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_file_path'] ) ) : '';
+			$chunk_job_id    = isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '';
 
 			if ( $chunk_file_path && file_exists( $chunk_file_path ) ) {
 				// Validate that file path is within allowed directory (chunk job repository).
@@ -155,8 +160,13 @@ class SelectedContentImportService {
 					$extension = 'wpbkp'; // Default to wpbkp for chunked uploads.
 				}
 
+				$chunk_name = isset( $_POST['mksddn_mc_import_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['mksddn_mc_import_original_name'] ) ) : '';
+				if ( '' === $chunk_name ) {
+					$chunk_name = isset( $_POST['chunk_job_id'] ) ? sprintf( 'chunk-%s.wpbkp', sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) ) : 'chunked-upload.wpbkp';
+				}
+
 				$file_data = array(
-					'name'      => isset( $_POST['chunk_job_id'] ) ? sprintf( 'chunk:%s.wpbkp', sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) ) : 'chunked-upload.wpbkp',
+					'name'      => $chunk_name,
 					'path'      => $real_path,
 					'size'      => filesize( $real_path ),
 					'extension' => $extension,
@@ -186,7 +196,8 @@ class SelectedContentImportService {
 				}
 			} elseif ( $this->has_preflight_staged_request() ) {
 				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-				$raw_path = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
+				$raw_path    = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
+				$staged_path = $raw_path;
 				if ( ! PreflightStagingPath::is_allowed_path( $raw_path ) ) {
 					$this->notifications->redirect_with_notice( 'error', __( 'Invalid preflight file path.', 'mksddn-migrate-content' ) );
 					return;
@@ -270,6 +281,15 @@ class SelectedContentImportService {
 			$import_result = $this->process_import( $import_handler, $payload_type, $payload );
 
 			if ( $import_result ) {
+				$job = null;
+				if ( '' !== $chunk_job_id ) {
+					$job = ( new ChunkJobRepository() )->get( $chunk_job_id );
+				}
+				ImportArtifactCleanup::persist_for_reuse(
+					(string) ( $file_data['path'] ?? '' ),
+					(string) ( $file_data['name'] ?? '' ),
+					$job
+				);
 				$import_handler->purge_selected_import_caches();
 
 				// Get import details for redirect.

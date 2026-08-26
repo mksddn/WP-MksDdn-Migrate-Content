@@ -14,6 +14,7 @@ use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Filesystem\FullContentImporter;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
 use MksDdn\MigrateContent\Support\FullImportMaintenance;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Support\ImportLock;
 use MksDdn\MigrateContent\Support\PostImportMaintenance;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
@@ -221,7 +222,6 @@ class FullSiteImportService {
 			return;
 		}
 
-		$cleanup       = ! empty( $upload['cleanup'] );
 		$job           = $upload['job'] ?? null;
 		$original_name = $upload['original_name'] ?? '';
 
@@ -231,6 +231,7 @@ class FullSiteImportService {
 		$lock_token = null;
 		$status     = 'success';
 		$message    = null;
+		$imported_ok = false;
 		$site_guard = new SiteUrlGuard();
 		$importer   = new FullContentImporter();
 		$site_url_restored = false;
@@ -293,6 +294,7 @@ class FullSiteImportService {
 					PostImportMaintenance::run_after_database_mutation( 'import_wp_error' );
 				}
 			} else {
+				$imported_ok       = true;
 				$site_url_restored = true;
 				$this->run_post_import_maintenance();
 			}
@@ -301,7 +303,9 @@ class FullSiteImportService {
 			if ( ! $site_url_restored ) {
 				$site_guard->restore();
 			}
-			$this->cleanup( $temp, $cleanup, $job );
+			if ( $imported_ok ) {
+				ImportArtifactCleanup::persist_for_reuse( $temp, $original_name, $job );
+			}
 			if ( $lock_token ) {
 				$lock->release( $lock_token );
 			}
@@ -421,7 +425,7 @@ class FullSiteImportService {
 
 			$result['temp']          = $path;
 			$result['job']           = $job;
-			$result['original_name'] = sprintf( 'chunk:%s', $chunk_job_id );
+			$result['original_name'] = $this->resolve_original_backup_name( $chunk_job_id );
 
 			return $result;
 		}
@@ -463,7 +467,7 @@ class FullSiteImportService {
 				$staged_name = isset( $_POST['preflight_staged_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['preflight_staged_name'] ) ) : basename( $real );
 
 				$result['temp']          = $real;
-				$result['cleanup']       = false;
+				$result['cleanup']       = PreflightStagingPath::is_ephemeral_path( $real );
 				$result['original_name'] = $staged_name;
 
 				return $result;
@@ -617,11 +621,27 @@ class FullSiteImportService {
 	}
 
 	/**
+	 * Preferred filename when promoting a chunked upload into imports/.
+	 *
+	 * @param string $chunk_job_id Chunk job identifier.
+	 * @return string
+	 */
+	private function resolve_original_backup_name( string $chunk_job_id ): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+		$posted = isset( $_POST['mksddn_mc_import_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['mksddn_mc_import_original_name'] ) ) : '';
+		if ( '' !== $posted && str_ends_with( strtolower( $posted ), '.wpbkp' ) ) {
+			return $posted;
+		}
+
+		return sprintf( 'chunk-%s.wpbkp', $chunk_job_id );
+	}
+
+	/**
 	 * Cleanup temp files and chunk jobs.
 	 *
-	 * @param string     $temp    Temp file path.
-	 * @param bool       $cleanup Whether temp should be removed.
-	 * @param object|null $job    Chunk job instance.
+	 * @param string      $temp    Temp file path.
+	 * @param bool        $cleanup Whether temp should be removed.
+	 * @param object|null $job     Chunk job instance.
 	 * @return void
 	 * @since 1.0.0
 	 */
