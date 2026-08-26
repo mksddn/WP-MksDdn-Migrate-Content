@@ -428,8 +428,8 @@ class PluginConfig {
 		return array(
 			'base'      => $base,
 			'jobs'      => $base . 'jobs/',
-			'imports'   => $base . 'imports/',
-			'preflight' => $base . 'preflight/',
+			'imports'   => self::imports_dir(),
+			'preflight' => self::preflight_dir(),
 			'logs'      => $base . 'logs/',
 		);
 	}
