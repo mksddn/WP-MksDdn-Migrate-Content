@@ -2,9 +2,9 @@
 Contributors: mksddn
 Tags: migration, export, import, backup, wpbkp
 Requires at least: 6.2
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 2.6.0
+Stable tag: 2.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -192,12 +192,16 @@ All key components implement interfaces:
 
 == Changelog ==
 
+= 2.6.1 =
+* Fixed: `ImportArtifactCleanup` — stage browser uploads into `preflight/`, promote ephemeral archives into `imports/` after success (rename, no second full copy).
+* Fixed: Failed user-diff / prepare steps no longer delete staged `preflight/` or chunk job archives (retryable).
+* Improved: Chunk job lookup without creating metadata (`ChunkJobRepository::find`).
+* Compatibility: Tested up to WordPress 7.1.
+
 = 2.6.0 =
 * Added: Background full-site export via WP-Cron with cancel from the admin UI.
 * Enhanced: Storage protection for plugin directories and ephemeral import paths.
 * Improved: Import source selector layout.
-* Fixed: Successful import keeps a single reusable copy of a browser/chunked backup: rename from `jobs/` or `preflight/` into `imports/` (no second full copy); `jobs/` is cleared. Files already in `imports/` are unchanged.
-* Fixed: Failed user-diff / prepare steps no longer delete staged `preflight/` or chunk job archives (retryable); direct uploads are staged under `preflight/` so promote-to-`imports/` stays same-volume.
 
 = 2.5.0 =
 * Added: Delete unused backup files from the server imports directory.

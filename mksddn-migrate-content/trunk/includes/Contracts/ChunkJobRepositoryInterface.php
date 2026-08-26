@@ -37,7 +37,7 @@ interface ChunkJobRepositoryInterface {
 	 *
 	 * @param string $job_id Job ID.
 	 * @return ChunkJob|null Job instance or null when the job file is missing.
-	 * @since 2.6.0
+	 * @since 2.6.1
 	 */
 	public function find( string $job_id ): ?ChunkJob;
 

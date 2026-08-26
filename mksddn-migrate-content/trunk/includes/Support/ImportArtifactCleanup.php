@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * After a successful import, keep a single reusable copy under imports/.
  *
- * @since 2.6.0
+ * @since 2.6.1
  */
 final class ImportArtifactCleanup {
 
