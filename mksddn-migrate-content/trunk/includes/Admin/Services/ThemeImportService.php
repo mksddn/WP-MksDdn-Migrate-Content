@@ -2,7 +2,7 @@
 /**
  * @file: ThemeImportService.php
  * @description: Service for importing theme archives
- * @dependencies: Filesystem\ThemeImporter, Admin\Services\ServerBackupScanner, Admin\Services\ResponseHandler, Support\FilesystemHelper, Chunking\ChunkJobRepository, Config\PluginConfig, Themes\ThemePreviewStore
+ * @dependencies: Filesystem\ThemeImporter, Admin\Services\ServerBackupScanner, Admin\Services\ResponseHandler, Support\ImportArtifactCleanup, Chunking\ChunkJobRepository, Config\PluginConfig, Themes\ThemePreviewStore
  * @created: 2026-02-19
  */
 
@@ -11,8 +11,9 @@ namespace MksDdn\MigrateContent\Admin\Services;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Filesystem\ThemeImporter;
-use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Support\ImportLock;
+use MksDdn\MigrateContent\Support\PreflightStagingPath;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use WP_Error;
@@ -140,15 +141,13 @@ class ThemeImportService {
 		$import_mode = $this->sanitize_import_mode( $raw_mode );
 		$upload      = array(
 			'temp'          => isset( $preview['file_path'] ) ? (string) $preview['file_path'] : '',
-			'cleanup'       => ! empty( $preview['cleanup'] ),
 			'chunk_job_id'  => isset( $preview['chunk_job_id'] ) ? sanitize_text_field( (string) $preview['chunk_job_id'] ) : '',
 			'original_name' => $preview['original_name'] ?? '',
 			'job'           => null,
 		);
 
 		if ( $upload['chunk_job_id'] ) {
-			$repo          = new ChunkJobRepository();
-			$upload['job'] = $repo->get( $upload['chunk_job_id'] );
+			$upload['job'] = ( new ChunkJobRepository() )->find( $upload['chunk_job_id'] );
 		}
 
 		if ( empty( $upload['temp'] ) || ! file_exists( $upload['temp'] ) ) {
@@ -180,8 +179,9 @@ class ThemeImportService {
 
 		$lock       = new ImportLock();
 		$lock_token = null;
-		$status     = 'success';
-		$message    = null;
+		$status      = 'success';
+		$message     = null;
+		$imported_ok = false;
 
 		try {
 			$lock_token = $lock->acquire();
@@ -207,10 +207,17 @@ class ThemeImportService {
 				$message = $result->get_error_message();
 				$this->log_debug( sprintf( 'Theme import failed: %s', $message ) );
 			} else {
+				$imported_ok = true;
 				$this->log_debug( sprintf( 'Theme import completed successfully (mode: %s)', $import_mode ) );
 			}
 		} finally {
-			$this->cleanup( $upload['temp'], $upload['cleanup'], $upload['job'] );
+			if ( $imported_ok ) {
+				ImportArtifactCleanup::persist_for_reuse(
+					(string) ( $upload['temp'] ?? '' ),
+					(string) ( $upload['original_name'] ?? '' ),
+					$upload['job'] ?? null
+				);
+			}
 			if ( $lock_token ) {
 				$lock->release( $lock_token );
 			}
@@ -246,7 +253,6 @@ class ThemeImportService {
 		$chunk_disabled = PluginConfig::is_chunked_disabled();
 		$result         = array(
 			'temp'          => '',
-			'cleanup'       => false,
 			'job'           => null,
 			'chunk_job_id'  => $chunk_job_id,
 			'original_name' => '',
@@ -257,17 +263,22 @@ class ThemeImportService {
 				return new WP_Error( 'mksddn_mc_chunk_disabled', __( 'Chunked uploads are disabled on this site.', 'mksddn-migrate-content' ) );
 			}
 
-			$repo = new ChunkJobRepository();
-			$job  = $repo->get( $chunk_job_id );
-			$path = $job->get_file_path();
+			$job = ( new ChunkJobRepository() )->find( $chunk_job_id );
+			if ( ! $job ) {
+				return new WP_Error( 'mksddn_mc_chunk_missing', __( 'Chunked upload is incomplete. Please retry.', 'mksddn-migrate-content' ) );
+			}
 
+			$path = $job->get_file_path();
 			if ( ! file_exists( $path ) ) {
 				return new WP_Error( 'mksddn_mc_chunk_missing', __( 'Chunked upload is incomplete. Please retry.', 'mksddn-migrate-content' ) );
 			}
 
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+			$posted_name = isset( $_POST['mksddn_mc_import_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['mksddn_mc_import_original_name'] ) ) : '';
+
 			$result['temp']          = $path;
 			$result['job']           = $job;
-			$result['original_name'] = sprintf( 'chunk:%s', $chunk_job_id );
+			$result['original_name'] = ImportArtifactCleanup::preferred_chunk_filename( $chunk_job_id, $posted_name );
 
 			return $result;
 		}
@@ -288,10 +299,30 @@ class ThemeImportService {
 			}
 
 			$result['temp']          = $file_info['path'];
-			$result['cleanup']       = false;
 			$result['original_name'] = $file_info['name'];
 
 			return $result;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+		$preflight_path = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
+
+		if ( '' !== $preflight_path && PreflightStagingPath::is_allowed_path( $preflight_path ) ) {
+			$real = realpath( $preflight_path );
+			if ( false !== $real && is_readable( $real ) ) {
+				$ext = strtolower( pathinfo( $real, PATHINFO_EXTENSION ) );
+				if ( 'wpbkp' !== $ext ) {
+					return new WP_Error( 'mksddn_mc_invalid_type', __( 'Please select a .wpbkp archive generated by this plugin.', 'mksddn-migrate-content' ) );
+				}
+
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+				$staged_name = isset( $_POST['preflight_staged_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['preflight_staged_name'] ) ) : basename( $real );
+
+				$result['temp']          = $real;
+				$result['original_name'] = $staged_name;
+
+				return $result;
+			}
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
@@ -314,41 +345,18 @@ class ThemeImportService {
 			return new WP_Error( 'mksddn_mc_invalid_type', __( 'Please upload a .wpbkp archive generated by this plugin.', 'mksddn-migrate-content' ) );
 		}
 
-		$temp = wp_tempnam( 'mksddn-theme-import-' );
-		if ( ! $temp ) {
-			return new WP_Error( 'mksddn_mc_temp_unavailable', __( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
-		}
-
 		if ( ! is_uploaded_file( $tmp_name ) ) {
 			return new WP_Error( 'mksddn_mc_move_failed', __( 'Uploaded file could not be verified.', 'mksddn-migrate-content' ) );
 		}
 
-		if ( ! FilesystemHelper::move( $tmp_name, $temp, true ) ) {
-			return new WP_Error( 'mksddn_mc_move_failed', __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
+		$staged = ImportArtifactCleanup::stage_into_preflight( $tmp_name, $name, $ext );
+		if ( is_wp_error( $staged ) ) {
+			return $staged;
 		}
 
-		$result['temp']          = $temp;
-		$result['cleanup']       = true;
-		$result['original_name'] = $name;
+		$result['temp']          = $staged['path'];
+		$result['original_name'] = $staged['name'];
 
 		return $result;
-	}
-
-	/**
-	 * Cleanup temp files and chunk jobs.
-	 *
-	 * @param string     $temp    Temp file path.
-	 * @param bool       $cleanup Whether temp should be removed.
-	 * @param object|null $job    Chunk job instance.
-	 * @return void
-	 */
-	private function cleanup( string $temp, bool $cleanup, $job ): void {
-		if ( $cleanup && $temp && file_exists( $temp ) ) {
-			FilesystemHelper::delete( $temp );
-		}
-
-		if ( $job && method_exists( $job, 'delete' ) ) {
-			$job->delete();
-		}
 	}
 }

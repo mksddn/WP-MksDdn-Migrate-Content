@@ -16,7 +16,7 @@ use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Services\PluginLogger;
-use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
 use MksDdn\MigrateContent\Themes\ThemePreviewStore;
 use WP_Error;
@@ -171,6 +171,7 @@ class UnifiedImportOrchestrator {
 		}
 
 		$this->register_fatal_memory_redirect();
+		ImportArtifactCleanup::purge_expired_preflight_files();
 
 		$preflight_report_id = isset( $request_data['preflight_report_id'] )
 			? sanitize_text_field( (string) $request_data['preflight_report_id'] )
@@ -266,8 +267,7 @@ class UnifiedImportOrchestrator {
 	 * @since 2.0.0
 	 */
 	private function resolve_chunked_file( string $chunk_job_id, string $original_name = '' ): array|WP_Error {
-		$repo = new ChunkJobRepository();
-		$job  = $repo->get( $chunk_job_id );
+		$job = ( new ChunkJobRepository() )->find( $chunk_job_id );
 
 		if ( ! $job ) {
 			return new WP_Error( 'mksddn_mc_chunk_not_found', __( 'Chunked upload job not found.', 'mksddn-migrate-content' ) );
@@ -278,9 +278,7 @@ class UnifiedImportOrchestrator {
 			return new WP_Error( 'mksddn_mc_chunk_file_missing', __( 'Chunked upload file not found.', 'mksddn-migrate-content' ) );
 		}
 
-		if ( '' === $original_name ) {
-			$original_name = sprintf( 'chunk-%s.wpbkp', $chunk_job_id );
-		}
+		$original_name = ImportArtifactCleanup::preferred_chunk_filename( $chunk_job_id, $original_name );
 
 		return array(
 			'path'         => $file_path,
@@ -368,7 +366,8 @@ class UnifiedImportOrchestrator {
 
 		if ( 'chunked' === $st ) {
 			$jid = isset( $h['chunk_job_id'] ) ? sanitize_text_field( (string) $h['chunk_job_id'] ) : '';
-			return '' !== $jid ? $this->resolve_chunked_file( $jid ) : new WP_Error(
+			$orig = isset( $h['original_name'] ) ? sanitize_file_name( (string) $h['original_name'] ) : '';
+			return '' !== $jid ? $this->resolve_chunked_file( $jid, $orig ) : new WP_Error(
 				'mksddn_mc_preflight_invalid',
 				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
 			);
@@ -411,8 +410,12 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Build persistent import handle after preflight (so the next step does not re-upload).
 	 *
-	 * Browser and chunked uploads are copied into the imports directory so the backup
-	 * can be re-imported later via "Select from server".
+	 * Persist a handle so step two can reuse the same file without a second upload.
+	 *
+	 * Chunked uploads stay in jobs/ until a successful import, then are renamed
+	 * into imports/ (no second copy). Browser uploads are moved to preflight/
+	 * between steps and renamed into imports/ after success. Server-selected
+	 * files in imports/ are kept in place.
 	 *
 	 * @param array $file_info Resolved file info from the first request.
 	 * @return array|WP_Error
@@ -427,34 +430,50 @@ class UnifiedImportOrchestrator {
 			);
 		}
 
-		if ( 'chunked' === $file_info['source'] || 'upload' === $file_info['source'] ) {
-			$original_name = isset( $file_info['name'] ) ? (string) $file_info['name'] : '';
-			$extension     = isset( $file_info['extension'] ) ? (string) $file_info['extension'] : '';
-			$stored        = $this->server_scanner->store_uploaded_file( $file_info['path'], $original_name, $extension );
-
-			if ( is_wp_error( $stored ) ) {
-				return $stored;
+		if ( 'chunked' === $file_info['source'] ) {
+			$job_id = isset( $file_info['chunk_job_id'] ) ? sanitize_text_field( (string) $file_info['chunk_job_id'] ) : '';
+			if ( '' === $job_id ) {
+				return new WP_Error( 'mksddn_mc_chunk_not_found', __( 'Chunked upload job not found.', 'mksddn-migrate-content' ) );
 			}
 
 			return array(
-				'source_type'   => 'server',
-				'server_file'   => $stored['name'],
-				'extension'     => $stored['extension'],
-				'original_name' => $stored['name'],
+				'source_type'   => 'chunked',
+				'chunk_job_id'  => $job_id,
+				'extension'     => $file_info['extension'] ?? 'wpbkp',
+				'original_name' => $file_info['name'] ?? '',
 			);
+		}
+
+		if ( 'upload' === $file_info['source'] ) {
+			return $this->stage_browser_upload( $file_info );
 		}
 
 		return new WP_Error( 'mksddn_mc_unknown_source', __( 'Invalid file source.', 'mksddn-migrate-content' ) );
 	}
 
 	/**
-	 * MIME type hint for synthetic $_FILES entries.
+	 * Move a browser upload into the preflight directory for the import step.
 	 *
-	 * @param string $extension File extension (wpbkp or json).
-	 * @return string
+	 * @param array $file_info Resolved upload info.
+	 * @return array|WP_Error
 	 */
-	private function mime_for_import_file( string $extension ): string {
-		return 'json' === strtolower( $extension ) ? 'application/json' : 'application/zip';
+	private function stage_browser_upload( array $file_info ): array|WP_Error {
+		$staged = ImportArtifactCleanup::stage_into_preflight(
+			isset( $file_info['path'] ) ? (string) $file_info['path'] : '',
+			isset( $file_info['name'] ) ? (string) $file_info['name'] : '',
+			isset( $file_info['extension'] ) ? (string) $file_info['extension'] : ''
+		);
+
+		if ( is_wp_error( $staged ) ) {
+			return $staged;
+		}
+
+		return array(
+			'source_type'   => 'staged',
+			'staged_path'   => $staged['path'],
+			'extension'     => $staged['extension'],
+			'original_name' => $staged['name'],
+		);
 	}
 
 	/**
@@ -467,10 +486,12 @@ class UnifiedImportOrchestrator {
 	 * @since 2.1.0
 	 */
 	private function prepare_file_for_import( array $file_info, string $file_key, string $nonce_action ): void {
+		unset( $file_key ); // Legacy $_FILES key; unified routing now uses staged/chunk/server POST fields.
 		$nonce = wp_create_nonce( $nonce_action );
 
 		if ( 'chunked' === $file_info['source'] ) {
 			$_POST['chunk_job_id'] = $file_info['chunk_job_id'];
+			$_POST['mksddn_mc_import_original_name'] = isset( $file_info['name'] ) ? sanitize_file_name( (string) $file_info['name'] ) : '';
 			$_POST['_wpnonce']     = $nonce;
 			$_REQUEST['_wpnonce']  = $nonce;
 		} elseif ( 'server' === $file_info['source'] ) {
@@ -484,24 +505,20 @@ class UnifiedImportOrchestrator {
 			$_POST['_wpnonce']              = $nonce;
 			$_REQUEST['_wpnonce']           = $nonce;
 		} else {
-			$temp = wp_tempnam( 'mksddn-unified-import-' );
-			if ( ! $temp ) {
-				wp_die( esc_html__( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
-			}
-
-			if ( ! FilesystemHelper::move( $file_info['path'], $temp, true ) ) {
-				wp_die( esc_html__( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
-			}
-
-			$_FILES[ $file_key ] = array(
-				'name'     => $file_info['name'],
-				'tmp_name' => $temp,
-				'size'     => filesize( $temp ),
-				'error'    => UPLOAD_ERR_OK,
-				'type'     => $this->mime_for_import_file( $file_info['extension'] ?? '' ),
+			$staged = ImportArtifactCleanup::stage_into_preflight(
+				(string) ( $file_info['path'] ?? '' ),
+				(string) ( $file_info['name'] ?? '' ),
+				(string) ( $file_info['extension'] ?? '' )
 			);
-			$_POST['_wpnonce']    = $nonce;
-			$_REQUEST['_wpnonce'] = $nonce;
+			if ( is_wp_error( $staged ) ) {
+				wp_die( esc_html( $staged->get_error_message() ) );
+			}
+
+			$_POST['preflight_staged_path'] = $staged['path'];
+			$_POST['preflight_staged_name'] = $staged['name'];
+			$_POST['preflight_staged_ext']  = $staged['extension'];
+			$_POST['_wpnonce']              = $nonce;
+			$_REQUEST['_wpnonce']           = $nonce;
 		}
 	}
 
@@ -529,6 +546,7 @@ class UnifiedImportOrchestrator {
 			// For chunked uploads, set chunk data in POST.
 			$_POST['chunk_job_id']   = $file_info['chunk_job_id'];
 			$_POST['chunk_file_path'] = $file_info['path'];
+			$_POST['mksddn_mc_import_original_name'] = isset( $file_info['name'] ) ? sanitize_file_name( (string) $file_info['name'] ) : '';
 			$_REQUEST['_wpnonce']     = wp_create_nonce( 'import_single_page_nonce' );
 		} elseif ( 'server' === $file_info['source'] ) {
 			// For server files, set server_file in POST.
@@ -575,7 +593,6 @@ class UnifiedImportOrchestrator {
 	private function prepare_file_for_preview( array $file_info ): array|WP_Error {
 		$result = array(
 			'file_path'     => '',
-			'cleanup'       => false,
 			'chunk_job_id'  => '',
 			'original_name' => $file_info['name'] ?? '',
 		);
@@ -586,27 +603,22 @@ class UnifiedImportOrchestrator {
 			return $result;
 		}
 
-		if ( 'server' === $file_info['source'] ) {
+		if ( 'server' === $file_info['source'] || 'staged' === $file_info['source'] ) {
 			$result['file_path'] = $file_info['path'];
 			return $result;
 		}
 
-		if ( 'staged' === $file_info['source'] ) {
-			$result['file_path'] = $file_info['path'];
-			return $result;
+		$staged = ImportArtifactCleanup::stage_into_preflight(
+			(string) ( $file_info['path'] ?? '' ),
+			(string) ( $file_info['name'] ?? '' ),
+			(string) ( $file_info['extension'] ?? '' )
+		);
+		if ( is_wp_error( $staged ) ) {
+			return $staged;
 		}
 
-		$temp = wp_tempnam( 'mksddn-theme-preview-' );
-		if ( ! $temp ) {
-			return new WP_Error( 'mksddn_mc_temp_unavailable', __( 'Unable to allocate a temporary file for import.', 'mksddn-migrate-content' ) );
-		}
-
-		if ( ! FilesystemHelper::move( $file_info['path'], $temp, true ) ) {
-			return new WP_Error( 'mksddn_mc_move_failed', __( 'Failed to move uploaded file. Check permissions.', 'mksddn-migrate-content' ) );
-		}
-
-		$result['file_path'] = $temp;
-		$result['cleanup']   = true;
+		$result['file_path']     = $staged['path'];
+		$result['original_name'] = $staged['name'];
 
 		return $result;
 	}

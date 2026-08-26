@@ -183,9 +183,38 @@ final class FilesystemHelper {
 
 	/**
 	 * Move/rename a path.
+	 *
+	 * May copy-then-delete if rename fails (different volumes). Do not use for multi-GB backups.
 	 */
 	public static function move( string $from, string $to, bool $overwrite = true ): bool {
 		return self::instance()->move( $from, $to, $overwrite );
+	}
+
+	/**
+	 * Rename a file without copying bytes.
+	 *
+	 * Used after large imports so jobs/ and imports/ never hold two full archives.
+	 *
+	 * @param string $from Source path.
+	 * @param string $to   Destination path.
+	 * @return bool
+	 */
+	public static function rename_without_copy( string $from, string $to ): bool {
+		if ( '' === $from || '' === $to || ! is_file( $from ) ) {
+			return false;
+		}
+
+		if ( file_exists( $to ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_exists -- destination must not exist for a no-copy rename.
+			return false;
+		}
+
+		$dir = dirname( $to );
+		if ( ! is_dir( $dir ) ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- rename is required to avoid a second multi-GB copy.
+		return rename( $from, $to );
 	}
 
 	/**

@@ -42,6 +42,26 @@ class ChunkJobRepository implements ChunkJobRepositoryInterface {
 		return new ChunkJob( $job_id, $this->storage_dir );
 	}
 
+	/**
+	 * Load an existing chunk job without creating metadata.
+	 *
+	 * @param string $job_id Job ID.
+	 * @return ChunkJob|null
+	 */
+	public function find( string $job_id ): ?ChunkJob {
+		$job_id = sanitize_key( $job_id );
+		if ( '' === $job_id ) {
+			return null;
+		}
+
+		$meta = trailingslashit( $this->storage_dir ) . $job_id . '.json';
+		if ( ! file_exists( $meta ) ) {
+			return null;
+		}
+
+		return new ChunkJob( $job_id, $this->storage_dir );
+	}
+
 	public function create(): ChunkJob {
 		$job_id = wp_generate_password( 20, false, false );
 		return new ChunkJob( $job_id, $this->storage_dir );

@@ -2,14 +2,14 @@
 /**
  * @file: ThemePreviewStore.php
  * @description: Stores pending theme import previews between requests
- * @dependencies: Contracts\ThemePreviewStoreInterface, Support\FilesystemHelper
+ * @dependencies: Contracts\ThemePreviewStoreInterface, Support\ImportArtifactCleanup
  * @created: 2026-02-21
  */
 
 namespace MksDdn\MigrateContent\Themes;
 
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
-use MksDdn\MigrateContent\Support\FilesystemHelper;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -115,7 +115,6 @@ class ThemePreviewStore implements ThemePreviewStoreInterface {
 			'id'         => $id,
 			'created_at' => (int) ( $data['created_at'] ?? time() ),
 			'file_path'  => isset( $data['file_path'] ) ? (string) $data['file_path'] : '',
-			'cleanup'    => ! empty( $data['cleanup'] ),
 		);
 		$this->save_index( $index );
 	}
@@ -172,12 +171,8 @@ class ThemePreviewStore implements ThemePreviewStoreInterface {
 	 * @return void
 	 */
 	private function cleanup_entry( array $entry ): void {
-		$cleanup   = ! empty( $entry['cleanup'] );
 		$file_path = isset( $entry['file_path'] ) ? (string) $entry['file_path'] : '';
-
-		if ( $cleanup && $file_path && file_exists( $file_path ) ) {
-			FilesystemHelper::delete( $file_path );
-		}
+		ImportArtifactCleanup::discard_unmanaged_temp( $file_path );
 	}
 
 	/**

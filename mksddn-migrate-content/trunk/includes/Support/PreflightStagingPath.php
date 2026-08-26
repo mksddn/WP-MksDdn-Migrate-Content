@@ -17,8 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Guards import file paths used between unified import preflight and import steps.
  *
- * Allows files under uploads/mksddn-mc/imports/ (current flow) and the legacy
- * uploads/mksddn-mc/preflight/ directory for backward compatibility.
+ * Allows files under uploads/mksddn-mc/imports/ (user-managed backups) and
+ * uploads/mksddn-mc/preflight/ (ephemeral browser uploads between import steps).
  *
  * @since 2.2.0
  */
@@ -57,17 +57,31 @@ final class PreflightStagingPath {
 	 * @return array<int, string>
 	 */
 	private static function allowed_directory_roots(): array {
-		$uploads = wp_upload_dir();
-		if ( ! empty( $uploads['error'] ) ) {
-			return array();
-		}
-
-		$base = trailingslashit( wp_normalize_path( $uploads['basedir'] ) ) . 'mksddn-mc/';
-
 		return array(
 			PluginConfig::imports_dir(),
-			$base . 'preflight/',
+			PluginConfig::preflight_dir(),
 		);
+	}
+
+	/**
+	 * Whether the path is a plugin-owned staging file that should be deleted after import.
+	 *
+	 * User-placed backups under imports/ are not ephemeral.
+	 *
+	 * @param string $absolute_path Candidate file path.
+	 * @return bool
+	 */
+	public static function is_ephemeral_path( string $absolute_path ): bool {
+		if ( ! self::is_allowed_path( $absolute_path ) ) {
+			return false;
+		}
+
+		$real_file = realpath( $absolute_path );
+		if ( false === $real_file ) {
+			return false;
+		}
+
+		return self::path_is_under_root( wp_normalize_path( $real_file ), PluginConfig::preflight_dir() );
 	}
 
 	/**
