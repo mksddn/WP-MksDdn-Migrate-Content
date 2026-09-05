@@ -1,7 +1,7 @@
 === MksDdn Migrate Content ===
 Contributors: mksddn
 Tags: migration, export, import, backup, wpbkp
-Requires at least: 6.2
+Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
 Stable tag: 2.7.0
@@ -195,6 +195,7 @@ All key components implement interfaces:
 = 2.7.0 =
 * Compatibility: Minimum PHP version restored to 7.4 (was 8.0 in 2.6.x).
 * Changed: Replaced PHP 8 union types with PHP 7.4-compatible method signatures.
+* Compatibility: Minimum WordPress version lowered to 5.9 (was 6.2).
 
 = 2.6.1 =
 * Fixed: `ImportArtifactCleanup` — stage browser uploads into `preflight/`, promote ephemeral archives into `imports/` after success (rename, no second full copy).
