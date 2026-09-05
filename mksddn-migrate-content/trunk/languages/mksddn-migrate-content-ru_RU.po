@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: MksDdn Migrate Content\n"
 "Report-Msgid-Bugs-To: https://github.com/mksddn/WP-MksDdn-Migrate-Content/"
 "issues\n"
-"POT-Creation-Date: 2026-09-05 10:43+0000\n"
+"POT-Creation-Date: 2026-09-05 11:50+0000\n"
 "PO-Revision-Date: 2026-09-05 10:43+0000\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -142,7 +142,7 @@ msgstr ""
 ".json без медиа, удобен для правок. .wpbkp включает медиа и контрольную "
 "сумму."
 
-#: includes/Database/FullDatabaseExporter.php:306
+#: includes/Database/FullDatabaseExporter.php:309
 #: includes/Filesystem/FullContentExporter.php:270
 #: includes/Chunking/FullExportBuilder.php:103
 msgid ""
@@ -495,6 +495,12 @@ msgstr "Не удалось создать временный файл."
 msgid "Unable to write chunk."
 msgstr "Не удалось записать чанк."
 
+#: includes/Database/FullDatabaseImporter.php:648
+msgid ""
+"Unable to drop the previous copy of table %1$s (%2$s). Database error: %3$s"
+msgstr ""
+"Не удалось удалить предыдущую копию таблицы %1$s (%2$s). Ошибка БД: %3$s"
+
 #: includes/Admin/AdminPageController.php:417
 msgid ""
 "You do not have permission to use the migration REST API. Refresh the page "
@@ -594,7 +600,7 @@ msgstr ""
 "В архиве есть пользователи WordPress; при реальном импорте может появиться "
 "шаг объединения учётных записей."
 
-#: includes/Database/FullDatabaseImporter.php:53
+#: includes/Database/FullDatabaseImporter.php:69
 msgid "Database dump is empty or invalid."
 msgstr "Дамп БД пуст или некорректен."
 
@@ -608,7 +614,7 @@ msgstr "Недопустимый запрос."
 msgid "Sorry, you are not allowed to perform this action."
 msgstr "У вас нет прав для этого действия."
 
-#: includes/Database/FullDatabaseImporter.php:253
+#: includes/Database/FullDatabaseImporter.php:275
 msgid "Failed to insert rows into %1$s. Database error: %2$s"
 msgstr "Не удалось вставить строки в %1$s. Ошибка БД: %2$s"
 
@@ -630,6 +636,14 @@ msgstr "Не удалось прочитать JSON файл."
 #: includes/Admin/Services/ImportTypeDetector.php:66
 msgid "Unsupported file extension. Use .wpbkp or .json."
 msgstr "Неподдерживаемое расширение. Используйте .wpbkp или .json."
+
+#: includes/Database/FullDatabaseImporter.php:662
+msgid ""
+"Unable to drop the previous copy of table %1$s. Old data is in %2$s. "
+"Database error: %3$s"
+msgstr ""
+"Не удалось удалить предыдущую копию таблицы %1$s. Старые данные в %2$s. "
+"Ошибка БД: %3$s"
 
 #: includes/Admin/AdminPageController.php:494
 msgid "You are not allowed to continue this user selection."
@@ -803,7 +817,7 @@ msgstr "Удалить каталог темы и заменить файлам�
 msgid "Uploaded archive not found."
 msgstr "Загруженный архив не найден."
 
-#: includes/Database/FullDatabaseImporter.php:474
+#: includes/Database/FullDatabaseImporter.php:505
 msgid "Unable to truncate table %1$s. Database error: %2$s"
 msgstr "Не удалось очистить таблицу %1$s. Ошибка БД: %2$s"
 
@@ -963,7 +977,8 @@ msgstr "Не удалось закодировать манифест для э�
 msgid "Failed to write export payload header."
 msgstr "Не удалось записать заголовок полезной нагрузки экспорта."
 
-#: includes/Database/FullDatabaseImporter.php:871
+#: includes/Database/FullDatabaseImporter.php:829
+#: includes/Database/FullDatabaseImporter.php:1491
 msgid "unknown database error"
 msgstr "неизвестная ошибка БД"
 
@@ -1184,8 +1199,7 @@ msgstr "Сервис недоступен"
 
 #: includes/Admin/AdminPageController.php:533
 msgid "Preflight report expired or not found. Run preflight again."
-msgstr ""
-"Отчёт preflight истёк или не найден. Запустите preflight снова."
+msgstr "Отчёт preflight истёк или не найден. Запустите preflight снова."
 
 #: includes/Admin/Handlers/ExportRequestHandler.php:155
 msgid "Export file not found."
@@ -1368,7 +1382,7 @@ msgstr "Сервер обрабатывает архив…"
 msgid "Security check failed."
 msgstr "Проверка безопасности не пройдена."
 
-#: includes/Database/FullDatabaseImporter.php:464
+#: includes/Database/FullDatabaseImporter.php:492
 msgid "Unable to create or find table %s."
 msgstr "Не удалось создать или найти таблицу %s."
 
@@ -1383,6 +1397,11 @@ msgstr "Файл импорта не найден."
 #: views/admin/selected-export-card.php:20
 msgid "Choose content"
 msgstr "Выберите контент"
+
+#: includes/Database/FullDatabaseImporter.php:538
+#: includes/Database/FullDatabaseImporter.php:592
+msgid "Unable to allocate a temporary table name for %s."
+msgstr "Не удалось выделить временное имя таблицы для %s."
 
 #: includes/Archive/Extractor.php:176 includes/Archive/Extractor.php:204
 msgid "Unable to extract media file to temporary storage."
@@ -1441,6 +1460,11 @@ msgstr ""
 "«Настройки → Общие → Адрес сайта» (http/https, www), один раз сохраните "
 "постоянные ссылки и разрешите /wp-json/mksddn/v1/ в security- и cache-"
 "плагинах."
+
+#: includes/Database/FullDatabaseImporter.php:570
+#: includes/Database/FullDatabaseImporter.php:614
+msgid "Unable to swap table %1$s into place. Database error: %2$s"
+msgstr "Не удалось подменить таблицу %1$s. Ошибка БД: %2$s"
 
 #: includes/Admin/Views/AdminPageView.php:194
 msgid "Content type: %s"
@@ -1628,7 +1652,7 @@ msgstr "Файл импорта отсутствует. Запустите за�
 msgid "Full Site Export"
 msgstr "Экспорт всего сайта"
 
-#: includes/Database/FullDatabaseImporter.php:450
+#: includes/Database/FullDatabaseImporter.php:553
 msgid "Unable to recreate table %1$s from dump schema. Database error: %2$s"
 msgstr "Не удалось пересоздать таблицу %1$s по схеме дампа. Ошибка БД: %2$s"
 
@@ -1679,7 +1703,7 @@ msgstr "Существующий пользователь"
 msgid "Could not read source file for export: %s"
 msgstr "Не удалось прочитать исходный файл для экспорта: %s"
 
-#: includes/Database/FullDatabaseExporter.php:303
+#: includes/Database/FullDatabaseExporter.php:306
 msgid ""
 "Failed to write database export data to temporary storage. Check free disk "
 "space."
@@ -2080,9 +2104,6 @@ msgstr "или нажмите для выбора"
 
 #~ msgid "MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+."
 #~ msgstr "Для MksDdn Migrate Content нужны WordPress 6.2+ и PHP 7.4+."
-
-#~ msgid "Unable to allocate a temporary file for import."
-#~ msgstr "Не удалось создать временный файл для импорта."
 
 #~ msgid "Could not save uploaded backup to the imports directory."
 #~ msgstr ""

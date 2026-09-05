@@ -267,7 +267,10 @@ class FullDatabaseExporter {
 
 		return array_values(
 			array_filter(
-				array_map( 'sanitize_text_field', (array) $result )
+				array_map( 'sanitize_text_field', (array) $result ),
+				static function ( $table_name ): bool {
+					return is_string( $table_name ) && '' !== $table_name && ! SwapTableNames::is_internal( $table_name );
+				}
 			)
 		);
 	}
