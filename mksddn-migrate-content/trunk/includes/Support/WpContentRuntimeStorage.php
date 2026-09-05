@@ -160,7 +160,7 @@ final class WpContentRuntimeStorage {
 	private static function is_within_ephemeral_root( string $path ): bool {
 		$prefix = trailingslashit( wp_normalize_path( untrailingslashit( self::root() ) ) );
 
-		return str_starts_with( wp_normalize_path( $path ), $prefix );
+		return 0 === strpos( wp_normalize_path( $path ), $prefix );
 	}
 
 	/**

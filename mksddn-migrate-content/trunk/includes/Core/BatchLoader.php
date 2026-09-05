@@ -171,7 +171,7 @@ class BatchLoader {
 	 * @return int|false Thumbnail ID or false.
 	 * @since 1.0.0
 	 */
-	public function get_post_thumbnail_id( int $post_id ): int|false {
+	public function get_post_thumbnail_id( int $post_id ) {
 		if ( ! isset( $this->thumbnail_cache[ $post_id ] ) ) {
 			$this->load_thumbnails_batch( array( $post_id ) );
 		}

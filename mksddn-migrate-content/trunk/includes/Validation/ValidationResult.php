@@ -62,7 +62,7 @@ class ValidationResult {
 	 * @return self
 	 * @since 1.0.0
 	 */
-	public static function failure( string|array $errors ): self {
+	public static function failure( $errors ): self {
 		$error_array = is_array( $errors ) ? $errors : array( $errors );
 		return new self( false, $error_array );
 	}

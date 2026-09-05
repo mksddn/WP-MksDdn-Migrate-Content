@@ -30,7 +30,7 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @return string|WP_Error Always returns error as extractor cannot create archives.
 	 * @since 1.0.0
 	 */
-	public function create_archive( array $payload, array $meta, array $assets = array() ): string|WP_Error {
+	public function create_archive( array $payload, array $meta, array $assets = array() ) {
 		return new WP_Error( 'mksddn_mc_not_implemented', __( 'Extractor cannot create archives.', 'mksddn-migrate-content' ) );
 	}
 
@@ -40,7 +40,7 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @param string $file_path Uploaded archive path.
 	 * @return array|WP_Error
 	 */
-	public function extract( string $file_path ): array|WP_Error {
+	public function extract( string $file_path ) {
 		if ( ! file_exists( $file_path ) ) {
 			return new WP_Error( 'mksddn_mc_file_missing', __( 'Uploaded archive not found.', 'mksddn-migrate-content' ) );
 		}
@@ -81,7 +81,7 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @param string $file_path Archive.
 	 * @return array|WP_Error
 	 */
-	private function read_from_archive( string $file_path ): array|WP_Error {
+	private function read_from_archive( string $file_path ) {
 		if ( class_exists( ZipArchive::class ) ) {
 			$result = $this->read_with_ziparchive( $file_path );
 			if ( ! is_wp_error( $result ) ) {
@@ -98,7 +98,7 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @param string $file_path Archive path.
 	 * @return array|WP_Error
 	 */
-	private function read_with_ziparchive( string $file_path ): array|WP_Error {
+	private function read_with_ziparchive( string $file_path ) {
 		$zip   = new ZipArchive();
 		$open  = $zip->open( $file_path );
 
@@ -126,7 +126,7 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @param string $file_path Archive path.
 	 * @return array|WP_Error
 	 */
-	private function read_with_pclzip( string $file_path ): array|WP_Error {
+	private function read_with_pclzip( string $file_path ) {
 		// Load PclZip class required for archive reading when ZipArchive is unavailable.
 		// Class is used immediately after loading to extract archive contents.
 		if ( ! class_exists( 'PclZip' ) ) {
@@ -155,7 +155,7 @@ class Extractor implements ArchiveHandlerInterface {
 	 * @param string $file_path    Original uploaded archive.
 	 * @return string|WP_Error
 	 */
-	public function extract_media_file( string $archive_path, string $file_path ): string|WP_Error {
+	public function extract_media_file( string $archive_path, string $file_path ) {
 		if ( '' === $archive_path ) {
 			return new WP_Error( 'mksddn_mc_media_path_missing', __( 'Media file path missing in archive.', 'mksddn-migrate-content' ) );
 		}

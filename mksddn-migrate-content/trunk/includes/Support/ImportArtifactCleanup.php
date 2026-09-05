@@ -89,7 +89,7 @@ final class ImportArtifactCleanup {
 	 * @param string $extension     Known extension (wpbkp|json); inferred when empty.
 	 * @return array{path:string,name:string,extension:string}|WP_Error
 	 */
-	public static function stage_into_preflight( string $source_path, string $original_name, string $extension = '' ): array|WP_Error {
+	public static function stage_into_preflight( string $source_path, string $original_name, string $extension = '' ) {
 		if ( '' === $source_path || ! is_readable( $source_path ) ) {
 			return new WP_Error(
 				'mksddn_mc_preflight_stage_source',
@@ -235,7 +235,8 @@ final class ImportArtifactCleanup {
 		}
 
 		$basename = basename( sanitize_file_name( $original_name ) );
-		if ( '' === $basename || ! str_ends_with( strtolower( $basename ), '.' . $extension ) ) {
+		$suffix = '.' . $extension;
+		if ( '' === $basename || substr( strtolower( $basename ), -strlen( $suffix ) ) !== $suffix ) {
 			return 'import-' . gmdate( 'Y-m-d-His' ) . '.' . $extension;
 		}
 
@@ -350,6 +351,6 @@ final class ImportArtifactCleanup {
 		$prefix = trailingslashit( wp_normalize_path( $real_root ) );
 		$file   = wp_normalize_path( $absolute_path );
 
-		return str_starts_with( $file, $prefix );
+		return 0 === strpos( $file, $prefix );
 	}
 }

@@ -323,7 +323,7 @@ class FullSiteImportService {
 	 * @return array|WP_Error
 	 * @since 1.0.0
 	 */
-	public function build_user_plan( array $summary ): array|WP_Error {
+	public function build_user_plan( array $summary ) {
 		$incoming = isset( $summary['incoming'] ) && is_array( $summary['incoming'] ) ? $summary['incoming'] : array();
 		if ( empty( $incoming ) ) {
 			return array();
@@ -397,7 +397,7 @@ class FullSiteImportService {
 	 * @return array|WP_Error
 	 * @since 1.0.0
 	 */
-	public function resolve_upload( string $chunk_job_id ): array|WP_Error {
+	public function resolve_upload( string $chunk_job_id ) {
 		$chunk_disabled = PluginConfig::is_chunked_disabled();
 		$result         = array(
 			'temp'          => '',

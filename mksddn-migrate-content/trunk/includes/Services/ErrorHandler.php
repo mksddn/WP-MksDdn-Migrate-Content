@@ -34,7 +34,7 @@ class ErrorHandler {
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function log( string|WP_Error|\Throwable $error, string $context = '' ): void {
+	public function log( $error, string $context = '' ): void {
 		$message = $this->extract_message( $error );
 
 		if ( $context ) {
@@ -64,7 +64,7 @@ class ErrorHandler {
 	 * @return string Error message.
 	 * @since 1.0.0
 	 */
-	private function extract_message( string|WP_Error|\Throwable $error ): string {
+	private function extract_message( $error ): string {
 		if ( is_wp_error( $error ) ) {
 			return $error->get_error_message();
 		}
@@ -175,7 +175,7 @@ class ErrorHandler {
 	 * @return string Formatted error message.
 	 * @since 1.0.0
 	 */
-	public function handle( string|WP_Error|\Throwable $error, string $context = '' ): string {
+	public function handle( $error, string $context = '' ): string {
 		$this->log( $error, $context );
 
 		if ( is_wp_error( $error ) ) {

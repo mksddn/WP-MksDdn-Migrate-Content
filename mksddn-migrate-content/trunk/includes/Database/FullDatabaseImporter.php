@@ -447,7 +447,7 @@ class FullDatabaseImporter {
 	 * @return bool|int Rows affected on success, false on failure.
 	 * @since 1.0.0
 	 */
-	private function batch_insert_rows( wpdb $wpdb, string $table_name, array $rows ): bool|int {
+	private function batch_insert_rows( wpdb $wpdb, string $table_name, array $rows ) {
 		if ( empty( $rows ) ) {
 			return 0;
 		}
@@ -544,7 +544,7 @@ class FullDatabaseImporter {
 	 * @return bool|int Number of affected rows on success, false on failure.
 	 * @since 1.0.0
 	 */
-	private function insert_row_safe( wpdb $wpdb, string $table_name, array $row ): bool|int {
+	private function insert_row_safe( wpdb $wpdb, string $table_name, array $row ) {
 		// For wp_options table, use INSERT ... ON DUPLICATE KEY UPDATE to handle transients
 		// that may be created by WordPress during import.
 		if ( $wpdb->options === $table_name ) {

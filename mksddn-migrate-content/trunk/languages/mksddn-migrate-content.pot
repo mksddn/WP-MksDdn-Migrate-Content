@@ -447,7 +447,7 @@ msgid "Page"
 msgstr ""
 
 #: mksddn-migrate-content.php:54
-msgid "MksDdn Migrate Content requires WordPress 6.2+ and PHP 8.0+."
+msgid "MksDdn Migrate Content requires WordPress 6.2+ and PHP 7.4+."
 msgstr ""
 
 #: includes/Admin/AdminPageController.php:380 includes/Admin/AdminPageController.php:453

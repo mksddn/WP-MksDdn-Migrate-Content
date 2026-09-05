@@ -223,7 +223,7 @@ class ImportHandler implements ImporterInterface {
 	 * @return int|false Post ID on success, false on failure.
 	 * @since 1.0.0
 	 */
-	public function import_single_page( array $data, ?array &$post_id_map = null ): int|false {
+	public function import_single_page( array $data, ?array &$post_id_map = null ) {
 		if ( ! $this->validate_page_data( $data ) ) {
 			return false;
 		}
@@ -497,7 +497,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param array $data Item payload.
 	 * @return string|false Registered post type, or false if type is blocked or missing on site.
 	 */
-	private function resolve_import_post_type( array $data ): string|false {
+	private function resolve_import_post_type( array $data ) {
 		$raw = $data['type'] ?? $data['post_type'] ?? '';
 		$post_type = '';
 		if ( is_scalar( $raw ) ) {
@@ -604,7 +604,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param array   $post_data     Data to update.
 	 * @return int|WP_Error
 	 */
-	private function update_post( WP_Post $existing, array $post_data ): int|WP_Error {
+	private function update_post( WP_Post $existing, array $post_data ) {
 		$post_data['ID'] = $existing->ID;
 		return $this->wp_functions->update_post( $post_data );
 	}
@@ -615,7 +615,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param array $post_data Data to insert.
 	 * @return int|WP_Error
 	 */
-	private function create_post( array $post_data ): int|WP_Error {
+	private function create_post( array $post_data ) {
 		return $this->wp_functions->insert_post( $post_data );
 	}
 
@@ -716,7 +716,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param array      $url_to_new_id  Original URL => new attachment ID (for image fields).
 	 * @return void
 	 */
-	private function import_acf_fields( array $data, int|string $post_id, array $id_map = array(), array $url_map = array(), array $url_to_new_id = array() ): void {
+	private function import_acf_fields( array $data, $post_id, array $id_map = array(), array $url_map = array(), array $url_to_new_id = array() ): void {
 		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
 			return;
 		}
@@ -763,7 +763,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param int    $post_id    Target post ID.
 	 * @return bool
 	 */
-	private function acf_is_value_missing_after_import( string $field_name, mixed $expected, int $post_id ): bool {
+	private function acf_is_value_missing_after_import( string $field_name, $expected, int $post_id ): bool {
 		if ( $post_id <= 0 || ! function_exists( 'get_field' ) ) {
 			return false;
 		}
@@ -815,8 +815,8 @@ class ImportHandler implements ImporterInterface {
 			$is_target_key = (
 				$field_name === $meta_key
 				|| '_' . $field_name === $meta_key
-				|| str_starts_with( $meta_key, $prefix )
-				|| str_starts_with( $meta_key, '_' . $prefix )
+				|| 0 === strpos( $meta_key, $prefix )
+				|| 0 === strpos( $meta_key, '_' . $prefix )
 			);
 
 			if ( ! $is_target_key ) {
@@ -854,7 +854,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param mixed $value Value to inspect.
 	 * @return bool
 	 */
-	private function acf_has_meaningful_value( mixed $value ): bool {
+	private function acf_has_meaningful_value( $value ): bool {
 		if ( is_array( $value ) ) {
 			foreach ( $value as $item ) {
 				if ( $this->acf_has_meaningful_value( $item ) ) {
@@ -910,7 +910,7 @@ class ImportHandler implements ImporterInterface {
 	 * @param array $url_to_new_id Original URL => new attachment ID (optional).
 	 * @return mixed
 	 */
-	private function remap_media_values( mixed $value, array $id_map, array $url_map, array $url_to_new_id = array() ): mixed {
+	private function remap_media_values( $value, array $id_map, array $url_map, array $url_to_new_id = array() ) {
 		if ( is_array( $value ) ) {
 			if ( isset( $value['ID'] ) ) {
 				$old_id = (int) $value['ID'];

@@ -30,7 +30,7 @@ interface ArchiveHandlerInterface {
 	 * @return string|WP_Error Archive file path or error.
 	 * @since 1.0.0
 	 */
-	public function create_archive( array $payload, array $meta, array $assets = array() ): string|WP_Error;
+	public function create_archive( array $payload, array $meta, array $assets = array() );
 
 	/**
 	 * Extract archive contents.
@@ -39,6 +39,6 @@ interface ArchiveHandlerInterface {
 	 * @return array|WP_Error Extracted data or error.
 	 * @since 1.0.0
 	 */
-	public function extract( string $file_path ): array|WP_Error;
+	public function extract( string $file_path );
 }
 

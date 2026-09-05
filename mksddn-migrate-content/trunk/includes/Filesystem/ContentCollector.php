@@ -36,7 +36,7 @@ class ContentCollector {
 	 * @param array<string,string> $map Map of archive paths to real directories.
 	 * @return array<string,int>|WP_Error Archive write stats or error.
 	 */
-	public function append_directories( ZipArchive $zip, array $map ): array|WP_Error {
+	public function append_directories( ZipArchive $zip, array $map ) {
 		$stats = array(
 			'directories' => 0,
 			'files'       => 0,
@@ -67,7 +67,7 @@ class ContentCollector {
 	 * @param string     $archive_root Target folder inside archive.
 	 * @return array<string,int>|WP_Error Archive write stats or error.
 	 */
-	private function add_directory_to_zip( ZipArchive $zip, string $source_dir, string $archive_root ): array|WP_Error {
+	private function add_directory_to_zip( ZipArchive $zip, string $source_dir, string $archive_root ) {
 		$stats = array(
 			'directories' => 0,
 			'files'       => 0,

@@ -28,6 +28,6 @@ interface ImporterInterface {
 	 * @return bool|WP_Error True on success, false or WP_Error on failure.
 	 * @since 1.0.0
 	 */
-	public function import_bundle( array $data ): bool|WP_Error;
+	public function import_bundle( array $data );
 }
 

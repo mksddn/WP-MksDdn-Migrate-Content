@@ -28,7 +28,7 @@ interface WpUserFunctionsWrapperInterface {
 	 * @return int|WP_Error User ID on success, WP_Error on failure.
 	 * @since 1.0.0
 	 */
-	public function insert_user( array $userdata ): int|WP_Error;
+	public function insert_user( array $userdata );
 
 	/**
 	 * Check if username exists.
@@ -37,7 +37,7 @@ interface WpUserFunctionsWrapperInterface {
 	 * @return int|false User ID if exists, false otherwise.
 	 * @since 1.0.0
 	 */
-	public function username_exists( string $username ): int|false;
+	public function username_exists( string $username );
 
 	/**
 	 * Get current user ID.

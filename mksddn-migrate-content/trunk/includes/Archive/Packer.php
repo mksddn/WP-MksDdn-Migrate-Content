@@ -30,7 +30,7 @@ class Packer implements ArchiveHandlerInterface {
 	 * @return array|WP_Error Always returns error as packer cannot extract archives.
 	 * @since 1.0.0
 	 */
-	public function extract( string $file_path ): array|WP_Error {
+	public function extract( string $file_path ) {
 		return new WP_Error( 'mksddn_mc_not_implemented', __( 'Packer cannot extract archives.', 'mksddn-migrate-content' ) );
 	}
 
@@ -42,7 +42,7 @@ class Packer implements ArchiveHandlerInterface {
 	 * @param array $assets  Additional files to embed.
 	 * @return string|WP_Error
 	 */
-	public function create_archive( array $payload, array $meta, array $assets = array() ): string|WP_Error {
+	public function create_archive( array $payload, array $meta, array $assets = array() ) {
 		$payload_json = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 
 		if ( false === $payload_json ) {
@@ -79,7 +79,7 @@ class Packer implements ArchiveHandlerInterface {
 	 * @param string $payload_json  Payload string.
 	 * @return string|WP_Error
 	 */
-	private function build_with_ziparchive( string $manifest_json, string $payload_json, array $assets ): string|WP_Error {
+	private function build_with_ziparchive( string $manifest_json, string $payload_json, array $assets ) {
 		$archive_path = wp_tempnam( 'mksddn-mc-' );
 
 		if ( ! $archive_path ) {
@@ -118,7 +118,7 @@ class Packer implements ArchiveHandlerInterface {
 	 * @param string $payload_json  Payload string.
 	 * @return string|WP_Error
 	 */
-	private function build_with_pclzip( string $manifest_json, string $payload_json, array $assets ): string|WP_Error {
+	private function build_with_pclzip( string $manifest_json, string $payload_json, array $assets ) {
 		// Load PclZip class required for archive creation when ZipArchive is unavailable.
 		// Class is used immediately after loading to create archive.
 		if ( ! class_exists( 'PclZip' ) ) {
@@ -184,7 +184,7 @@ class Packer implements ArchiveHandlerInterface {
 	 *
 	 * @return string|WP_Error
 	 */
-	private function create_temp_dir(): string|WP_Error {
+	private function create_temp_dir() {
 		$temp_file = wp_tempnam( 'mksddn-mc-' );
 
 		if ( ! $temp_file ) {

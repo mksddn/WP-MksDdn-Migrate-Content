@@ -49,7 +49,7 @@ class ChunkJob {
 	 * @param array           $payload         Values to persist.
 	 * @return bool Whether the job was updated.
 	 */
-	public function update_if_status( string|array $expected_status, array $payload ): bool {
+	public function update_if_status( $expected_status, array $payload ): bool {
 		$path    = $this->dir . $this->id . '.json';
 		$allowed = (array) $expected_status;
 		$handle  = fopen( $path, 'c+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- an exclusive lock is required for atomic job status updates.

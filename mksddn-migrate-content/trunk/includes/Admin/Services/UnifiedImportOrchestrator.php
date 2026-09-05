@@ -239,7 +239,7 @@ class UnifiedImportOrchestrator {
 	 * @return array|WP_Error File info or error.
 	 * @since 2.0.0
 	 */
-	private function resolve_file_source( array $request_data ): array|WP_Error {
+	private function resolve_file_source( array $request_data ) {
 		// Check for chunked upload.
 		if ( ! empty( $request_data['chunk_job_id'] ) ) {
 			$original_name = isset( $request_data['chunk_original_name'] )
@@ -266,7 +266,7 @@ class UnifiedImportOrchestrator {
 	 * @return array|WP_Error File info or error.
 	 * @since 2.0.0
 	 */
-	private function resolve_chunked_file( string $chunk_job_id, string $original_name = '' ): array|WP_Error {
+	private function resolve_chunked_file( string $chunk_job_id, string $original_name = '' ) {
 		$job = ( new ChunkJobRepository() )->find( $chunk_job_id );
 
 		if ( ! $job ) {
@@ -296,7 +296,7 @@ class UnifiedImportOrchestrator {
 	 * @return array|WP_Error File info or error.
 	 * @since 2.0.0
 	 */
-	private function resolve_server_file( string $server_file ): array|WP_Error {
+	private function resolve_server_file( string $server_file ) {
 		$file_info = $this->server_scanner->get_file( $server_file );
 
 		if ( is_wp_error( $file_info ) ) {
@@ -318,7 +318,7 @@ class UnifiedImportOrchestrator {
 	 * @return array|WP_Error File info or error.
 	 * @since 2.0.0
 	 */
-	private function resolve_uploaded_file(): array|WP_Error {
+	private function resolve_uploaded_file() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in process() method.
 		if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
 			return new WP_Error( 'mksddn_mc_upload_failed', __( 'Failed to upload file.', 'mksddn-migrate-content' ) );
@@ -352,7 +352,7 @@ class UnifiedImportOrchestrator {
 	 * @param string $report_id Preflight report id.
 	 * @return array|WP_Error File info or error.
 	 */
-	private function resolve_preflight_import( string $report_id ): array|WP_Error {
+	private function resolve_preflight_import( string $report_id ) {
 		$bucket = $this->preflight_report_store->get_bucket_for_user( $report_id, (int) get_current_user_id() );
 		if ( ! $bucket || empty( $bucket['import_handle'] ) ) {
 			return new WP_Error(
@@ -420,7 +420,7 @@ class UnifiedImportOrchestrator {
 	 * @param array $file_info Resolved file info from the first request.
 	 * @return array|WP_Error
 	 */
-	private function build_import_handle( array $file_info ): array|WP_Error {
+	private function build_import_handle( array $file_info ) {
 		if ( 'server' === $file_info['source'] ) {
 			return array(
 				'source_type'   => 'server',
@@ -457,7 +457,7 @@ class UnifiedImportOrchestrator {
 	 * @param array $file_info Resolved upload info.
 	 * @return array|WP_Error
 	 */
-	private function stage_browser_upload( array $file_info ): array|WP_Error {
+	private function stage_browser_upload( array $file_info ) {
 		$staged = ImportArtifactCleanup::stage_into_preflight(
 			isset( $file_info['path'] ) ? (string) $file_info['path'] : '',
 			isset( $file_info['name'] ) ? (string) $file_info['name'] : '',
@@ -590,7 +590,7 @@ class UnifiedImportOrchestrator {
 	 * @return array|WP_Error
 	 * @since 2.1.0
 	 */
-	private function prepare_file_for_preview( array $file_info ): array|WP_Error {
+	private function prepare_file_for_preview( array $file_info ) {
 		$result = array(
 			'file_path'     => '',
 			'chunk_job_id'  => '',

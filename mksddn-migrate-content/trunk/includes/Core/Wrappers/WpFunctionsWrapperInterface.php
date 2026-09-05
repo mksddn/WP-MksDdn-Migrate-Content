@@ -30,7 +30,7 @@ interface WpFunctionsWrapperInterface {
 	 * @return int|WP_Error Post ID on success, WP_Error on failure.
 	 * @since 1.0.0
 	 */
-	public function insert_post( array $post_data ): int|WP_Error;
+	public function insert_post( array $post_data );
 
 	/**
 	 * Update a post.
@@ -39,7 +39,7 @@ interface WpFunctionsWrapperInterface {
 	 * @return int|WP_Error Post ID on success, WP_Error on failure.
 	 * @since 1.0.0
 	 */
-	public function update_post( array $post_data ): int|WP_Error;
+	public function update_post( array $post_data );
 
 	/**
 	 * Delete a post.
@@ -49,7 +49,7 @@ interface WpFunctionsWrapperInterface {
 	 * @return WP_Post|false|null Post object on success, false/null on failure.
 	 * @since 1.0.0
 	 */
-	public function delete_post( int $post_id, bool $force = false ): WP_Post|false|null;
+	public function delete_post( int $post_id, bool $force = false );
 
 	/**
 	 * Get posts.
@@ -89,7 +89,7 @@ interface WpFunctionsWrapperInterface {
 	 * @return mixed Meta value(s).
 	 * @since 1.0.0
 	 */
-	public function get_post_meta( int $post_id, string $key = '', bool $single = false ): mixed;
+	public function get_post_meta( int $post_id, string $key = '', bool $single = false );
 
 	/**
 	 * Update post meta.
@@ -100,7 +100,7 @@ interface WpFunctionsWrapperInterface {
 	 * @return int|false Meta ID on success, false on failure.
 	 * @since 1.0.0
 	 */
-	public function update_post_meta( int $post_id, string $key, mixed $value ): int|false;
+	public function update_post_meta( int $post_id, string $key, $value );
 
 	/**
 	 * Get post thumbnail ID.
@@ -109,7 +109,7 @@ interface WpFunctionsWrapperInterface {
 	 * @return int|false Thumbnail ID or false.
 	 * @since 1.0.0
 	 */
-	public function get_post_thumbnail_id( int|WP_Post $post ): int|false;
+	public function get_post_thumbnail_id( $post );
 
 	/**
 	 * Get ACF fields.
@@ -118,6 +118,6 @@ interface WpFunctionsWrapperInterface {
 	 * @return array Fields array.
 	 * @since 1.0.0
 	 */
-	public function get_acf_fields( int|string $post_id ): array;
+	public function get_acf_fields( $post_id ): array;
 }
 
