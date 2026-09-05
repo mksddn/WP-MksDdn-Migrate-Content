@@ -50,7 +50,7 @@ interface UserMergeApplierInterface {
 	 * @return array|WP_Error Summary or error.
 	 * @since 1.0.0
 	 */
-	public function merge( array $remote_users, array $plan, string $remote_prefix ): array|WP_Error;
+	public function merge( array $remote_users, array $plan, string $remote_prefix );
 
 	/**
 	 * Get last summary stats.

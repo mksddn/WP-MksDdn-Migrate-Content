@@ -95,10 +95,10 @@ final class PreflightStagingPath {
 		$real_root = realpath( untrailingslashit( wp_normalize_path( $root ) ) );
 		if ( false !== $real_root ) {
 			$prefix = trailingslashit( wp_normalize_path( $real_root ) );
-			return str_starts_with( $file_path, $prefix );
+			return 0 === strpos( $file_path, $prefix );
 		}
 
 		$prefix = trailingslashit( wp_normalize_path( $root ) );
-		return str_starts_with( $file_path, $prefix );
+		return 0 === strpos( $file_path, $prefix );
 	}
 }

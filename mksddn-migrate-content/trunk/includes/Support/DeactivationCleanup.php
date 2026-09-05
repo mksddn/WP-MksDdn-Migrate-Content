@@ -103,7 +103,7 @@ final class DeactivationCleanup {
 
 		$ok = false;
 		foreach ( $allowed as $root ) {
-			if ( $root && str_starts_with( $real, $root ) ) {
+			if ( $root && 0 === strpos( $real, $root ) ) {
 				$ok = true;
 				break;
 			}

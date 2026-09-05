@@ -48,7 +48,7 @@ class ImportTypeDetector {
 	 * @return string|WP_Error Import type ('full', 'selected', or 'themes') or error.
 	 * @since 1.4.0
 	 */
-	public function detect( string $file_path, string $extension ): string|WP_Error {
+	public function detect( string $file_path, string $extension ) {
 		if ( ! file_exists( $file_path ) ) {
 			return new WP_Error( 'mksddn_mc_file_missing', __( 'File not found.', 'mksddn-migrate-content' ) );
 		}
@@ -73,7 +73,7 @@ class ImportTypeDetector {
 	 * @return string|WP_Error Import type or error.
 	 * @since 1.4.0
 	 */
-	private function detect_from_archive( string $file_path ): string|WP_Error {
+	private function detect_from_archive( string $file_path ) {
 		$zip = new ZipArchive();
 		$open = $zip->open( $file_path );
 
@@ -169,7 +169,7 @@ class ImportTypeDetector {
 	 * @param array|false    $payload_stat Result of ZipArchive::statName() for payload/content.json.
 	 * @return string|null One of 'full', 'themes', or null when inconclusive.
 	 */
-	private function detect_payload_type( ZipArchive $zip, array|false $payload_stat ): ?string {
+	private function detect_payload_type( ZipArchive $zip, $payload_stat ): ?string {
 		$size = is_array( $payload_stat ) && isset( $payload_stat['size'] ) ? (int) $payload_stat['size'] : 0;
 
 		if ( $size > 0 && $size <= 1048576 ) {

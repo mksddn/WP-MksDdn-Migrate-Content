@@ -30,7 +30,7 @@ class FileValidator implements ValidatorInterface {
 	 * @return bool True if valid, false otherwise.
 	 * @since 1.0.0
 	 */
-	public function validate( mixed $data, string $type ): bool {
+	public function validate( $data, string $type ): bool {
 		$result = $this->validate_file( $data, $type );
 		return $result->is_valid();
 	}

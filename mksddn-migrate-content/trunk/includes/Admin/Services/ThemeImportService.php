@@ -249,7 +249,7 @@ class ThemeImportService {
 	 * @param string $chunk_job_id Chunk job identifier.
 	 * @return array|WP_Error
 	 */
-	public function resolve_upload( string $chunk_job_id ): array|WP_Error {
+	public function resolve_upload( string $chunk_job_id ) {
 		$chunk_disabled = PluginConfig::is_chunked_disabled();
 		$result         = array(
 			'temp'          => '',

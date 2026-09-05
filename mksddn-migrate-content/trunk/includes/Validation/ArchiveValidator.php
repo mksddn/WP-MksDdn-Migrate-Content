@@ -30,7 +30,7 @@ class ArchiveValidator implements ValidatorInterface {
 	 * @return bool True if valid, false otherwise.
 	 * @since 1.0.0
 	 */
-	public function validate( mixed $data, string $type ): bool {
+	public function validate( $data, string $type ): bool {
 		$result = $this->validate_archive( $data );
 		return $result->is_valid();
 	}
@@ -42,7 +42,7 @@ class ArchiveValidator implements ValidatorInterface {
 	 * @return ValidationResult Validation result.
 	 * @since 1.0.0
 	 */
-	public function validate_archive( string|array $archive ): ValidationResult {
+	public function validate_archive( $archive ): ValidationResult {
 		$errors = array();
 
 		if ( is_string( $archive ) ) {

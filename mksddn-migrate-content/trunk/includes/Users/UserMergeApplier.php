@@ -151,7 +151,7 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 * @param string $remote_prefix Remote table prefix for meta normalization.
 	 * @return array|WP_Error Summary or error.
 	 */
-	public function merge( array $remote_users, array $plan, string $remote_prefix ): array|WP_Error {
+	public function merge( array $remote_users, array $plan, string $remote_prefix ) {
 		$this->summary = array(
 			'created'  => 0,
 			'updated'  => 0,

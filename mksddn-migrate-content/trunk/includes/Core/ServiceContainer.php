@@ -43,7 +43,7 @@ class ServiceContainer {
 	 * @return void
 	 * @since 1.0.0
 	 */
-	public function register( string $id, callable|string $factory, bool $singleton = true, bool $lazy = false ): void {
+	public function register( string $id, $factory, bool $singleton = true, bool $lazy = false ): void {
 		$this->services[ $id ] = array(
 			'factory'   => $factory,
 			'singleton' => $singleton,
@@ -59,7 +59,7 @@ class ServiceContainer {
 	 * @throws \RuntimeException If service not found.
 	 * @since 1.0.0
 	 */
-	public function get( string $id ): mixed {
+	public function get( string $id ) {
 		// Return singleton if already instantiated.
 		if ( isset( $this->singletons[ $id ] ) ) {
 			return $this->singletons[ $id ];
@@ -104,7 +104,7 @@ class ServiceContainer {
 	 * @return mixed Resolved instance.
 	 * @since 1.0.0
 	 */
-	private function resolve( callable|string $factory ): mixed {
+	private function resolve( $factory ) {
 		if ( is_callable( $factory ) ) {
 			return call_user_func( $factory, $this );
 		}

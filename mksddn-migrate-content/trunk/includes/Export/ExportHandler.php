@@ -376,10 +376,11 @@ class ExportHandler implements ExporterInterface {
 	private function resolve_target_id(): int {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce checked in admin controller before calling handler.
 		$type = \sanitize_key( $_POST['export_type'] ?? 'page' );
-		return match ( $type ) {
-			'post' => \absint( $_POST['post_id'] ?? 0 ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- validated upstream
-			default => \absint( $_POST['page_id'] ?? 0 ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- validated upstream
-		};
+		if ( 'post' === $type ) {
+			return \absint( $_POST['post_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- validated upstream
+		}
+
+		return \absint( $_POST['page_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- validated upstream
 	}
 
 	/**

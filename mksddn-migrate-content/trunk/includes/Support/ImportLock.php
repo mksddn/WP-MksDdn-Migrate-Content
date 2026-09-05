@@ -49,7 +49,7 @@ class ImportLock {
 	 * @return string|false Lock token or false if already locked.
 	 * @since 1.0.0
 	 */
-	public function acquire( int $ttl = self::DEFAULT_TTL ): string|false {
+	public function acquire( int $ttl = self::DEFAULT_TTL ) {
 		$current = get_transient( self::LOCK_KEY );
 		
 		// Check if lock exists and is still valid.

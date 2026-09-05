@@ -81,7 +81,7 @@ class ServerBackupScanner {
 	 * @return array|WP_Error List of import files with metadata or error.
 	 * @since 1.0.1
 	 */
-	public function scan(): array|WP_Error {
+	public function scan() {
 		$imports_dir = PluginConfig::imports_dir();
 
 		// Ensure directory exists, create if needed.
@@ -175,7 +175,7 @@ class ServerBackupScanner {
 	 * @return array|WP_Error File data or error.
 	 * @since 1.0.1
 	 */
-	public function get_file( string $filename ): array|WP_Error {
+	public function get_file( string $filename ) {
 		$imports_dir = PluginConfig::imports_dir();
 
 		// Debug logging for troubleshooting.
@@ -304,7 +304,7 @@ class ServerBackupScanner {
 	 * @return true|WP_Error True on success, WP_Error on failure.
 	 * @since 2.5.0
 	 */
-	public function delete_file( string $filename ): bool|WP_Error {
+	public function delete_file( string $filename ) {
 		$file = $this->get_file( $filename );
 		if ( is_wp_error( $file ) ) {
 			return $file;

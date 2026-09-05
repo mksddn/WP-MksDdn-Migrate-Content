@@ -441,13 +441,17 @@ class FullDatabaseImporter {
 	/**
 	 * Batch insert multiple rows for better performance.
 	 *
+	 * NULL values are emitted as SQL NULL (not empty strings). Using %s for null
+	 * breaks UNIQUE indexes that allow multiple NULLs but only one empty string
+	 * (e.g. Robin Image Optimizer `index-hash` on item_hash).
+	 *
 	 * @param wpdb   $wpdb       Database object.
 	 * @param string $table_name Table name.
 	 * @param array  $rows       Array of row arrays.
 	 * @return bool|int Rows affected on success, false on failure.
 	 * @since 1.0.0
 	 */
-	private function batch_insert_rows( wpdb $wpdb, string $table_name, array $rows ): bool|int {
+	private function batch_insert_rows( wpdb $wpdb, string $table_name, array $rows ) {
 		if ( empty( $rows ) ) {
 			return 0;
 		}
@@ -474,65 +478,116 @@ class FullDatabaseImporter {
 		$columns = array_keys( $first_row );
 		// Sanitize and escape column names for safe SQL usage.
 		$sanitized_columns = array_map( 'sanitize_key', $columns );
-		$escaped_columns = array_map( 'esc_sql', $sanitized_columns );
-		$column_names = '`' . implode( '`, `', $escaped_columns ) . '`';
-		
-		// Build VALUES clause with placeholders and collect all values for batch insert.
+		$escaped_columns   = array_map( 'esc_sql', $sanitized_columns );
+		$column_names      = '`' . implode( '`, `', $escaped_columns ) . '`';
+
+		// Build VALUES clause. NULL stays as SQL NULL; other values use %s placeholders.
 		$values_clauses = array();
-		$query_values = array();
-		$column_count = count( $columns );
-		
+		$query_values   = array();
+
 		foreach ( $rows as $row ) {
-			// Create placeholders for this row: (%s, %s, ...).
-			$row_placeholders = array_fill( 0, $column_count, '%s' );
-			$values_clauses[] = '(' . implode( ', ', $row_placeholders ) . ')';
-			
-			// Collect values in the same order as columns for $wpdb->prepare().
+			$row_parts = array();
 			foreach ( $columns as $col ) {
-				$query_values[] = isset( $row[ $col ] ) ? $row[ $col ] : null;
+				$value = array_key_exists( $col, $row ) ? $row[ $col ] : null;
+				if ( null === $value ) {
+					$row_parts[] = 'NULL';
+				} else {
+					$row_parts[]    = '%s';
+					$query_values[] = $value;
+				}
 			}
+			$values_clauses[] = '(' . implode( ', ', $row_parts ) . ')';
 		}
 
 		// Escape table name for safe SQL usage.
 		// Table name is validated via is_valid_table_name() before calling this method.
 		$escaped_table_name = esc_sql( $table_name );
-		
+
 		// Build query template with escaped identifiers and placeholders for values.
-		// All values will be properly escaped by $wpdb->prepare().
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$values_placeholder_string = implode( ', ', $values_clauses );
-		$query_template = sprintf(
-			"INSERT INTO `%s` (%s) VALUES %s",
+		$query_template            = sprintf(
+			'INSERT INTO `%s` (%s) VALUES %s',
 			$escaped_table_name,
 			$column_names,
 			$values_placeholder_string
 		);
-		
-		// Prepare query with all values - $wpdb->prepare() will escape all values safely.
-		// Use call_user_func_array to pass array of values as separate arguments.
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query template contains placeholders, all values are passed to prepare() for escaping
-		$prepare_args = array_merge( array( $query_template ), $query_values );
-		$query = call_user_func_array( array( $wpdb, 'prepare' ), $prepare_args );
+
+		if ( empty( $query_values ) ) {
+			// All values are NULL — no placeholders to prepare.
+			$query = $query_template;
+		} else {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query template contains placeholders; values passed to prepare().
+			$prepare_args = array_merge( array( $query_template ), $query_values );
+			$query        = call_user_func_array( array( $wpdb, 'prepare' ), $prepare_args );
+		}
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		// Execute prepared query - all identifiers and values are properly escaped.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Query is prepared via $wpdb->prepare() above with all values escaped, table name and column names are validated and escaped via esc_sql()
+		if ( false === $query || null === $query || '' === $query ) {
+			return false;
+		}
+
+		// Avoid flooding the admin UI when a batch fails and we recover below.
+		$previous_suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Query prepared above; identifiers escaped via esc_sql().
 		$result = $wpdb->query( $query );
+		$wpdb->suppress_errors( $previous_suppress );
 
-		// Check for errors.
 		if ( false === $result ) {
-			$error_code = $wpdb->last_error ? $wpdb->last_error : '';
-			$error_num = isset( $wpdb->last_error_no ) ? $wpdb->last_error_no : 0;
-
-			// MySQL error 1062 is "Duplicate entry" - acceptable, rows may exist.
-			if ( 1062 === $error_num || false !== strpos( strtolower( $error_code ), 'duplicate entry' ) ) {
+			if ( $this->is_duplicate_key_error( $wpdb ) ) {
 				$wpdb->last_error = '';
-				return count( $rows ); // Assume all inserted despite dupes.
+				// Multi-row INSERT is atomic: one duplicate aborts the whole batch.
+				// Fall back to row-by-row so valid rows are still imported.
+				return $this->insert_rows_individually( $wpdb, $table_name, $rows );
 			}
 			return false;
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Insert rows one at a time (fallback when a multi-row INSERT fails).
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @param array  $rows       Array of row arrays.
+	 * @return bool|int Total affected rows, or false on hard failure.
+	 * @since 1.0.0
+	 */
+	private function insert_rows_individually( wpdb $wpdb, string $table_name, array $rows ) {
+		$total = 0;
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$result = $this->insert_row_safe( $wpdb, $table_name, $row );
+			if ( false === $result ) {
+				return false;
+			}
+			$total += (int) $result;
+		}
+		return $total;
+	}
+
+	/**
+	 * Whether the last wpdb error is a MySQL duplicate-key (1062).
+	 *
+	 * @param wpdb $wpdb Database object.
+	 * @return bool
+	 * @since 1.0.0
+	 */
+	private function is_duplicate_key_error( wpdb $wpdb ): bool {
+		$error_code = $wpdb->last_error ? $wpdb->last_error : '';
+		$error_num  = 0;
+		if ( isset( $wpdb->last_errno ) ) {
+			$error_num = (int) $wpdb->last_errno;
+		} elseif ( isset( $wpdb->last_error_no ) ) {
+			// Legacy typo kept for older forks / compatibility.
+			$error_num = (int) $wpdb->last_error_no;
+		}
+
+		return ( 1062 === $error_num || false !== strpos( strtolower( $error_code ), 'duplicate entry' ) );
 	}
 
 	/**
@@ -544,27 +599,23 @@ class FullDatabaseImporter {
 	 * @return bool|int Number of affected rows on success, false on failure.
 	 * @since 1.0.0
 	 */
-	private function insert_row_safe( wpdb $wpdb, string $table_name, array $row ): bool|int {
+	private function insert_row_safe( wpdb $wpdb, string $table_name, array $row ) {
 		// For wp_options table, use INSERT ... ON DUPLICATE KEY UPDATE to handle transients
 		// that may be created by WordPress during import.
 		if ( $wpdb->options === $table_name ) {
 			return $this->insert_option_safe( $wpdb, $row );
 		}
 
-		$result = $wpdb->insert( $table_name, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// $wpdb->insert() preserves PHP null as SQL NULL (unlike prepare('%s')).
+		$previous_suppress = $wpdb->suppress_errors( true );
+		$result            = $wpdb->insert( $table_name, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->suppress_errors( $previous_suppress );
 
-		// Check for duplicate key error.
 		if ( false === $result ) {
-			$error_code = $wpdb->last_error ? $wpdb->last_error : '';
-			$error_num  = isset( $wpdb->last_error_no ) ? $wpdb->last_error_no : 0;
-
-			// MySQL error 1062 is "Duplicate entry" error.
-			// Also check error message for compatibility with older WordPress versions.
-			if ( 1062 === $error_num || false !== strpos( strtolower( $error_code ), 'duplicate entry' ) ) {
-				// Duplicate key error - row already exists, which is acceptable.
-				// WordPress may have created records during import, so we ignore this error.
-				$wpdb->last_error = ''; // Clear error to prevent logging.
-				return 0; // Return 0 to indicate no rows were inserted, but it's not a failure.
+			if ( $this->is_duplicate_key_error( $wpdb ) ) {
+				// Duplicate key — row already exists; acceptable during import.
+				$wpdb->last_error = '';
+				return 0;
 			}
 		}
 

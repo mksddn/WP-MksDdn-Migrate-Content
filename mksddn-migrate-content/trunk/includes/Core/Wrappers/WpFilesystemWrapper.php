@@ -27,7 +27,7 @@ class WpFilesystemWrapper implements WpFilesystemWrapperInterface {
 	 * @return array|WP_Error Upload directory array or error.
 	 * @since 1.0.0
 	 */
-	public function upload_dir(): array|WP_Error {
+	public function upload_dir() {
 		$upload_dir = wp_upload_dir();
 		if ( $upload_dir['error'] ) {
 			return new WP_Error( 'upload_dir_error', $upload_dir['error'] );
@@ -45,7 +45,7 @@ class WpFilesystemWrapper implements WpFilesystemWrapperInterface {
 	 * @return array|WP_Error File data or error.
 	 * @since 1.0.0
 	 */
-	public function handle_upload( array $file, array $overrides = array(), ?string $time = null ): array|WP_Error {
+	public function handle_upload( array $file, array $overrides = array(), ?string $time = null ) {
 		return wp_handle_upload( $file, $overrides, $time );
 	}
 }

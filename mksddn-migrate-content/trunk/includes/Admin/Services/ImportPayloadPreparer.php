@@ -48,7 +48,7 @@ class ImportPayloadPreparer {
 	 * @return array|WP_Error Prepared payload data or error.
 	 * @since 1.0.0
 	 */
-	public function prepare( string $extension, string $mime, string $file_path ): array|WP_Error {
+	public function prepare( string $extension, string $mime, string $file_path ) {
 		switch ( $extension ) {
 			case 'json':
 				$data = $this->read_json( $file_path );
@@ -87,7 +87,7 @@ class ImportPayloadPreparer {
 	 * @return array|WP_Error Decoded JSON data or error.
 	 * @since 1.0.0
 	 */
-	public function read_json( string $file_path ): array|WP_Error {
+	public function read_json( string $file_path ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file -- Local temporary file validated earlier.
 		$json = file_get_contents( $file_path );
 		if ( false === $json ) {

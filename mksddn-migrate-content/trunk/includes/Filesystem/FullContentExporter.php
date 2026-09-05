@@ -315,7 +315,7 @@ class FullContentExporter {
 	 * @param string     $base_prefix Base directory inside archive.
 	 * @return array<string,int>|WP_Error Archive write stats or error.
 	 */
-	private function append_wp_content( ZipArchive $zip, string $base_prefix = '' ): array|WP_Error {
+	private function append_wp_content( ZipArchive $zip, string $base_prefix = '' ) {
 		return $this->collector->append_directories( $zip, $this->get_wp_content_paths( $base_prefix ) );
 	}
 

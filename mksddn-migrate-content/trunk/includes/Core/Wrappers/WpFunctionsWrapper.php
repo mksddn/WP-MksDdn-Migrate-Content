@@ -30,7 +30,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return int|WP_Error Post ID on success, WP_Error on failure.
 	 * @since 1.0.0
 	 */
-	public function insert_post( array $post_data ): int|WP_Error {
+	public function insert_post( array $post_data ) {
 		return wp_insert_post( $post_data, true );
 	}
 
@@ -41,7 +41,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return int|WP_Error Post ID on success, WP_Error on failure.
 	 * @since 1.0.0
 	 */
-	public function update_post( array $post_data ): int|WP_Error {
+	public function update_post( array $post_data ) {
 		return wp_update_post( $post_data, true );
 	}
 
@@ -53,7 +53,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return WP_Post|false|null Post object on success, false/null on failure.
 	 * @since 1.0.0
 	 */
-	public function delete_post( int $post_id, bool $force = false ): WP_Post|false|null {
+	public function delete_post( int $post_id, bool $force = false ) {
 		return wp_delete_post( $post_id, $force );
 	}
 
@@ -102,7 +102,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return mixed Meta value(s).
 	 * @since 1.0.0
 	 */
-	public function get_post_meta( int $post_id, string $key = '', bool $single = false ): mixed {
+	public function get_post_meta( int $post_id, string $key = '', bool $single = false ) {
 		return get_post_meta( $post_id, $key, $single );
 	}
 
@@ -115,7 +115,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return int|false Meta ID on success, false on failure.
 	 * @since 1.0.0
 	 */
-	public function update_post_meta( int $post_id, string $key, mixed $value ): int|false {
+	public function update_post_meta( int $post_id, string $key, $value ) {
 		return update_post_meta( $post_id, $key, $value );
 	}
 
@@ -126,7 +126,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return int|false Thumbnail ID or false.
 	 * @since 1.0.0
 	 */
-	public function get_post_thumbnail_id( int|WP_Post $post ): int|false {
+	public function get_post_thumbnail_id( $post ) {
 		return get_post_thumbnail_id( $post );
 	}
 
@@ -137,7 +137,7 @@ class WpFunctionsWrapper implements WpFunctionsWrapperInterface {
 	 * @return array Fields array.
 	 * @since 1.0.0
 	 */
-	public function get_acf_fields( int|string $post_id ): array {
+	public function get_acf_fields( $post_id ): array {
 		if ( ! function_exists( 'get_fields' ) ) {
 			return array();
 		}

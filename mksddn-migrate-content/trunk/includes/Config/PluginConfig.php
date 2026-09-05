@@ -76,7 +76,7 @@ class PluginConfig {
 		}
 
 		$slug = sanitize_key( $filtered );
-		if ( '' === $slug || ! str_starts_with( $slug, 'mksddn-' ) ) {
+		if ( '' === $slug || 0 !== strpos( $slug, 'mksddn-' ) ) {
 			return MKSDDN_MC_TEXT_DOMAIN;
 		}
 
@@ -440,7 +440,7 @@ class PluginConfig {
 	 * @return bool|WP_Error True if all directories were created successfully, WP_Error with failed directories otherwise.
 	 * @since 1.0.1
 	 */
-	public static function create_required_directories(): bool|WP_Error {
+	public static function create_required_directories() {
 		$directories = self::get_required_directories();
 		$failed = array();
 
