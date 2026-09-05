@@ -254,10 +254,10 @@ class FullDatabaseImporter {
 						$this->log( sprintf( 'Insert failed for table %s. MySQL error: %s', $table_name, $db_error ) );
 						unset( $rows, $table_data, $row_keys, $batch_rows );
 						$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-						/* translators: 1: database table name, 2: MySQL error message. */
 						return new WP_Error(
 							'mksddn_db_insert_failed',
 							sprintf(
+								/* translators: 1: database table name, 2: MySQL error message. */
 								__( 'Failed to insert rows into %1$s. Database error: %2$s', 'mksddn-migrate-content' ),
 								esc_html( $table_name ),
 								esc_html( $db_error )
@@ -452,19 +452,22 @@ class FullDatabaseImporter {
 		$this->ensure_table_exists( $wpdb, $table_name, $schema_sql );
 
 		if ( ! $this->table_exists( $wpdb, $table_name ) ) {
-			/* translators: %s: database table name. */
 			return new WP_Error(
 				'mksddn_db_table_missing',
-				sprintf( __( 'Unable to create or find table %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) )
+				sprintf(
+					/* translators: %s: database table name. */
+					__( 'Unable to create or find table %s.', 'mksddn-migrate-content' ),
+					esc_html( $table_name )
+				)
 			);
 		}
 
 		$truncate = $wpdb->query( "TRUNCATE TABLE `{$escaped_table}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
 		if ( false === $truncate ) {
-			/* translators: 1: database table name, 2: MySQL error message. */
 			return new WP_Error(
 				'mksddn_db_truncate_failed',
 				sprintf(
+					/* translators: 1: database table name, 2: MySQL error message. */
 					__( 'Unable to truncate table %1$s. Database error: %2$s', 'mksddn-migrate-content' ),
 					esc_html( $table_name ),
 					esc_html( $this->format_db_error( $wpdb ) )
@@ -565,10 +568,10 @@ class FullDatabaseImporter {
 						$this->format_db_error( $wpdb )
 					)
 				);
-				/* translators: 1: database table name, 2: MySQL error message. */
 				return new WP_Error(
 					'mksddn_db_create_failed',
 					sprintf(
+						/* translators: 1: database table name, 2: MySQL error message. */
 						__( 'Unable to recreate table %1$s from dump schema. Database error: %2$s', 'mksddn-migrate-content' ),
 						esc_html( $table_name ),
 						esc_html( $create_error )
@@ -580,10 +583,10 @@ class FullDatabaseImporter {
 			return false;
 		}
 
-		/* translators: 1: database table name, 2: MySQL error message. */
 		return new WP_Error(
 			'mksddn_db_create_failed',
 			sprintf(
+				/* translators: 1: database table name, 2: MySQL error message. */
 				__( 'Unable to recreate table %1$s from dump schema. Database error: %2$s', 'mksddn-migrate-content' ),
 				esc_html( $table_name ),
 				esc_html( $create_error )
