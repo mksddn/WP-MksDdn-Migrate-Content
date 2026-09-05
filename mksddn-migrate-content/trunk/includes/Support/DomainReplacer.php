@@ -290,7 +290,13 @@ class DomainReplacer {
 				return $data;
 			}
 
-			foreach ( $data as $property => $value ) {
+			// Iterate declared/visible properties only. `foreach ( $object as ... )` walks
+			// ArrayAccess keys (e.g. Requests header bags) and then writes them as dynamic
+			// properties — PHP 8.2+ deprecation.
+			foreach ( get_object_vars( $data ) as $property => $value ) {
+				if ( ! is_string( $property ) || '' === $property ) {
+					continue;
+				}
 				$data->$property = $this->replace_recursive( $value, $map );
 			}
 

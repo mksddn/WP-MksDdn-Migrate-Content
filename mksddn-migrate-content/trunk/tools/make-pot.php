@@ -35,16 +35,22 @@ call_user_func(
 		}
 
 		$source_dir  = $GLOBALS['argv'][1] ?? dirname( __DIR__ );
-		$output_file = $GLOBALS['argv'][2] ?? $source_dir . '/languages/mksddn-migrate-content.pot';
+		$output_file = $GLOBALS['argv'][2] ?? null;
 		$text_domain = $GLOBALS['argv'][3] ?? 'mksddn-migrate-content';
 
-		if ( ! is_dir( $source_dir ) ) {
+		// Resolve to an absolute path so relative args like "." do not strip dots from file references.
+		$resolved_source = realpath( $source_dir );
+		if ( false === $resolved_source || ! is_dir( $resolved_source ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- CLI helper cannot bootstrap WP_Filesystem.
 			fwrite( STDERR, "Source directory not found: {$source_dir}\n" );
 			exit( 1 );
 		}
 
-		$generator = new PotGenerator( $source_dir, $output_file, $text_domain );
+		if ( null === $output_file ) {
+			$output_file = $resolved_source . '/languages/mksddn-migrate-content.pot';
+		}
+
+		$generator = new PotGenerator( $resolved_source, $output_file, $text_domain );
 		$generator->run();
 	}
 );

@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.7.0
+Stable tag: 2.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -191,6 +191,14 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.7.1 =
+* Fixed: Full-site DB import now recreates tables from the dump schema (DROP + CREATE) to avoid schema/charset drift breaking inserts (e.g. `wp_terms`).
+* Fixed: If CREATE TABLE fails after DROP (unknown collation/tablespace), retry without host-specific clauses instead of leaving the table missing.
+* Fixed: Batch INSERT escapes values without multi-arg `$wpdb->prepare()` so literal `%` in content cannot break imports on WordPress < 6.2.
+* Fixed: NULL values for NOT NULL columns are coerced to column defaults before insert (keeps RIO NULL-safe UNIQUE behavior for nullable columns).
+* Improved: Insert failures log and surface the real MySQL error; non-duplicate batch failures fall back to row-by-row insert.
+* Fixed: DomainReplacer no longer writes dynamic properties on Requests header objects (PHP 8.2+ deprecations during environment replacement).
 
 = 2.7.0 =
 * Compatibility: Minimum PHP version restored to 7.4 (was 8.0 in 2.6.x).
