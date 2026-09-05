@@ -496,7 +496,7 @@ class FullDatabaseImporter {
 		}
 
 		$quoted_table = $this->quote_identifier( $table_name );
-		$truncate     = $wpdb->query( "TRUNCATE TABLE {$quoted_table}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
+		$truncate     = $wpdb->query( "TRUNCATE TABLE {$quoted_table}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
 		if ( false === $truncate ) {
 			return new WP_Error(
 				'mksddn_db_truncate_failed',
@@ -777,7 +777,7 @@ class FullDatabaseImporter {
 
 		$quoted            = $this->quote_identifier( $table_name );
 		$previous_suppress = $wpdb->suppress_errors( true );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- identifier validated and quoted
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- identifier validated and quoted
 		$wpdb->query( "DROP TABLE IF EXISTS {$quoted}" );
 		$wpdb->suppress_errors( $previous_suppress );
 
@@ -915,7 +915,7 @@ class FullDatabaseImporter {
 
 			$quoted_trigger    = $this->quote_identifier( $name );
 			$previous_suppress = $wpdb->suppress_errors( true );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- trigger name validated and quoted
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- trigger name validated and quoted
 			$wpdb->query( "DROP TRIGGER IF EXISTS {$quoted_trigger}" );
 
 			$sql = sprintf(
@@ -1326,7 +1326,7 @@ class FullDatabaseImporter {
 		}
 
 		$quoted = $this->quote_identifier( $table_name );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name validated and quoted
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name validated and quoted
 		$columns = $wpdb->get_results( "SHOW COLUMNS FROM {$quoted}", ARRAY_A );
 		$map     = array();
 
