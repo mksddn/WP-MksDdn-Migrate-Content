@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.7.0
+Stable tag: 2.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -113,7 +113,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF)
 * `SelectionBuilder`, `ContentSelection` — build export selections from admin input
 * `FullContentExporter`, `FullContentImporter` — full-site archive assembly and restore
-* `FullDatabaseExporter`, `FullDatabaseImporter` — streaming database export/import
+* `FullDatabaseExporter`, `FullDatabaseImporter`, `SwapTableNames` — streaming database export/import; schema recreate uses a swap table then atomic RENAME
 * `ThemeExporter`, `ThemeImporter` — theme archive export and filesystem apply
 * `OptionsExporter`, `OptionsImporter`, `OptionsHelper` — WordPress options slices
 * `AttachmentCollector`, `AttachmentRestorer`, `AttachmentCollection` — media pipeline
@@ -191,6 +191,17 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.7.1 =
+* Fixed: Full-site DB import recreates tables from the dump schema (CREATE under a swap name, then atomic RENAME) so the original table is not discarded until CREATE succeeds.
+* Fixed: Schema recreate failures no longer fall back to TRUNCATE of the old schema (the previous cause of charset/column drift on insert, e.g. `wp_terms`).
+* Fixed: Leftover swap tables (`*_mkn…` empty copies, `*_mko…` / `*_mksddn_bak` old copies) are recovered or excluded from export; empty `_mkn` leftovers are dropped.
+* Fixed: INSERT uses schema column names as-is (no `sanitize_key`), skips generated columns, and uses SQL DEFAULT for NOT NULL columns with defaults instead of quoting expression defaults like CURRENT_TIMESTAMP.
+* Fixed: Table triggers are captured before swap and reapplied after recreate.
+* Fixed: Batch INSERT splits by `max_allowed_packet` and escapes values without multi-arg `$wpdb->prepare()`.
+* Fixed: NULL stays SQL NULL on nullable UNIQUE columns (e.g. Robin Image Optimizer).
+* Improved: Insert failures log and surface the real MySQL error; non-duplicate batch failures fall back to row-by-row insert.
+* Fixed: DomainReplacer updates ArrayAccess collections via `offsetSet` and no longer writes dynamic properties (PHP 8.2+).
 
 = 2.7.0 =
 * Compatibility: Minimum PHP version restored to 7.4 (was 8.0 in 2.6.x).

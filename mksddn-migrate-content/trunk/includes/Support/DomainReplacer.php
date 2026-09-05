@@ -290,7 +290,25 @@ class DomainReplacer {
 				return $data;
 			}
 
-			foreach ( $data as $property => $value ) {
+			// ArrayAccess bags (Requests headers, etc.): walk iterator keys via offsetSet
+			// so URL replacement still runs without writing dynamic properties.
+			if ( $data instanceof \ArrayAccess && $data instanceof \Traversable ) {
+				$keys = array();
+				foreach ( $data as $key => $_value ) {
+					$keys[] = $key;
+				}
+				foreach ( $keys as $key ) {
+					if ( ! $data->offsetExists( $key ) ) {
+						continue;
+					}
+					$data->offsetSet( $key, $this->replace_recursive( $data->offsetGet( $key ), $map ) );
+				}
+			}
+
+			foreach ( get_object_vars( $data ) as $property => $value ) {
+				if ( ! is_string( $property ) || '' === $property ) {
+					continue;
+				}
 				$data->$property = $this->replace_recursive( $value, $map );
 			}
 

@@ -2,7 +2,7 @@
 /**
  * @file: FullDatabaseImporter.php
  * @description: Restores WordPress database tables from exported data
- * @dependencies: wpdb, WP_Error
+ * @dependencies: wpdb, WP_Error, SwapTableNames
  * @created: 2024-12-15
  */
 
@@ -25,11 +25,32 @@ if ( ! defined( 'ABSPATH' ) ) {
 class FullDatabaseImporter {
 
 	/**
-	 * True after first successful TRUNCATE or INSERT batch in the current import() run.
+	 * True after first successful schema swap, TRUNCATE, or INSERT batch in the current import() run.
 	 *
 	 * @var bool
 	 */
 	private bool $database_mutated = false;
+
+	/**
+	 * Cached column metadata per table for the current import() run.
+	 *
+	 * @var array<string, array<string, array<string, mixed>>>
+	 */
+	private array $table_columns_cache = array();
+
+	/**
+	 * One-shot schema/row-normalization warnings already logged (per import run).
+	 *
+	 * @var array<string, true>
+	 */
+	private array $row_norm_warnings = array();
+
+	/**
+	 * INSERT byte budget derived from max_allowed_packet (per import run).
+	 *
+	 * @var int
+	 */
+	private int $insert_byte_budget = 0;
 
 	/**
 	 * Apply dump onto current database.
@@ -39,7 +60,10 @@ class FullDatabaseImporter {
 	 * @since 1.0.0
 	 */
 	public function import( array $dump ) {
-		$this->database_mutated = false;
+		$this->database_mutated    = false;
+		$this->table_columns_cache = array();
+		$this->row_norm_warnings   = array();
+		$this->insert_byte_budget  = 0;
 
 		if ( empty( $dump['tables'] ) || ! is_array( $dump['tables'] ) ) {
 			return new WP_Error( 'mksddn_db_empty', __( 'Database dump is empty or invalid.', 'mksddn-migrate-content' ) );
@@ -67,6 +91,8 @@ class FullDatabaseImporter {
 		try {
 			global $wpdb;
 			$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 0' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+			$this->cleanup_internal_swap_tables( $wpdb );
 
 			// Backup critical options before import (to preserve user access if user tables not imported).
 			$preserved_options = $this->backup_critical_options( $wpdb );
@@ -129,6 +155,10 @@ class FullDatabaseImporter {
 				$this->log( sprintf( 'Skipping table with invalid name: %s', $table_name ) );
 				continue;
 			}
+			if ( SwapTableNames::is_internal( $table_name ) ) {
+				$this->log( sprintf( 'Skipping leftover import swap table from dump: %s', $table_name ) );
+				continue;
+			}
 
 			$this->log( sprintf( 'Importing table %d/%d: %s', $processed + 1, $table_count, $table_name ) );
 
@@ -143,25 +173,20 @@ class FullDatabaseImporter {
 				$this->log( sprintf( 'Warning: Schema for table %s does not contain CREATE TABLE.', $table_name ) );
 			}
 
-			$this->ensure_table_exists( $wpdb, $table_name, $schema );
+			$is_protected = in_array( $table_name, $protected_tables, true );
+			$prepared     = $this->prepare_table_for_import( $wpdb, $table_name, $schema, $is_protected );
+			if ( is_wp_error( $prepared ) ) {
+				$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
+				return $prepared;
+			}
 
 			if ( ! $this->table_exists( $wpdb, $table_name ) ) {
 				$this->log( sprintf( 'Error: Table %s still missing after creation attempt; skipping import for this table.', $table_name ) );
 				continue;
 			}
 
-			// Skip truncation for protected tables (user tables not in dump).
-			if ( ! in_array( $table_name, $protected_tables, true ) ) {
-				$truncate = $wpdb->query( "TRUNCATE TABLE `{$table_name}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
-				if ( false === $truncate ) {
-					$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-					/* translators: %s: database table name. */
-					return new WP_Error( 'mksddn_db_truncate_failed', sprintf( __( 'Unable to truncate table %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
-				}
-				$this->mark_database_mutated();
-			} else {
-				$this->log( sprintf( 'Skipping truncation of protected table: %s (preserving current users)', $table_name ) );
-			}
+			// Invalidate column cache after possible DROP/CREATE.
+			unset( $this->table_columns_cache[ $table_name ] );
 
 			$rows      = isset( $table_data['rows'] ) && is_array( $table_data['rows'] ) ? $table_data['rows'] : array();
 			$row_count = count( $rows );
@@ -239,10 +264,19 @@ class FullDatabaseImporter {
 				if ( ! empty( $batch_rows ) ) {
 					$result = $this->batch_insert_rows( $wpdb, $table_name, $batch_rows );
 					if ( false === $result ) {
+						$db_error = $this->format_db_error( $wpdb );
+						$this->log( sprintf( 'Insert failed for table %s. MySQL error: %s', $table_name, $db_error ) );
 						unset( $rows, $table_data, $row_keys, $batch_rows );
 						$wpdb->query( 'SET FOREIGN_KEY_CHECKS = 1' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-						/* translators: %s: database table name. */
-						return new WP_Error( 'mksddn_db_insert_failed', sprintf( __( 'Failed to insert rows into %s.', 'mksddn-migrate-content' ), esc_html( $table_name ) ) );
+						return new WP_Error(
+							'mksddn_db_insert_failed',
+							sprintf(
+								/* translators: 1: database table name, 2: MySQL error message. */
+								__( 'Failed to insert rows into %1$s. Database error: %2$s', 'mksddn-migrate-content' ),
+								esc_html( $table_name ),
+								esc_html( $db_error )
+							)
+						);
 					}
 					$this->mark_database_mutated();
 				}
@@ -392,7 +426,616 @@ class FullDatabaseImporter {
 	 * @since 1.0.0
 	 */
 	private function is_valid_table_name( string $table_name ): bool {
-		return (bool) preg_match( '/^[a-zA-Z0-9_]+$/', $table_name );
+		return $this->is_valid_identifier( $table_name );
+	}
+
+	/**
+	 * Validate a MySQL identifier (table or column) used in backtick quotes.
+	 *
+	 * @param string $name Candidate identifier.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private function is_valid_identifier( string $name ): bool {
+		return (bool) preg_match( '/^[a-zA-Z0-9_]+$/', $name );
+	}
+
+	/**
+	 * Quote a validated identifier for SQL.
+	 *
+	 * @param string $name Identifier.
+	 * @return string
+	 * @since 2.7.1
+	 */
+	private function quote_identifier( string $name ): string {
+		return '`' . str_replace( '`', '``', $name ) . '`';
+	}
+
+	/**
+	 * Prepare a table for import: recreate from schema when possible, otherwise truncate.
+	 *
+	 * Full-site dumps carry SHOW CREATE TABLE output. Recreating avoids schema drift
+	 * (extra plugin columns, charset/collation mismatches) that breaks INSERTs.
+	 *
+	 * @param wpdb   $wpdb         Database object.
+	 * @param string $table_name   Validated table name.
+	 * @param string $schema_sql   CREATE TABLE statement from the dump.
+	 * @param bool   $is_protected Whether truncation/drop must be skipped.
+	 * @return true|WP_Error
+	 * @since 2.7.1
+	 */
+	private function prepare_table_for_import( wpdb $wpdb, string $table_name, string $schema_sql, bool $is_protected ) {
+		if ( $is_protected ) {
+			$this->log( sprintf( 'Skipping drop/truncate of protected table: %s (preserving current users)', $table_name ) );
+			return true;
+		}
+
+		$has_schema = ! empty( $schema_sql ) && false !== stripos( $schema_sql, 'CREATE TABLE' );
+
+		if ( $has_schema ) {
+			$schema_sql = $this->normalize_create_table_sql( $schema_sql, $table_name );
+			$recreated  = $this->recreate_table_from_schema( $wpdb, $table_name, $schema_sql );
+			if ( is_wp_error( $recreated ) ) {
+				return $recreated;
+			}
+
+			return true;
+		}
+
+		$this->ensure_table_exists( $wpdb, $table_name, $schema_sql );
+
+		if ( ! $this->table_exists( $wpdb, $table_name ) ) {
+			return new WP_Error(
+				'mksddn_db_table_missing',
+				sprintf(
+					/* translators: %s: database table name. */
+					__( 'Unable to create or find table %s.', 'mksddn-migrate-content' ),
+					esc_html( $table_name )
+				)
+			);
+		}
+
+		$quoted_table = $this->quote_identifier( $table_name );
+		$truncate     = $wpdb->query( "TRUNCATE TABLE {$quoted_table}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name validated via is_valid_table_name()
+		if ( false === $truncate ) {
+			return new WP_Error(
+				'mksddn_db_truncate_failed',
+				sprintf(
+					/* translators: 1: database table name, 2: MySQL error message. */
+					__( 'Unable to truncate table %1$s. Database error: %2$s', 'mksddn-migrate-content' ),
+					esc_html( $table_name ),
+					esc_html( $this->format_db_error( $wpdb ) )
+				)
+			);
+		}
+
+		$this->mark_database_mutated();
+		return true;
+	}
+
+	/**
+	 * Recreate a table from dump schema without discarding the old table until CREATE succeeds.
+	 *
+	 * The new table is created under a swap name first. Original data stays in place until
+	 * an atomic RENAME swaps the empty new table in. Truncate is not used as a fallback.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Validated table name.
+	 * @param string $schema_sql Normalized CREATE TABLE SQL.
+	 * @return true|WP_Error
+	 * @since 2.7.1
+	 */
+	private function recreate_table_from_schema( wpdb $wpdb, string $table_name, string $schema_sql ) {
+		$table_existed = $this->table_exists( $wpdb, $table_name );
+		$triggers      = $table_existed ? $this->get_table_triggers( $wpdb, $table_name ) : array();
+
+		$temp_name = $this->make_swap_table_name( $wpdb, $table_name, 'new' );
+		if ( '' === $temp_name ) {
+			return new WP_Error(
+				'mksddn_db_swap_name',
+				sprintf(
+					/* translators: %s: database table name. */
+					__( 'Unable to allocate a temporary table name for %s.', 'mksddn-migrate-content' ),
+					esc_html( $table_name )
+				)
+			);
+		}
+
+		$temp_sql = $this->normalize_create_table_sql( $schema_sql, $temp_name );
+		if ( ! $this->try_create_table( $wpdb, $temp_name, $temp_sql ) ) {
+			$create_error = $this->format_db_error( $wpdb );
+			$this->drop_table( $wpdb, $temp_name );
+
+			return new WP_Error(
+				'mksddn_db_create_failed',
+				sprintf(
+					/* translators: 1: database table name, 2: MySQL error message. */
+					__( 'Unable to recreate table %1$s from dump schema. Database error: %2$s', 'mksddn-migrate-content' ),
+					esc_html( $table_name ),
+					esc_html( $create_error )
+				)
+			);
+		}
+
+		if ( ! $table_existed ) {
+			$renamed = $this->rename_tables( $wpdb, array( $temp_name => $table_name ) );
+			if ( ! $renamed || ! $this->table_exists( $wpdb, $table_name ) ) {
+				$rename_error = $this->format_db_error( $wpdb );
+				$this->drop_table( $wpdb, $temp_name );
+
+				return new WP_Error(
+					'mksddn_db_swap_failed',
+					sprintf(
+						/* translators: 1: database table name, 2: MySQL error message. */
+						__( 'Unable to swap table %1$s into place. Database error: %2$s', 'mksddn-migrate-content' ),
+						esc_html( $table_name ),
+						esc_html( $rename_error )
+					)
+				);
+			}
+
+			$this->mark_database_mutated();
+			$this->restore_table_triggers( $wpdb, $table_name, $triggers );
+			$this->log( sprintf( 'Recreated table from dump schema: %s', $table_name ) );
+
+			return true;
+		}
+
+		$bak_name = $this->make_swap_table_name( $wpdb, $table_name, 'old' );
+		if ( '' === $bak_name || $bak_name === $temp_name ) {
+			$this->drop_table( $wpdb, $temp_name );
+
+			return new WP_Error(
+				'mksddn_db_swap_name',
+				sprintf(
+					/* translators: %s: database table name. */
+					__( 'Unable to allocate a temporary table name for %s.', 'mksddn-migrate-content' ),
+					esc_html( $table_name )
+				)
+			);
+		}
+
+		$renamed = $this->rename_tables(
+			$wpdb,
+			array(
+				$table_name => $bak_name,
+				$temp_name  => $table_name,
+			)
+		);
+
+		if ( ! $renamed || ! $this->table_exists( $wpdb, $table_name ) ) {
+			$rename_error = $this->format_db_error( $wpdb );
+			$this->drop_table( $wpdb, $temp_name );
+
+			return new WP_Error(
+				'mksddn_db_swap_failed',
+				sprintf(
+					/* translators: 1: database table name, 2: MySQL error message. */
+					__( 'Unable to swap table %1$s into place. Database error: %2$s', 'mksddn-migrate-content' ),
+					esc_html( $table_name ),
+					esc_html( $rename_error )
+				)
+			);
+		}
+
+		if ( ! $this->drop_table( $wpdb, $bak_name ) ) {
+			$drop_error = $this->format_db_error( $wpdb );
+			$rolled     = $this->rename_tables(
+				$wpdb,
+				array(
+					$table_name => $temp_name,
+					$bak_name   => $table_name,
+				)
+			);
+			if ( $rolled ) {
+				$this->drop_table( $wpdb, $temp_name );
+			}
+
+			$this->log(
+				sprintf(
+					'DROP of previous copy %s failed after recreating %s: %s',
+					$bak_name,
+					$table_name,
+					$drop_error
+				)
+			);
+
+			if ( $rolled ) {
+				return new WP_Error(
+					'mksddn_db_drop_backup_failed',
+					sprintf(
+						/* translators: 1: database table name, 2: backup table name, 3: MySQL error message. */
+						__( 'Unable to drop the previous copy of table %1$s (%2$s). Database error: %3$s', 'mksddn-migrate-content' ),
+						esc_html( $table_name ),
+						esc_html( $bak_name ),
+						esc_html( $drop_error )
+					)
+				);
+			}
+
+			$this->mark_database_mutated();
+
+			return new WP_Error(
+				'mksddn_db_drop_backup_failed',
+				sprintf(
+					/* translators: 1: database table name, 2: backup table name, 3: MySQL error message. */
+					__( 'Unable to drop the previous copy of table %1$s. Old data is in %2$s. Database error: %3$s', 'mksddn-migrate-content' ),
+					esc_html( $table_name ),
+					esc_html( $bak_name ),
+					esc_html( $drop_error )
+				)
+			);
+		}
+
+		$this->mark_database_mutated();
+		$this->restore_table_triggers( $wpdb, $table_name, $triggers );
+		$this->log( sprintf( 'Recreated table from dump schema: %s', $table_name ) );
+
+		return true;
+	}
+
+	/**
+	 * Build a unique swap table name within MySQL's 64-char identifier limit.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Original table name.
+	 * @param string $role       `new` (empty CREATE target) or `old` (original moved aside).
+	 * @return string Empty when a safe unused name cannot be allocated.
+	 * @since 2.7.1
+	 */
+	private function make_swap_table_name( wpdb $wpdb, string $table_name, string $role ): string {
+		$max = 64;
+		$tag = ( 'old' === $role ) ? 'mko' : 'mkn';
+
+		for ( $attempt = 0; $attempt < 8; ++$attempt ) {
+			$suffix = '_' . $tag . substr( md5( $table_name . $role . microtime( true ) . wp_rand() . (string) $attempt ), 0, 8 );
+			if ( strlen( $table_name ) + strlen( $suffix ) <= $max ) {
+				$candidate = $table_name . $suffix;
+			} else {
+				$candidate = substr( $table_name, 0, $max - strlen( $suffix ) ) . $suffix;
+			}
+
+			if ( ! $this->is_valid_identifier( $candidate ) || $candidate === $table_name ) {
+				continue;
+			}
+
+			if ( ! $this->table_exists( $wpdb, $candidate ) ) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Drop leftover import swap tables and recover non-truncated legacy backups.
+	 *
+	 * @param wpdb $wpdb Database object.
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function cleanup_internal_swap_tables( wpdb $wpdb ): void {
+		$like = $wpdb->esc_like( $wpdb->prefix ) . '%';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- enumerate leftover swap tables
+		$tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) );
+
+		foreach ( (array) $tables as $name ) {
+			$name = (string) $name;
+			if ( ! $this->is_valid_identifier( $name ) || ! SwapTableNames::is_internal( $name ) ) {
+				continue;
+			}
+
+			if ( SwapTableNames::is_new_swap( $name ) ) {
+				if ( $this->drop_table( $wpdb, $name ) ) {
+					$this->log( sprintf( 'Dropped leftover import swap table: %s', $name ) );
+				} else {
+					$this->log(
+						sprintf(
+							'Warning: could not drop leftover import swap table %s: %s',
+							$name,
+							$this->format_db_error( $wpdb )
+						)
+					);
+				}
+				continue;
+			}
+
+			if ( ! SwapTableNames::is_old_copy( $name ) ) {
+				continue;
+			}
+
+			$original = SwapTableNames::recoverable_original_name( $name );
+			if ( '' === $original ) {
+				$this->log( sprintf( 'Leaving leftover table copy in place (name may be truncated): %s', $name ) );
+				continue;
+			}
+
+			if ( $this->is_valid_identifier( $original ) && ! $this->table_exists( $wpdb, $original ) ) {
+				$renamed = $this->rename_tables( $wpdb, array( $name => $original ) );
+				if ( $renamed ) {
+					$this->log( sprintf( 'Recovered table %s from leftover copy %s.', $original, $name ) );
+				}
+				continue;
+			}
+
+			$this->log( sprintf( 'Leaving leftover table copy in place (original still exists): %s', $name ) );
+		}
+	}
+
+	/**
+	 * DROP TABLE IF EXISTS for a validated identifier.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Validated table name.
+	 * @return bool True when the table is gone.
+	 * @since 2.7.1
+	 */
+	private function drop_table( wpdb $wpdb, string $table_name ): bool {
+		if ( ! $this->is_valid_identifier( $table_name ) ) {
+			return false;
+		}
+
+		$quoted            = $this->quote_identifier( $table_name );
+		$previous_suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- identifier validated and quoted
+		$wpdb->query( "DROP TABLE IF EXISTS {$quoted}" );
+		$wpdb->suppress_errors( $previous_suppress );
+
+		return ! $this->table_exists( $wpdb, $table_name );
+	}
+
+	/**
+	 * Atomically rename one or more tables.
+	 *
+	 * @param wpdb                 $wpdb  Database object.
+	 * @param array<string,string> $pairs Map of current name => new name.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private function rename_tables( wpdb $wpdb, array $pairs ): bool {
+		$parts = array();
+		foreach ( $pairs as $from => $to ) {
+			if ( ! $this->is_valid_identifier( (string) $from ) || ! $this->is_valid_identifier( (string) $to ) ) {
+				return false;
+			}
+			$parts[] = $this->quote_identifier( (string) $from ) . ' TO ' . $this->quote_identifier( (string) $to );
+		}
+
+		if ( array() === $parts ) {
+			return false;
+		}
+
+		$sql               = 'RENAME TABLE ' . implode( ', ', $parts );
+		$previous_suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- identifiers validated and quoted
+		$result = $wpdb->query( $sql );
+		$wpdb->suppress_errors( $previous_suppress );
+
+		return false !== $result;
+	}
+
+	/**
+	 * Capture triggers defined on a table.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @return array<int, array<string, string>>
+	 * @since 2.7.1
+	 */
+	private function get_table_triggers( wpdb $wpdb, string $table_name ): array {
+		$db_name = isset( $wpdb->dbname ) ? (string) $wpdb->dbname : '';
+		if ( '' === $db_name || false !== strpos( $db_name, '`' ) || false !== strpos( $db_name, "\0" ) ) {
+			return array();
+		}
+
+		$quoted_db         = $this->quote_identifier( $db_name );
+		$previous_suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- database name validated; table name prepared
+		$rows = $wpdb->get_results( $wpdb->prepare( "SHOW TRIGGERS FROM {$quoted_db} WHERE `Table` = %s", $table_name ), ARRAY_A );
+		$wpdb->suppress_errors( $previous_suppress );
+
+		if ( ! is_array( $rows ) ) {
+			$error = $this->format_db_error( $wpdb );
+			if ( '' !== $error && __( 'unknown database error', 'mksddn-migrate-content' ) !== $error ) {
+				$this->log( sprintf( 'SHOW TRIGGERS failed for %s: %s', $table_name, $error ) );
+			}
+			return array();
+		}
+
+		$triggers = array();
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$trigger = array(
+				'name'      => $this->trigger_row_field( $row, 'Trigger' ),
+				'timing'    => strtoupper( $this->trigger_row_field( $row, 'Timing' ) ),
+				'event'     => strtoupper( $this->trigger_row_field( $row, 'Event' ) ),
+				'statement' => $this->trigger_row_field( $row, 'Statement' ),
+			);
+			if ( '' === $trigger['name'] || '' === $trigger['statement'] ) {
+				continue;
+			}
+			if ( ! in_array( $trigger['timing'], array( 'BEFORE', 'AFTER' ), true ) ) {
+				continue;
+			}
+			if ( ! in_array( $trigger['event'], array( 'INSERT', 'UPDATE', 'DELETE' ), true ) ) {
+				continue;
+			}
+			$triggers[] = $trigger;
+		}
+
+		return $triggers;
+	}
+
+	/**
+	 * Read a SHOW TRIGGERS column, ignoring key case.
+	 *
+	 * @param array<string, mixed> $row Row.
+	 * @param string               $key Canonical column name.
+	 * @return string
+	 * @since 2.7.1
+	 */
+	private function trigger_row_field( array $row, string $key ): string {
+		if ( isset( $row[ $key ] ) ) {
+			return (string) $row[ $key ];
+		}
+
+		foreach ( $row as $column => $value ) {
+			if ( 0 === strcasecmp( (string) $column, $key ) ) {
+				return (string) $value;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Re-apply captured triggers to a table after schema recreate.
+	 *
+	 * @param wpdb                              $wpdb       Database object.
+	 * @param string                            $table_name Table name.
+	 * @param array<int, array<string, string>> $triggers   Captured triggers.
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function restore_table_triggers( wpdb $wpdb, string $table_name, array $triggers ): void {
+		if ( array() === $triggers ) {
+			return;
+		}
+
+		$quoted_table = $this->quote_identifier( $table_name );
+
+		foreach ( $triggers as $trigger ) {
+			$name = isset( $trigger['name'] ) ? (string) $trigger['name'] : '';
+			if ( ! $this->is_valid_identifier( $name ) ) {
+				$this->log( sprintf( 'Skipping trigger with invalid name on %s: %s', $table_name, $name ) );
+				continue;
+			}
+
+			$quoted_trigger    = $this->quote_identifier( $name );
+			$previous_suppress = $wpdb->suppress_errors( true );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- trigger name validated and quoted
+			$wpdb->query( "DROP TRIGGER IF EXISTS {$quoted_trigger}" );
+
+			$sql = sprintf(
+				'CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s',
+				$quoted_trigger,
+				$trigger['timing'],
+				$trigger['event'],
+				$quoted_table,
+				$trigger['statement']
+			);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- trigger captured from SHOW TRIGGERS on this database
+			$created = $wpdb->query( $sql );
+			$wpdb->suppress_errors( $previous_suppress );
+
+			if ( false === $created ) {
+				$this->log(
+					sprintf(
+						'Failed to restore trigger %s on %s: %s',
+						$name,
+						$table_name,
+						$this->format_db_error( $wpdb )
+					)
+				);
+			}
+		}
+	}
+
+	/**
+	 * Normalize CREATE TABLE SQL so the statement targets the expected table name.
+	 *
+	 * @param string $schema_sql CREATE TABLE SQL.
+	 * @param string $table_name Expected table name (already prefix-replaced).
+	 * @return string
+	 * @since 2.7.1
+	 */
+	private function normalize_create_table_sql( string $schema_sql, string $table_name ): string {
+		$schema_sql = trim( $schema_sql );
+
+		// Force IF NOT EXISTS off — table is created under a swap name, then renamed.
+		$schema_sql = preg_replace( '/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+/i', 'CREATE TABLE ', $schema_sql, 1 ) ?? $schema_sql;
+
+		// Ensure the CREATE targets the (prefix-replaced) table name.
+		$replaced = preg_replace(
+			'/^CREATE\s+TABLE\s+`?([a-zA-Z0-9_]+)`?/i',
+			'CREATE TABLE `' . str_replace( '`', '``', $table_name ) . '`',
+			$schema_sql,
+			1
+		);
+
+		return is_string( $replaced ) ? $replaced : $schema_sql;
+	}
+
+	/**
+	 * Run CREATE TABLE, retrying with host-incompatible clauses stripped.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @param string $schema_sql Normalized CREATE TABLE SQL.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private function try_create_table( wpdb $wpdb, string $table_name, string $schema_sql ): bool {
+		if ( '' === trim( $schema_sql ) ) {
+			return false;
+		}
+
+		$previous_suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema originates from trusted export manifest
+		$result = $wpdb->query( $schema_sql );
+		$wpdb->suppress_errors( $previous_suppress );
+
+		if ( false !== $result && $this->table_exists( $wpdb, $table_name ) ) {
+			return true;
+		}
+
+		$first_error = $this->format_db_error( $wpdb );
+		if ( $this->table_exists( $wpdb, $table_name ) ) {
+			$this->drop_table( $wpdb, $table_name );
+		}
+		$stripped    = $this->strip_incompatible_create_clauses( $schema_sql );
+		if ( $stripped === $schema_sql ) {
+			$this->log( sprintf( 'CREATE TABLE failed for %s: %s', $table_name, $first_error ) );
+			return false;
+		}
+
+		$this->log( sprintf( 'CREATE TABLE failed for %s (%s). Retrying without host-specific clauses.', $table_name, $first_error ) );
+
+		$previous_suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema originates from trusted export manifest
+		$result = $wpdb->query( $stripped );
+		$wpdb->suppress_errors( $previous_suppress );
+
+		if ( false !== $result && $this->table_exists( $wpdb, $table_name ) ) {
+			$this->log( sprintf( 'Created %s after stripping collation/tablespace clauses.', $table_name ) );
+			return true;
+		}
+
+		$this->log( sprintf( 'CREATE TABLE retry failed for %s: %s', $table_name, $this->format_db_error( $wpdb ) ) );
+		return false;
+	}
+
+	/**
+	 * Strip CREATE TABLE clauses that often fail across MySQL/MariaDB hosts.
+	 *
+	 * @param string $schema_sql CREATE TABLE SQL.
+	 * @return string
+	 * @since 2.7.1
+	 */
+	private function strip_incompatible_create_clauses( string $schema_sql ): string {
+		$stripped = preg_replace( '/\s*\/\*![\s\S]*?\*\/\s*/', ' ', $schema_sql ) ?? $schema_sql;
+		$stripped = preg_replace( '/\s+TABLESPACE\s+[^\s,)]+/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+DATA DIRECTORY\s*=\s*\'[^\']*\'/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+INDEX DIRECTORY\s*=\s*\'[^\']*\'/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+ROW_FORMAT\s*=\s*\w+/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+COLLATE\s*=\s*[`\']?[a-z0-9_]+[`\']?/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+COLLATE\s+[`\']?[a-z0-9_]+[`\']?/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+CHARACTER SET\s+[`\']?[a-z0-9_]+[`\']?/i', '', $stripped ) ?? $stripped;
+		$stripped = preg_replace( '/\s+CHARSET\s*=\s*[`\']?[a-z0-9_]+[`\']?/i', '', $stripped ) ?? $stripped;
+
+		return is_string( $stripped ) ? $stripped : $schema_sql;
 	}
 
 	/**
@@ -414,11 +1057,9 @@ class FullDatabaseImporter {
 			return;
 		}
 
-		$create_result = $wpdb->query( $schema_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema originates from trusted export manifest
-		if ( false === $create_result ) {
-			$this->log( sprintf( 'Error: Failed to create table %s. MySQL error: %s', $table_name, $wpdb->last_error ) );
-		} elseif ( ! $this->table_exists( $wpdb, $table_name ) ) {
-			$this->log( sprintf( 'Error: Table %s not found after CREATE TABLE statement.', $table_name ) );
+		$schema_sql = $this->normalize_create_table_sql( $schema_sql, $table_name );
+		if ( ! $this->try_create_table( $wpdb, $table_name, $schema_sql ) ) {
+			$this->log( sprintf( 'Error: Failed to create table %s. MySQL error: %s', $table_name, $this->format_db_error( $wpdb ) ) );
 		}
 	}
 
@@ -445,6 +1086,9 @@ class FullDatabaseImporter {
 	 * breaks UNIQUE indexes that allow multiple NULLs but only one empty string
 	 * (e.g. Robin Image Optimizer `index-hash` on item_hash).
 	 *
+	 * Values are escaped via wpdb::_real_escape instead of multi-arg prepare() so
+	 * literal "%" in content cannot break placeholder counting (WP < 6.2).
+	 *
 	 * @param wpdb   $wpdb       Database object.
 	 * @param string $table_name Table name.
 	 * @param array  $rows       Array of row arrays.
@@ -469,81 +1113,392 @@ class FullDatabaseImporter {
 			return $total_inserted;
 		}
 
+		$columns_meta = $this->get_table_columns( $wpdb, $table_name );
+		$known_cols   = array_keys( $columns_meta );
+
+		$normalized_rows = array();
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$normalized = $this->normalize_row_for_insert( $row, $columns_meta, $table_name );
+			if ( ! empty( $normalized ) ) {
+				$normalized_rows[] = $normalized;
+			}
+		}
+
+		if ( empty( $normalized_rows ) ) {
+			return 0;
+		}
+
 		// Build multi-row INSERT query for other tables.
-		$first_row = reset( $rows );
+		$first_row = reset( $normalized_rows );
 		if ( ! is_array( $first_row ) || empty( $first_row ) ) {
 			return 0;
 		}
 
-		$columns = array_keys( $first_row );
-		// Sanitize and escape column names for safe SQL usage.
-		$sanitized_columns = array_map( 'sanitize_key', $columns );
-		$escaped_columns   = array_map( 'esc_sql', $sanitized_columns );
-		$column_names      = '`' . implode( '`, `', $escaped_columns ) . '`';
+		// Union of columns present on any row (ordered by table schema when available).
+		$present = array();
+		foreach ( $normalized_rows as $row ) {
+			foreach ( $row as $col => $_value ) {
+				$present[ (string) $col ] = true;
+			}
+		}
 
-		// Build VALUES clause. NULL stays as SQL NULL; other values use %s placeholders.
-		$values_clauses = array();
-		$query_values   = array();
-
-		foreach ( $rows as $row ) {
-			$row_parts = array();
-			foreach ( $columns as $col ) {
-				$value = array_key_exists( $col, $row ) ? $row[ $col ] : null;
-				if ( null === $value ) {
-					$row_parts[] = 'NULL';
-				} else {
-					$row_parts[]    = '%s';
-					$query_values[] = $value;
+		if ( ! empty( $known_cols ) ) {
+			$columns = array();
+			foreach ( $known_cols as $col ) {
+				if ( isset( $present[ $col ] ) ) {
+					$columns[] = $col;
 				}
 			}
-			$values_clauses[] = '(' . implode( ', ', $row_parts ) . ')';
-		}
-
-		// Escape table name for safe SQL usage.
-		// Table name is validated via is_valid_table_name() before calling this method.
-		$escaped_table_name = esc_sql( $table_name );
-
-		// Build query template with escaped identifiers and placeholders for values.
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$values_placeholder_string = implode( ', ', $values_clauses );
-		$query_template            = sprintf(
-			'INSERT INTO `%s` (%s) VALUES %s',
-			$escaped_table_name,
-			$column_names,
-			$values_placeholder_string
-		);
-
-		if ( empty( $query_values ) ) {
-			// All values are NULL — no placeholders to prepare.
-			$query = $query_template;
 		} else {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query template contains placeholders; values passed to prepare().
-			$prepare_args = array_merge( array( $query_template ), $query_values );
-			$query        = call_user_func_array( array( $wpdb, 'prepare' ), $prepare_args );
+			$columns = array_keys( $present );
 		}
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-		if ( false === $query || null === $query || '' === $query ) {
+		if ( empty( $columns ) ) {
+			$this->log( sprintf( 'No matching columns to insert into %s.', $table_name ) );
 			return false;
 		}
 
-		// Avoid flooding the admin UI when a batch fails and we recover below.
+		$quoted_columns = array();
+		foreach ( $columns as $col ) {
+			$col = (string) $col;
+			if ( ! $this->is_valid_identifier( $col ) ) {
+				$this->log( sprintf( 'Refusing to insert into %s: invalid column name %s.', $table_name, $col ) );
+				return false;
+			}
+			$quoted_columns[] = $this->quote_identifier( $col );
+		}
+
+		$column_names       = implode( ', ', $quoted_columns );
+		$escaped_table_name = $this->quote_identifier( $table_name );
+		$header             = sprintf( 'INSERT INTO %s (%s) VALUES ', $escaped_table_name, $column_names );
+		$budget             = $this->get_insert_byte_budget( $wpdb );
+
+		$pending_rows    = array();
+		$pending_clauses = array();
+		$pending_bytes   = strlen( $header );
+		$total_inserted  = 0;
+
+		foreach ( $normalized_rows as $row ) {
+			$row_parts = array();
+			foreach ( $columns as $col ) {
+				if ( array_key_exists( $col, $row ) ) {
+					$row_parts[] = $this->sql_literal( $wpdb, $row[ $col ] );
+				} else {
+					$row_parts[] = 'DEFAULT';
+				}
+			}
+			$clause = '(' . implode( ', ', $row_parts ) . ')';
+			$extra  = strlen( $clause ) + ( array() === $pending_clauses ? 0 : 2 );
+
+			if ( array() !== $pending_clauses && ( $pending_bytes + $extra ) > $budget ) {
+				$chunk_result = $this->execute_insert_batch( $wpdb, $table_name, $header, $pending_clauses, $pending_rows );
+				if ( false === $chunk_result ) {
+					return false;
+				}
+				$total_inserted += (int) $chunk_result;
+				$pending_rows    = array();
+				$pending_clauses = array();
+				$pending_bytes   = strlen( $header );
+				$extra           = strlen( $clause );
+			}
+
+			$pending_rows[]    = $row;
+			$pending_clauses[] = $clause;
+			$pending_bytes    += $extra;
+		}
+
+		if ( array() !== $pending_clauses ) {
+			$chunk_result = $this->execute_insert_batch( $wpdb, $table_name, $header, $pending_clauses, $pending_rows );
+			if ( false === $chunk_result ) {
+				return false;
+			}
+			$total_inserted += (int) $chunk_result;
+		}
+
+		return $total_inserted;
+	}
+
+	/**
+	 * Run one packet-sized INSERT, falling back to row-by-row on batch failure.
+	 *
+	 * @param wpdb                       $wpdb       Database object.
+	 * @param string                     $table_name Table name.
+	 * @param string                     $header     INSERT INTO ... VALUES prefix.
+	 * @param array<int, string>         $clauses    Value tuples.
+	 * @param array<int, array<mixed>>   $rows       Matching normalized rows for fallback.
+	 * @return int|false
+	 * @since 2.7.1
+	 */
+	private function execute_insert_batch( wpdb $wpdb, string $table_name, string $header, array $clauses, array $rows ) {
+		$query             = $header . implode( ', ', $clauses );
 		$previous_suppress = $wpdb->suppress_errors( true );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Query prepared above; identifiers escaped via esc_sql().
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Identifiers quoted; values escaped via sql_literal().
 		$result = $wpdb->query( $query );
 		$wpdb->suppress_errors( $previous_suppress );
 
-		if ( false === $result ) {
-			if ( $this->is_duplicate_key_error( $wpdb ) ) {
-				$wpdb->last_error = '';
-				// Multi-row INSERT is atomic: one duplicate aborts the whole batch.
-				// Fall back to row-by-row so valid rows are still imported.
-				return $this->insert_rows_individually( $wpdb, $table_name, $rows );
+		if ( false !== $result ) {
+			return (int) $result;
+		}
+
+		$error = $this->format_db_error( $wpdb );
+		if ( $this->is_duplicate_key_error( $wpdb ) ) {
+			$wpdb->last_error = '';
+			return $this->insert_rows_individually( $wpdb, $table_name, $rows );
+		}
+
+		$this->log( sprintf( 'Batch INSERT failed for %s (%s); retrying row-by-row.', $table_name, $error ) );
+		$wpdb->last_error = '';
+		return $this->insert_rows_individually( $wpdb, $table_name, $rows );
+	}
+
+	/**
+	 * Byte budget for a single INSERT statement (80% of max_allowed_packet).
+	 *
+	 * @param wpdb $wpdb Database object.
+	 * @return int
+	 * @since 2.7.1
+	 */
+	private function get_insert_byte_budget( wpdb $wpdb ): int {
+		if ( $this->insert_byte_budget > 0 ) {
+			return $this->insert_byte_budget;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- session packet limit for batch sizing
+		$packet = (int) $wpdb->get_var( 'SELECT @@session.max_allowed_packet' );
+		if ( $packet <= 0 ) {
+			$packet = 1048576;
+		}
+
+		$this->insert_byte_budget = max( 65536, (int) floor( $packet * 0.8 ) );
+
+		return $this->insert_byte_budget;
+	}
+
+	/**
+	 * Build a SQL literal for a PHP value (NULL or quoted/escaped scalar).
+	 *
+	 * @param wpdb  $wpdb  Database object.
+	 * @param mixed $value Value to escape.
+	 * @return string
+	 * @since 2.7.1
+	 */
+	private function sql_literal( wpdb $wpdb, $value ): string {
+		if ( null === $value ) {
+			return 'NULL';
+		}
+
+		if ( is_bool( $value ) ) {
+			return $value ? '1' : '0';
+		}
+
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return (string) $value;
+		}
+
+		if ( is_array( $value ) || is_object( $value ) ) {
+			$value = maybe_serialize( $value );
+		}
+
+		$value = (string) $value;
+
+		if ( method_exists( $wpdb, '_real_escape' ) ) {
+			// phpcs:ignore WordPress.DB.RestrictedClasses.UseWpdb, WordPress.DB.RestrictedFunctions.mysql_mysql_real_escape_string -- bulk import escape; avoids wpdb::prepare() "%" placeholder bugs on WP < 6.2
+			return "'" . $wpdb->_real_escape( $value ) . "'";
+		}
+
+		return "'" . esc_sql( $value ) . "'";
+	}
+
+	/**
+	 * Load and cache SHOW COLUMNS metadata for a table.
+	 *
+	 * @param wpdb   $wpdb       Database object.
+	 * @param string $table_name Table name.
+	 * @return array<string, array<string, mixed>> Map of column name => column info.
+	 * @since 2.7.1
+	 */
+	private function get_table_columns( wpdb $wpdb, string $table_name ): array {
+		if ( isset( $this->table_columns_cache[ $table_name ] ) ) {
+			return $this->table_columns_cache[ $table_name ];
+		}
+
+		$quoted = $this->quote_identifier( $table_name );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name validated and quoted
+		$columns = $wpdb->get_results( "SHOW COLUMNS FROM {$quoted}", ARRAY_A );
+		$map     = array();
+
+		if ( is_array( $columns ) ) {
+			foreach ( $columns as $column ) {
+				if ( ! isset( $column['Field'] ) || '' === (string) $column['Field'] ) {
+					continue;
+				}
+				$map[ (string) $column['Field'] ] = $column;
 			}
+		}
+
+		$this->table_columns_cache[ $table_name ] = $map;
+		return $map;
+	}
+
+	/**
+	 * Keep only insertable columns; omit generated fields and use table defaults for NULL.
+	 *
+	 * @param array<string, mixed>                $row          Source row.
+	 * @param array<string, array<string, mixed>> $columns_meta Column metadata.
+	 * @param string                              $table_name   Table name for one-shot warning logs.
+	 * @return array<string, mixed>
+	 * @since 2.7.1
+	 */
+	private function normalize_row_for_insert( array $row, array $columns_meta, string $table_name = '' ): array {
+		if ( empty( $columns_meta ) ) {
+			return $row;
+		}
+
+		$normalized = array();
+		$discarded  = array();
+		$generated  = array();
+		$omitted    = array();
+		$coerced    = array();
+
+		foreach ( $row as $column => $value ) {
+			$col_key = (string) $column;
+			if ( ! isset( $columns_meta[ $col_key ] ) ) {
+				$discarded[] = $col_key;
+				continue;
+			}
+
+			$meta = $columns_meta[ $col_key ];
+			if ( $this->is_generated_column( $meta ) ) {
+				$generated[] = $col_key;
+				continue;
+			}
+
+			$null_ok = isset( $meta['Null'] ) && 'YES' === strtoupper( (string) $meta['Null'] );
+
+			if ( null === $value && ! $null_ok ) {
+				if ( $this->should_omit_null_for_default( $meta ) ) {
+					$omitted[] = $col_key;
+					continue;
+				}
+
+				$type = isset( $meta['Type'] ) ? strtolower( (string) $meta['Type'] ) : '';
+				if ( false !== strpos( $type, 'int' ) || false !== strpos( $type, 'decimal' ) || false !== strpos( $type, 'float' ) || false !== strpos( $type, 'double' ) ) {
+					$value = 0;
+				} else {
+					$value = '';
+				}
+				$coerced[] = $col_key;
+			}
+
+			$normalized[ $col_key ] = $value;
+		}
+
+		if ( '' !== $table_name ) {
+			$this->log_row_norm_warning_once(
+				'discard:' . $table_name,
+				$discarded,
+				'Dropping unknown columns for ' . $table_name . ' (not in target schema): %s'
+			);
+			$this->log_row_norm_warning_once(
+				'generated:' . $table_name,
+				$generated,
+				'Skipping generated columns for ' . $table_name . ': %s'
+			);
+			$this->log_row_norm_warning_once(
+				'omitdefault:' . $table_name,
+				$omitted,
+				'Omitting NULL for NOT NULL columns with defaults on ' . $table_name . ': %s'
+			);
+			$this->log_row_norm_warning_once(
+				'nullcoerce:' . $table_name,
+				$coerced,
+				'Coerced NULL to empty for NOT NULL columns without defaults on ' . $table_name . ': %s'
+			);
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * Whether SHOW COLUMNS Extra marks a VIRTUAL/STORED generated column.
+	 *
+	 * DEFAULT_GENERATED columns remain insertable.
+	 *
+	 * @param array<string, mixed> $meta Column metadata.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private function is_generated_column( array $meta ): bool {
+		$extra = strtolower( (string) ( $meta['Extra'] ?? '' ) );
+		if ( '' === $extra ) {
 			return false;
 		}
 
-		return $result;
+		if ( false !== strpos( $extra, 'virtual' ) || false !== strpos( $extra, 'stored generated' ) ) {
+			return true;
+		}
+
+		return false !== strpos( $extra, 'generated' ) && false === strpos( $extra, 'default_generated' );
+	}
+
+	/**
+	 * Whether a NOT NULL NULL should be omitted so MySQL applies the column default.
+	 *
+	 * @param array<string, mixed> $meta Column metadata.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private function should_omit_null_for_default( array $meta ): bool {
+		$extra = strtolower( (string) ( $meta['Extra'] ?? '' ) );
+		if ( false !== strpos( $extra, 'auto_increment' ) ) {
+			return true;
+		}
+
+		return array_key_exists( 'Default', $meta ) && null !== $meta['Default'];
+	}
+
+	/**
+	 * Log a one-shot warning listing column names (avoids flooding the import log).
+	 *
+	 * @param string        $warning_key Unique key for this warning within the import run.
+	 * @param array<string> $columns     Column names involved.
+	 * @param string        $message_fmt sprintf format with one %%s for the column list.
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function log_row_norm_warning_once( string $warning_key, array $columns, string $message_fmt ): void {
+		if ( empty( $columns ) || isset( $this->row_norm_warnings[ $warning_key ] ) ) {
+			return;
+		}
+
+		$this->row_norm_warnings[ $warning_key ] = true;
+		$unique                                  = array_values( array_unique( $columns ) );
+		$shown                                   = array_slice( $unique, 0, 20 );
+		$list                                    = implode( ', ', $shown );
+		if ( count( $unique ) > 20 ) {
+			$list .= ', ...';
+		}
+
+		$this->log( sprintf( $message_fmt, $list ) );
+	}
+
+	/**
+	 * Human-readable last database error for logs and WP_Error messages.
+	 *
+	 * @param wpdb $wpdb Database object.
+	 * @return string
+	 * @since 2.7.1
+	 */
+	private function format_db_error( wpdb $wpdb ): string {
+		$error = trim( (string) $wpdb->last_error );
+		if ( '' !== $error ) {
+			return $error;
+		}
+
+		return __( 'unknown database error', 'mksddn-migrate-content' );
 	}
 
 	/**
@@ -551,7 +1506,7 @@ class FullDatabaseImporter {
 	 *
 	 * @param wpdb   $wpdb       Database object.
 	 * @param string $table_name Table name.
-	 * @param array  $rows       Array of row arrays.
+	 * @param array  $rows       Array of row arrays (preferably already normalized).
 	 * @return bool|int Total affected rows, or false on hard failure.
 	 * @since 1.0.0
 	 */
@@ -563,6 +1518,14 @@ class FullDatabaseImporter {
 			}
 			$result = $this->insert_row_safe( $wpdb, $table_name, $row );
 			if ( false === $result ) {
+				$this->log(
+					sprintf(
+						'Row insert failed for %s. MySQL error: %s. Row keys: %s',
+						$table_name,
+						$this->format_db_error( $wpdb ),
+						implode( ', ', array_keys( $row ) )
+					)
+				);
 				return false;
 			}
 			$total += (int) $result;
@@ -604,6 +1567,14 @@ class FullDatabaseImporter {
 		// that may be created by WordPress during import.
 		if ( $wpdb->options === $table_name ) {
 			return $this->insert_option_safe( $wpdb, $row );
+		}
+
+		$columns_meta = $this->get_table_columns( $wpdb, $table_name );
+		if ( ! empty( $columns_meta ) ) {
+			$row = $this->normalize_row_for_insert( $row, $columns_meta, $table_name );
+			if ( empty( $row ) ) {
+				return 0;
+			}
 		}
 
 		// $wpdb->insert() preserves PHP null as SQL NULL (unlike prepare('%s')).
