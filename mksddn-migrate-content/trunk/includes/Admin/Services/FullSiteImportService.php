@@ -517,10 +517,25 @@ class FullSiteImportService {
 		$this->log( 'Running post-import maintenance.' );
 
 		$maintenance = new PostImportMaintenance();
-		$maintenance->run_after_full_import();
 
-		$this->maybe_reactivate_plugins();
-		$maintenance->run_woocommerce_maintenance();
+		try {
+			$maintenance->run_after_full_import();
+		} catch ( \Throwable $error ) {
+			$this->log( 'Post-import cache maintenance failed: ' . $error->getMessage() );
+		}
+
+		try {
+			$this->maybe_reactivate_plugins();
+		} catch ( \Throwable $error ) {
+			$this->log( 'Post-import plugin reactivation failed: ' . $error->getMessage() );
+		}
+
+		try {
+			// Plugin files were just replaced. WooCommerce APIs run in a later process.
+			$maintenance->defer_woocommerce_maintenance();
+		} catch ( \Throwable $error ) {
+			$this->log( 'Post-import WooCommerce maintenance failed: ' . $error->getMessage() );
+		}
 
 		/**
 		 * Fires after a successful full import completes.

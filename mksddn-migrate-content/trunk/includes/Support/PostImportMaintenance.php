@@ -1,8 +1,8 @@
 <?php
 /**
  * @file: PostImportMaintenance.php
- * @description: Centralized cache/runtime cleanup after imports (object cache, rewrite, page-cache plugins).
- * @dependencies: None
+ * @description: Centralized cache/runtime cleanup after imports (object cache, rewrite, page-cache plugins, deferred WooCommerce maintenance).
+ * @dependencies: Services\PluginLogger
  * @created: 2026-04-28
  */
 
@@ -20,11 +20,84 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PostImportMaintenance {
 
 	/**
+	 * Cron hook and admin-post action for WooCommerce maintenance in a fresh PHP process.
+	 *
+	 * The import request has already replaced wp-content/plugins, so WooCommerce
+	 * classes loaded earlier in that process must not be called.
+	 *
+	 * @var string
+	 */
+	public const WOOCOMMERCE_MAINTENANCE_HOOK = 'mksddn_mc_woocommerce_post_import_maintenance';
+
+	/**
+	 * Single-use token that authorizes the deferred maintenance request.
+	 *
+	 * Stored as a non-autoload option. A transient lives only in the object cache
+	 * when an external cache drop-in is loaded, and that drop-in is the one from
+	 * process start — the next request loads object-cache.php from disk.
+	 *
+	 * @var string
+	 */
+	private const PENDING_TOKEN_OPTION = 'mksddn_mc_wc_maint_token';
+
+	/**
+	 * How long a deferred maintenance token stays valid.
+	 *
+	 * Long enough for a delayed cron hit when the loopback could not start.
+	 */
+	private const PENDING_TOKEN_TTL = 12 * HOUR_IN_SECONDS;
+
+	/**
+	 * Product transients safe to delete without calling WooCommerce.
+	 *
+	 * @var string[]
+	 */
+	private const SAFE_PRODUCT_TRANSIENTS = array(
+		'wc_products_onsale',
+		'wc_featured_products',
+		'wc_outofstock_count',
+		'wc_low_stock_count',
+	);
+
+	/**
+	 * WooCommerce class whose in-memory shape must match wc_delete_product_transients().
+	 *
+	 * @var string
+	 */
+	private const PRODUCT_UTIL_CLASS = 'Automattic\\WooCommerce\\Internal\\Utilities\\ProductUtil';
+
+	/**
 	 * Context passed to hooks (e.g. full_success, database_mutation_emergency).
 	 *
 	 * @var string
 	 */
 	private string $context = '';
+
+	/**
+	 * Register cron and loopback handlers.
+	 *
+	 * Must run on every request, including wp-cron.php, before the event fires.
+	 *
+	 * @return void
+	 * @since 2.7.1
+	 */
+	public static function register_hooks(): void {
+		add_action( self::WOOCOMMERCE_MAINTENANCE_HOOK, array( self::class, 'handle_deferred_woocommerce_maintenance' ), 10, 1 );
+		add_action( 'admin_post_' . self::WOOCOMMERCE_MAINTENANCE_HOOK, array( self::class, 'handle_admin_post_woocommerce_maintenance' ) );
+		add_action( 'admin_post_nopriv_' . self::WOOCOMMERCE_MAINTENANCE_HOOK, array( self::class, 'handle_admin_post_woocommerce_maintenance' ) );
+	}
+
+	/**
+	 * Drop a scheduled WooCommerce maintenance event and its token.
+	 *
+	 * @return void
+	 * @since 2.7.1
+	 */
+	public static function clear_scheduled_woocommerce_maintenance(): void {
+		wp_clear_scheduled_hook( self::WOOCOMMERCE_MAINTENANCE_HOOK );
+		delete_option( self::PENDING_TOKEN_OPTION );
+		delete_transient( self::PENDING_TOKEN_OPTION );
+	}
 
 	/**
 	 * Run full maintenance after a successful full-site import.
@@ -243,20 +316,324 @@ class PostImportMaintenance {
 	}
 
 	/**
-	 * WooCommerce tables and product cache after full replace (success path only).
+	 * Clear known product transients and schedule WooCommerce maintenance for a new process.
+	 *
+	 * Call this from the request that replaced wp-content/plugins. That process may still
+	 * have WooCommerce 10.9.x classes in memory while 11.x files are already on disk.
+	 * Calling wc_delete_product_transients() there fatals on ProductUtil::delete_product_transients_for_products().
+	 *
+	 * @return void
+	 * @since 2.7.1
+	 */
+	public function defer_woocommerce_maintenance(): void {
+		try {
+			$this->clear_woocommerce_product_transients_safely();
+		} catch ( \Throwable $error ) {
+			PluginLogger::log(
+				'Safe WooCommerce transient cleanup failed: ' . $error->getMessage(),
+				'PostImportMaintenance'
+			);
+		}
+
+		try {
+			$this->schedule_deferred_woocommerce_maintenance();
+		} catch ( \Throwable $error ) {
+			PluginLogger::log(
+				'Failed to schedule WooCommerce post-import maintenance: ' . $error->getMessage(),
+				'PostImportMaintenance'
+			);
+		}
+	}
+
+	/**
+	 * WooCommerce tables and product cache after full replace.
+	 *
+	 * Run only from a fresh request (cron or admin-post loopback) so ProductUtil
+	 * is loaded from disk. Failures are logged and do not propagate.
 	 *
 	 * @return void
 	 */
 	public function run_woocommerce_maintenance(): void {
-		if ( function_exists( 'wc_delete_product_transients' ) ) {
-			wc_delete_product_transients();
+		$this->run_woocommerce_step(
+			function (): void {
+				if ( ! function_exists( 'wc_delete_product_transients' ) ) {
+					return;
+				}
+
+				if ( ! $this->loaded_product_util_can_delete_transients() ) {
+					PluginLogger::log(
+						'Skipped wc_delete_product_transients(): loaded ProductUtil has no delete_product_transients_for_products().',
+						'PostImportMaintenance'
+					);
+					return;
+				}
+
+				wc_delete_product_transients();
+			},
+			'wc_delete_product_transients'
+		);
+
+		$this->run_woocommerce_step(
+			function (): void {
+				if ( ! class_exists( '\WC_Install' ) ) {
+					return;
+				}
+
+				\WC_Install::check_version();
+				\WC_Install::update_db_version();
+			},
+			'WC_Install'
+		);
+
+		$this->run_woocommerce_step(
+			function (): void {
+				if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
+					wc_update_product_lookup_tables();
+				}
+			},
+			'wc_update_product_lookup_tables'
+		);
+	}
+
+	/**
+	 * Cron callback. The argument is the single-use token stored at schedule time.
+	 *
+	 * @param string $token Maintenance token.
+	 * @return bool True when maintenance ran.
+	 * @since 2.7.1
+	 */
+	public static function handle_deferred_woocommerce_maintenance( string $token = '' ): bool {
+		if ( ! self::consume_pending_token( $token ) ) {
+			return false;
 		}
-		if ( class_exists( '\WC_Install' ) ) {
-			\WC_Install::check_version();
-			\WC_Install::update_db_version();
+
+		try {
+			( new self() )->run_woocommerce_maintenance();
+			PluginLogger::log( 'Deferred WooCommerce post-import maintenance finished.', 'PostImportMaintenance' );
+			return true;
+		} catch ( \Throwable $error ) {
+			PluginLogger::log(
+				'Deferred WooCommerce post-import maintenance failed: ' . $error->getMessage(),
+				'PostImportMaintenance'
+			);
+			return true;
 		}
-		if ( function_exists( 'wc_update_product_lookup_tables' ) ) {
-			wc_update_product_lookup_tables();
+	}
+
+	/**
+	 * Admin-post loopback callback used when WP-Cron cannot start a fresh process.
+	 *
+	 * Loopback requests have no logged-in cookie, so the nopriv hook is required.
+	 * Authorization is the single-use transient token from the import request.
+	 *
+	 * @return void
+	 * @since 2.7.1
+	 */
+	public static function handle_admin_post_woocommerce_maintenance(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Single-use transient token; non-strings are rejected and strings are sanitized next.
+		$raw   = isset( $_POST['token'] ) ? wp_unslash( $_POST['token'] ) : '';
+		$token = is_string( $raw ) ? sanitize_text_field( $raw ) : '';
+
+		if ( self::handle_deferred_woocommerce_maintenance( $token ) ) {
+			return;
+		}
+
+		wp_die(
+			esc_html__( 'Forbidden.', 'mksddn-migrate-content' ),
+			esc_html__( 'Forbidden.', 'mksddn-migrate-content' ),
+			array( 'response' => 403 )
+		);
+	}
+
+	/**
+	 * Delete fixed WooCommerce product transients without loading plugin APIs.
+	 *
+	 * Bumps the product transient version only when that helper is already loaded
+	 * and exposes the method. Does not autoload WooCommerce classes.
+	 *
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function clear_woocommerce_product_transients_safely(): void {
+		foreach ( self::SAFE_PRODUCT_TRANSIENTS as $transient ) {
+			delete_transient( $transient );
+		}
+
+		if ( ! class_exists( '\WC_Cache_Helper', false ) ) {
+			return;
+		}
+
+		if ( ! method_exists( '\WC_Cache_Helper', 'get_transient_version' ) ) {
+			return;
+		}
+
+		\WC_Cache_Helper::get_transient_version( 'product', true );
+	}
+
+	/**
+	 * Queue WooCommerce maintenance on WP-Cron, or ping admin-post when cron cannot run.
+	 *
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function schedule_deferred_woocommerce_maintenance(): void {
+		if ( ! function_exists( 'wp_generate_password' ) ) {
+			require_once ABSPATH . WPINC . '/pluggable.php';
+		}
+
+		$token = wp_generate_password( 32, false, false );
+		if ( ! self::store_pending_token( $token ) ) {
+			PluginLogger::log(
+				'Could not store WooCommerce maintenance token; deferred maintenance was not scheduled.',
+				'PostImportMaintenance'
+			);
+			return;
+		}
+
+		$scheduled     = wp_schedule_single_event( time(), self::WOOCOMMERCE_MAINTENANCE_HOOK, array( $token ), true );
+		$schedule_ok   = true === $scheduled || ( is_wp_error( $scheduled ) && 'duplicate_event' === $scheduled->get_error_code() );
+		$cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+
+		// The follow-up request must get past wp_maintenance() before it can load plugins.
+		FullImportMaintenance::lift_core_maintenance();
+
+		if ( $schedule_ok && ! $cron_disabled && function_exists( 'spawn_cron' ) && spawn_cron() ) {
+			PluginLogger::log( 'Scheduled WooCommerce post-import maintenance on WP-Cron.', 'PostImportMaintenance' );
+			return;
+		}
+
+		if ( ! $schedule_ok ) {
+			$message = is_wp_error( $scheduled ) ? $scheduled->get_error_message() : 'unknown error';
+			PluginLogger::log(
+				'Could not schedule WooCommerce maintenance cron (' . $message . '). Dispatching admin-post loopback.',
+				'PostImportMaintenance'
+			);
+		} elseif ( $cron_disabled ) {
+			PluginLogger::log(
+				'WP-Cron is disabled. Dispatching WooCommerce maintenance via admin-post loopback.',
+				'PostImportMaintenance'
+			);
+		} else {
+			PluginLogger::log(
+				'WP-Cron event is scheduled but could not be spawned. Dispatching admin-post loopback.',
+				'PostImportMaintenance'
+			);
+		}
+
+		$this->dispatch_woocommerce_maintenance_loopback( $token );
+	}
+
+	/**
+	 * Start a non-blocking admin-post request so maintenance runs in a new PHP process.
+	 *
+	 * @param string $token Single-use maintenance token.
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function dispatch_woocommerce_maintenance_loopback( string $token ): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core filter used by spawn_cron() for local loopback.
+		$sslverify = apply_filters( 'https_local_ssl_verify', false );
+
+		$response = wp_remote_post(
+			admin_url( 'admin-post.php' ),
+			array(
+				'timeout'   => 0.01,
+				'blocking'  => false,
+				'sslverify' => $sslverify,
+				'body'      => array(
+					'action' => self::WOOCOMMERCE_MAINTENANCE_HOOK,
+					'token'  => $token,
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			PluginLogger::log(
+				'WooCommerce maintenance loopback failed to dispatch: ' . $response->get_error_message(),
+				'PostImportMaintenance'
+			);
+		}
+	}
+
+	/**
+	 * Persist the token in the options table for the next PHP process.
+	 *
+	 * @param string $token Single-use maintenance token.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private static function store_pending_token( string $token ): bool {
+		$payload = array(
+			'token'   => $token,
+			'expires' => time() + self::PENDING_TOKEN_TTL,
+		);
+
+		update_option( self::PENDING_TOKEN_OPTION, $payload, false );
+
+		$stored = get_option( self::PENDING_TOKEN_OPTION );
+		$saved  = is_array( $stored ) && isset( $stored['token'] ) ? (string) $stored['token'] : '';
+
+		return '' !== $saved && hash_equals( $token, $saved );
+	}
+
+	/**
+	 * Accept the token once. A second import overwrites it, so stale events no-op.
+	 *
+	 * @param string $token Token from cron args or the loopback body.
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private static function consume_pending_token( string $token ): bool {
+		$pending = get_option( self::PENDING_TOKEN_OPTION );
+		$stored  = is_array( $pending ) && isset( $pending['token'] ) ? (string) $pending['token'] : '';
+		$expires = is_array( $pending ) && isset( $pending['expires'] ) ? (int) $pending['expires'] : 0;
+
+		if ( '' === $stored || '' === $token || ! hash_equals( $stored, $token ) ) {
+			return false;
+		}
+
+		delete_option( self::PENDING_TOKEN_OPTION );
+
+		if ( $expires > 0 && time() > $expires ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether the ProductUtil already loaded in this process matches WooCommerce 11+.
+	 *
+	 * Autoload is intentional: a fresh request must pull the class from disk.
+	 * The import request must not call this method.
+	 *
+	 * @return bool
+	 * @since 2.7.1
+	 */
+	private function loaded_product_util_can_delete_transients(): bool {
+		if ( ! class_exists( self::PRODUCT_UTIL_CLASS, true ) ) {
+			return false;
+		}
+
+		return method_exists( self::PRODUCT_UTIL_CLASS, 'delete_product_transients_for_products' );
+	}
+
+	/**
+	 * Run one WooCommerce maintenance step without letting it fail the caller.
+	 *
+	 * @param callable $callback Step callback.
+	 * @param string   $label    Log label.
+	 * @return void
+	 * @since 2.7.1
+	 */
+	private function run_woocommerce_step( callable $callback, string $label ): void {
+		try {
+			$callback();
+		} catch ( \Throwable $error ) {
+			PluginLogger::log(
+				sprintf( 'WooCommerce post-import step %s failed: %s', $label, $error->getMessage() ),
+				'PostImportMaintenance'
+			);
 		}
 	}
 }
