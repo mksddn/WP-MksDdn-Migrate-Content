@@ -65,6 +65,20 @@ class FullImportMaintenance {
 	}
 
 	/**
+	 * Remove the core maintenance file so a follow-up HTTP request can bootstrap.
+	 *
+	 * wp-cron.php and admin-post.php die in wp_maintenance() while ABSPATH/.maintenance
+	 * exists. The plugin runtime lock stays until deactivate(), and that gate already
+	 * exempts cron and wp-admin.
+	 *
+	 * @return void
+	 * @since 2.7.2
+	 */
+	public static function lift_core_maintenance(): void {
+		self::deactivate_core_maintenance();
+	}
+
+	/**
 	 * Whether a full import is marked active.
 	 *
 	 * @return bool

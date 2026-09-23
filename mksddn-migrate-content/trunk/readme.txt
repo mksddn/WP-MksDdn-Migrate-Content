@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.7.1
+Stable tag: 2.7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -141,7 +141,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 = Support & Maintenance =
 * `ImportArtifactCleanup` — stages browser uploads into `preflight/`; after success renames ephemeral archives into `imports/` (no second multi-GB copy) and clears chunk job metadata; purges expired preflight files
 * `DeactivationCleanup` — clears temporary upload state and service directories when the plugin is deactivated
-* `PostImportMaintenance` — cache/rewrite cleanup after full import and emergency purge if the database was partially updated; global flush plus targeted `wp_cache_flush_group()` when supported; filter `mksddn_mc_post_import_object_cache_flush_groups`
+* `PostImportMaintenance` — cache/rewrite cleanup after full import and emergency purge if the database was partially updated; global flush plus targeted `wp_cache_flush_group()` when supported; filter `mksddn_mc_post_import_object_cache_flush_groups`. WooCommerce maintenance is not called in the import request that replaced `wp-content/plugins` (that process may still have WooCommerce 10.9 classes in memory while 11.x files are on disk). The import request only deletes `wc_products_onsale`, `wc_featured_products`, `wc_outofstock_count`, and `wc_low_stock_count`, and calls `WC_Cache_Helper::get_transient_version( 'product', true )` when that method is already loaded. `run_woocommerce_maintenance()` runs on the next fresh request via a single WP-Cron event, or an admin-post loopback when cron cannot start. Core `.maintenance` is removed just before that request is spawned; the plugin runtime lock stays until import shutdown. The one-time token is saved with `update_option()` so the next process can read it after `object-cache.php` changes. `wc_delete_product_transients()` runs only if the loaded `Automattic\WooCommerce\Internal\Utilities\ProductUtil` has `delete_product_transients_for_products`. Maintenance failures are logged and do not fail the import.
 * `FullImportMaintenance` — file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
 * `ImportLock` — prevents concurrent import operations
 * `PreflightStagingPath` — validates staged preflight file paths
@@ -191,6 +191,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.7.2 =
+* Fixed: Full-site import no longer calls WooCommerce APIs in the request that replaced `wp-content/plugins`. Product transients are cleared there; `wc_delete_product_transients()`, `WC_Install`, and lookup tables run on the next request so `ProductUtil` is loaded from disk.
+* Fixed: Post-import maintenance errors are logged and no longer turn a successful full import into a fatal.
 
 = 2.7.1 =
 * Fixed: Full-site DB import recreates tables from the dump schema (CREATE under a swap name, then atomic RENAME) so the original table is not discarded until CREATE succeeds.

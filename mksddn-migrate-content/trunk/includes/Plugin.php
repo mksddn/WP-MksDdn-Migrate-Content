@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Chunking\FullExportBuilder;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Core\ServiceContainerFactory;
 use MksDdn\MigrateContent\Support\FullImportMaintenance;
+use MksDdn\MigrateContent\Support\PostImportMaintenance;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -47,6 +48,7 @@ class Plugin {
 	 * @since 1.0.0
 	 */
 	public function register(): void {
+		PostImportMaintenance::register_hooks();
 		add_action( 'plugins_loaded', array( $this, 'boot_rest' ), 5 );
 		add_action( 'plugins_loaded', array( $this, 'ensure_storage_protection' ), 6 );
 		add_action( 'init', array( FullImportMaintenance::class, 'maybe_block_public_requests' ), 0 );

@@ -52,6 +52,7 @@ final class DeactivationCleanup {
 
 		delete_transient( 'mksddn_mc_import_lock' );
 		delete_transient( 'mksddn_mc_server_backups' );
+		PostImportMaintenance::clear_scheduled_woocommerce_maintenance();
 		delete_option( 'mksddn_mc_storage_path' );
 
 		self::purge_user_preview_transients();
