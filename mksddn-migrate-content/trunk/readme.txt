@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.7.1
+Stable tag: 2.7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -191,6 +191,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.7.2 =
+* Fixed: Full-site import no longer calls WooCommerce APIs in the request that replaced `wp-content/plugins`. Product transients are cleared there; `wc_delete_product_transients()`, `WC_Install`, and lookup tables run on the next request so `ProductUtil` is loaded from disk.
+* Fixed: Post-import maintenance errors are logged and no longer turn a successful full import into a fatal.
 
 = 2.7.1 =
 * Fixed: Full-site DB import recreates tables from the dump schema (CREATE under a swap name, then atomic RENAME) so the original table is not discarded until CREATE succeeds.

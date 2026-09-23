@@ -72,7 +72,7 @@ class FullImportMaintenance {
 	 * exempts cron and wp-admin.
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	public static function lift_core_maintenance(): void {
 		self::deactivate_core_maintenance();

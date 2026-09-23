@@ -79,7 +79,7 @@ class PostImportMaintenance {
 	 * Must run on every request, including wp-cron.php, before the event fires.
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	public static function register_hooks(): void {
 		add_action( self::WOOCOMMERCE_MAINTENANCE_HOOK, array( self::class, 'handle_deferred_woocommerce_maintenance' ), 10, 1 );
@@ -91,7 +91,7 @@ class PostImportMaintenance {
 	 * Drop a scheduled WooCommerce maintenance event and its token.
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	public static function clear_scheduled_woocommerce_maintenance(): void {
 		wp_clear_scheduled_hook( self::WOOCOMMERCE_MAINTENANCE_HOOK );
@@ -323,7 +323,7 @@ class PostImportMaintenance {
 	 * Calling wc_delete_product_transients() there fatals on ProductUtil::delete_product_transients_for_products().
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	public function defer_woocommerce_maintenance(): void {
 		try {
@@ -400,7 +400,7 @@ class PostImportMaintenance {
 	 *
 	 * @param string $token Maintenance token.
 	 * @return bool True when maintenance ran.
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	public static function handle_deferred_woocommerce_maintenance( string $token = '' ): bool {
 		if ( ! self::consume_pending_token( $token ) ) {
@@ -427,7 +427,7 @@ class PostImportMaintenance {
 	 * Authorization is the single-use transient token from the import request.
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	public static function handle_admin_post_woocommerce_maintenance(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Single-use transient token; non-strings are rejected and strings are sanitized next.
@@ -452,7 +452,7 @@ class PostImportMaintenance {
 	 * and exposes the method. Does not autoload WooCommerce classes.
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private function clear_woocommerce_product_transients_safely(): void {
 		foreach ( self::SAFE_PRODUCT_TRANSIENTS as $transient ) {
@@ -474,7 +474,7 @@ class PostImportMaintenance {
 	 * Queue WooCommerce maintenance on WP-Cron, or ping admin-post when cron cannot run.
 	 *
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private function schedule_deferred_woocommerce_maintenance(): void {
 		if ( ! function_exists( 'wp_generate_password' ) ) {
@@ -528,7 +528,7 @@ class PostImportMaintenance {
 	 *
 	 * @param string $token Single-use maintenance token.
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private function dispatch_woocommerce_maintenance_loopback( string $token ): void {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core filter used by spawn_cron() for local loopback.
@@ -560,7 +560,7 @@ class PostImportMaintenance {
 	 *
 	 * @param string $token Single-use maintenance token.
 	 * @return bool
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private static function store_pending_token( string $token ): bool {
 		$payload = array(
@@ -581,7 +581,7 @@ class PostImportMaintenance {
 	 *
 	 * @param string $token Token from cron args or the loopback body.
 	 * @return bool
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private static function consume_pending_token( string $token ): bool {
 		$pending = get_option( self::PENDING_TOKEN_OPTION );
@@ -608,7 +608,7 @@ class PostImportMaintenance {
 	 * The import request must not call this method.
 	 *
 	 * @return bool
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private function loaded_product_util_can_delete_transients(): bool {
 		if ( ! class_exists( self::PRODUCT_UTIL_CLASS, true ) ) {
@@ -624,7 +624,7 @@ class PostImportMaintenance {
 	 * @param callable $callback Step callback.
 	 * @param string   $label    Log label.
 	 * @return void
-	 * @since 2.7.1
+	 * @since 2.7.2
 	 */
 	private function run_woocommerce_step( callable $callback, string $label ): void {
 		try {
