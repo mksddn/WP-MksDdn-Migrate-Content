@@ -21,7 +21,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
 * **Integrity & safety** – `.wpbkp` archives ship with manifests and checksums; imports verify capabilities, nonces, and disk space before touching data.
-* **Import preflight** – unified import is a two-step flow: run preflight (read-only report), then start the real import from the report without uploading the file again (browser uploads are staged server-side between steps).
+* **Import preflight** – unified import is a two-step flow: run preflight (read-only report), then start the real import from the report without uploading the file again (browser uploads are staged server-side between steps). Full-site and theme preflight warn when archive PHP/WordPress major.minor versions differ from the target site.
 
 = Feature Highlights =
 
@@ -44,7 +44,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 == Frequently Asked Questions ==
 
 = What is inside a `.wpbkp` archive? =
-Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads for selected entities, optional filesystem slices (uploads/plugins/themes), media binaries, and user-merge selections. Imports verify the manifest before processing.
+Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads for selected entities, optional filesystem slices (uploads/plugins/themes), media binaries, and user-merge selections. Full-site and theme manifests also record the source site `php_version` and `wp_version`. Imports verify the manifest before processing.
 
 = How is `.wpbkp` different from `.json` exports? =
 `.json` exports are lightweight (content only) and convenient for quick edits. `.wpbkp` adds media, filesystem slices, and checksums. Use `.wpbkp` for full fidelity.
@@ -74,7 +74,7 @@ Yes. The user merge dialog shows archive/current rows with conflict indicators. 
 Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports back up theme directories before replace and restore them if extraction fails.
 
 = How does unified import preflight work? =
-Step 1 runs file detection and read-only analysis (payload parsing, user diff scan for full-site archives, theme list scan) and stores a short-lived report on the Import page. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked jobs stay in `jobs/` until success, then are renamed into `imports/` for reuse). Browser uploads are moved to `preflight/` between steps and renamed into `imports/` after success. Files you place in `imports/` yourself are not deleted. Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
+Step 1 runs file detection and read-only analysis (payload parsing, user diff scan for full-site archives, theme list scan) and stores a short-lived report on the Import page. For full-site and theme archives, preflight also compares source vs target PHP and WordPress versions (major.minor) and warns when they differ; older archives without those manifest fields skip the check. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked jobs stay in `jobs/` until success, then are renamed into `imports/` for reuse). Browser uploads are moved to `preflight/` between steps and renamed into `imports/` after success. Files you place in `imports/` yourself are not deleted. Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
 
 == Screenshots ==
 
@@ -126,7 +126,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `FullSiteImportService` — manages full site imports
 * `ThemeImportService` — handles theme archive imports
 * `UnifiedImportOrchestrator` — orchestrates unified import with automatic type detection; step 1 is always preflight, step 2 runs the real import using a stored file reference
-* `ImportPreflightService` — read-only analysis for unified import preflight
+* `ImportPreflightService` — read-only analysis for unified import preflight (including PHP/WordPress version mismatch warnings for full-site and theme archives)
 * `PreflightReportStore` — short-lived transient storage for preflight reports and follow-up import handles (staged browser uploads under `wp-content/uploads/mksddn-mc/preflight/`, or chunk/server identifiers)
 * `ImportTypeDetector` — detects import type (full site, selected content, or theme) from archive file
 * `ImportFileValidator` — validates uploaded files
@@ -147,11 +147,12 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ImportLock` — prevents concurrent import operations
 * `PreflightStagingPath` — validates staged preflight file paths
 * `ThemeArchivePathHelper` — normalizes theme archive entry paths
+* `EnvironmentVersionComparator` — compares archive vs target PHP/WordPress major.minor versions for import preflight warnings
 * `DomainReplacer`, `SiteUrlGuard`, `FilesystemHelper`, `MimeTypeHelper`
 
 = Archive Layer =
 * `Packer`, `Extractor` — `.wpbkp` archive pack/unpack
-* `FullArchivePayload` — memory-efficient JSON payload handling
+* `FullArchivePayload` — memory-efficient JSON payload handling; `read_with_manifest()` loads payload and `manifest.json` in one archive open
 * `ContentCollector` — filesystem content collection for exports
 * `ArchiveValidator`, `ValidationResult` — manifest and checksum validation
 

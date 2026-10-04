@@ -96,6 +96,8 @@ class FullContentExporter {
 				'plugin_version' => MKSDDN_MC_VERSION,
 				'type'           => 'full-site',
 				'created_at_gmt' => gmdate( 'c' ),
+				'php_version'    => PHP_VERSION,
+				'wp_version'     => isset( $GLOBALS['wp_version'] ) ? (string) $GLOBALS['wp_version'] : '',
 			);
 
 			$manifest_json = wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );

@@ -99,6 +99,8 @@ class ThemeExporter {
 			'plugin_version' => MKSDDN_MC_VERSION,
 			'type'           => 'themes',
 			'created_at_gmt' => gmdate( 'c' ),
+			'php_version'    => PHP_VERSION,
+			'wp_version'     => isset( $GLOBALS['wp_version'] ) ? (string) $GLOBALS['wp_version'] : '',
 			'themes'         => $themes_data,
 		);
 

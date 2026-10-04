@@ -146,6 +146,36 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 			<?php if ( isset( $mksddn_mc_summary['user_conflicts'] ) ) : ?>
 				<li><?php echo esc_html( sprintf( /* translators: %d: conflict count */ __( 'Potential user email conflicts: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['user_conflicts'] ) ); ?></li>
 			<?php endif; ?>
+			<?php if ( in_array( $mksddn_mc_import_type_code, array( 'full', 'themes' ), true ) ) : ?>
+				<?php if ( ! empty( $mksddn_mc_summary['source_php_version'] ) ) : ?>
+					<li>
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: PHP version in archive, 2: PHP version on this site (or Unknown) */
+								__( 'PHP: archive %1$s -> this site %2$s', 'mksddn-migrate-content' ),
+								(string) $mksddn_mc_summary['source_php_version'],
+								! empty( $mksddn_mc_summary['target_php_version'] ) ? (string) $mksddn_mc_summary['target_php_version'] : $mksddn_mc_unknown_label
+							)
+						);
+						?>
+					</li>
+				<?php endif; ?>
+				<?php if ( ! empty( $mksddn_mc_summary['source_wp_version'] ) ) : ?>
+					<li>
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: WordPress version in archive, 2: WordPress version on this site (or Unknown) */
+								__( 'WordPress: archive %1$s -> this site %2$s', 'mksddn-migrate-content' ),
+								(string) $mksddn_mc_summary['source_wp_version'],
+								! empty( $mksddn_mc_summary['target_wp_version'] ) ? (string) $mksddn_mc_summary['target_wp_version'] : $mksddn_mc_unknown_label
+							)
+						);
+						?>
+					</li>
+				<?php endif; ?>
+			<?php endif; ?>
 			<?php if ( isset( $mksddn_mc_summary['theme_count'] ) ) : ?>
 				<li><?php echo esc_html( sprintf( /* translators: %d: theme count */ __( 'Themes in archive: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['theme_count'] ) ); ?></li>
 			<?php endif; ?>

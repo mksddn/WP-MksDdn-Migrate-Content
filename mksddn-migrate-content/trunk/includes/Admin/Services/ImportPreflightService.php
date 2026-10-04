@@ -2,13 +2,14 @@
 /**
  * @file: ImportPreflightService.php
  * @description: Read-only preflight analysis for unified import (dry-run)
- * @dependencies: ImportPayloadPreparer, Users\UserDiffBuilder, Support\MimeTypeHelper, Support\ThemeArchivePathHelper
+ * @dependencies: ImportPayloadPreparer, Users\UserDiffBuilder, Support\EnvironmentVersionComparator, Support\MimeTypeHelper, Support\ThemeArchivePathHelper
  * @created: 2026-04-08
  */
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
 use MksDdn\MigrateContent\Options\OptionsHelper;
+use MksDdn\MigrateContent\Support\EnvironmentVersionComparator;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
 use MksDdn\MigrateContent\Support\ThemeArchivePathHelper;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
@@ -624,9 +625,14 @@ class ImportPreflightService {
 			);
 		}
 
-		$warnings = array();
-		$incoming = isset( $diff['counts']['incoming'] ) ? (int) $diff['counts']['incoming'] : 0;
-		$conflicts = isset( $diff['counts']['conflicts'] ) ? (int) $diff['counts']['conflicts'] : 0;
+		$warnings   = array();
+		$incoming   = isset( $diff['counts']['incoming'] ) ? (int) $diff['counts']['incoming'] : 0;
+		$conflicts  = isset( $diff['counts']['conflicts'] ) ? (int) $diff['counts']['conflicts'] : 0;
+		$manifest   = isset( $diff['manifest'] ) && is_array( $diff['manifest'] ) ? $diff['manifest'] : array();
+		$comparator = new EnvironmentVersionComparator();
+		$env        = $comparator->summarize( $manifest );
+
+		$warnings = array_merge( $warnings, $comparator->build_warnings( $manifest ) );
 
 		if ( $incoming > 0 ) {
 			$warnings[] = __( 'Archive contains WordPress users; you may see a merge step during real import.', 'mksddn-migrate-content' );
@@ -643,11 +649,14 @@ class ImportPreflightService {
 			'status'            => $status,
 			'import_type'       => 'full',
 			'source'            => $this->normalize_source( $file_info['source'] ?? 'upload' ),
-			'summary'           => array(
-				'file_name'       => $file_info['name'] ?? basename( $path ),
-				'file_size'       => $this->file_size( $path ),
-				'users_in_archive'=> $incoming,
-				'user_conflicts'  => $conflicts,
+			'summary'           => array_merge(
+				array(
+					'file_name'        => $file_info['name'] ?? basename( $path ),
+					'file_size'        => $this->file_size( $path ),
+					'users_in_archive' => $incoming,
+					'user_conflicts'   => $conflicts,
+				),
+				$env
 			),
 			'warnings'          => $warnings,
 			'errors'            => array(),
@@ -677,16 +686,19 @@ class ImportPreflightService {
 			);
 		}
 
-		$slugs    = $diff['slugs'];
-		$themes   = $diff['themes'];
-		$existing = array();
+		$slugs      = $diff['slugs'];
+		$themes     = $diff['themes'];
+		$manifest   = isset( $diff['manifest'] ) && is_array( $diff['manifest'] ) ? $diff['manifest'] : array();
+		$comparator = new EnvironmentVersionComparator();
+		$env        = $comparator->summarize( $manifest );
+		$existing   = array();
 		foreach ( $themes as $theme_row ) {
 			if ( ! empty( $theme_row['exists'] ) ) {
 				$existing[] = $theme_row['slug'];
 			}
 		}
 
-		$warnings = array();
+		$warnings = $comparator->build_warnings( $manifest );
 		if ( ! empty( $existing ) ) {
 			$warnings[] = __( 'Some themes already exist on this site. Merge overwrites matching files; Replace removes the whole theme directory first.', 'mksddn-migrate-content' );
 		}
@@ -700,15 +712,18 @@ class ImportPreflightService {
 			'status'            => $status,
 			'import_type'       => 'themes',
 			'source'            => $this->normalize_source( $file_info['source'] ?? 'upload' ),
-			'summary'           => array(
-				'file_name'       => $file_info['name'] ?? basename( $path ),
-				'file_size'       => $this->file_size( $path ),
-				'theme_count'     => count( $slugs ),
-				'themes'          => $slugs,
-				'existing_slugs'  => $existing,
-				'files_total'     => $diff['files_total'],
-				'files_added'     => $diff['files_added'],
-				'files_overwrite' => $diff['files_overwrite'],
+			'summary'           => array_merge(
+				array(
+					'file_name'       => $file_info['name'] ?? basename( $path ),
+					'file_size'       => $this->file_size( $path ),
+					'theme_count'     => count( $slugs ),
+					'themes'          => $slugs,
+					'existing_slugs'  => $existing,
+					'files_total'     => $diff['files_total'],
+					'files_added'     => $diff['files_added'],
+					'files_overwrite' => $diff['files_overwrite'],
+				),
+				$env
 			),
 			'warnings'          => $warnings,
 			'errors'            => array(),
@@ -724,7 +739,7 @@ class ImportPreflightService {
 	 * Build per-theme file inventory: added vs overwrite (merge semantics).
 	 *
 	 * @param string $path Archive path.
-	 * @return array{slugs:string[],themes:array<int,array>,files_total:int,files_added:int,files_overwrite:int}|WP_Error
+	 * @return array{slugs:string[],themes:array<int,array>,files_total:int,files_added:int,files_overwrite:int,manifest:array}|WP_Error
 	 */
 	private function build_theme_file_diff( string $path ) {
 		$zip = new ZipArchive();
@@ -732,7 +747,8 @@ class ImportPreflightService {
 			return new WP_Error( 'mksddn_mc_zip_open', __( 'Unable to open archive.', 'mksddn-migrate-content' ) );
 		}
 
-		$from_manifest = $this->read_theme_slugs_from_manifest( $zip );
+		$manifest      = $this->decode_manifest_from_zip( $zip );
+		$from_manifest = $this->theme_slugs_from_manifest( $manifest );
 		$theme_root    = trailingslashit( get_theme_root() );
 		$prefix        = ThemeArchivePathHelper::ARCHIVE_PREFIX;
 		$cap           = self::THEME_FILE_SAMPLE_CAP;
@@ -868,24 +884,39 @@ class ImportPreflightService {
 			'files_total'     => $files_total,
 			'files_added'     => $files_added,
 			'files_overwrite' => $files_overwrite,
+			'manifest'        => $manifest,
 		);
 	}
 
 	/**
-	 * Read theme slugs from archive manifest.json when present.
+	 * Decode manifest.json from an open ZipArchive.
 	 *
 	 * @param ZipArchive $zip Open archive.
-	 * @return string[]
+	 * @return array
 	 */
-	private function read_theme_slugs_from_manifest( ZipArchive $zip ): array {
-		$from_manifest = array();
-		$raw_manifest  = $zip->getFromName( 'manifest.json' );
+	private function decode_manifest_from_zip( ZipArchive $zip ): array {
+		$raw_manifest = $zip->getFromName( 'manifest.json' );
 		if ( false === $raw_manifest || '' === $raw_manifest ) {
-			return $from_manifest;
+			return array();
 		}
 
 		$manifest = json_decode( $raw_manifest, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $manifest ) || ! isset( $manifest['themes'] ) || ! is_array( $manifest['themes'] ) ) {
+		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $manifest ) ) {
+			return array();
+		}
+
+		return $manifest;
+	}
+
+	/**
+	 * Extract theme slugs from a decoded manifest.
+	 *
+	 * @param array $manifest Decoded manifest.
+	 * @return string[]
+	 */
+	private function theme_slugs_from_manifest( array $manifest ): array {
+		$from_manifest = array();
+		if ( ! isset( $manifest['themes'] ) || ! is_array( $manifest['themes'] ) ) {
 			return $from_manifest;
 		}
 
