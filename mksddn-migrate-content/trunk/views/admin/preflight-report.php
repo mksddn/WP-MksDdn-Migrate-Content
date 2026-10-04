@@ -443,7 +443,14 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 		</form>
 	<?php endif; ?>
 
-	<p>
-		<a class="button" href="<?php echo esc_url( $mksddn_mc_import_page_url ); ?>"><?php esc_html_e( 'Dismiss report', 'mksddn-migrate-content' ); ?></a>
-	</p>
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 1rem 0;">
+		<?php if ( '' !== $mksddn_mc_preflight_report_id ) : ?>
+			<?php wp_nonce_field( 'mksddn_mc_dismiss_preflight_' . $mksddn_mc_preflight_report_id ); ?>
+			<input type="hidden" name="action" value="mksddn_mc_dismiss_preflight_report">
+			<input type="hidden" name="preflight_report_id" value="<?php echo esc_attr( $mksddn_mc_preflight_report_id ); ?>">
+			<button type="submit" class="button"><?php esc_html_e( 'Dismiss report', 'mksddn-migrate-content' ); ?></button>
+		<?php else : ?>
+			<a class="button" href="<?php echo esc_url( $mksddn_mc_import_page_url ); ?>"><?php esc_html_e( 'Dismiss report', 'mksddn-migrate-content' ); ?></a>
+		<?php endif; ?>
+	</form>
 </div>

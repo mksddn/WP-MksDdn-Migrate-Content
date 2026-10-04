@@ -2,7 +2,7 @@
 /**
  * @file: ImportRequestHandler.php
  * @description: Handler for import request operations
- * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator
+ * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator, Admin\Services\PreflightReportStore, Admin\Services\NotificationService, Support\ImportArtifactCleanup
  * @created: 2024-12-15
  */
 
@@ -10,12 +10,14 @@ namespace MksDdn\MigrateContent\Admin\Handlers;
 
 use MksDdn\MigrateContent\Admin\Services\FullSiteImportService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
+use MksDdn\MigrateContent\Admin\Services\NotificationService;
+use MksDdn\MigrateContent\Admin\Services\PreflightReportStore;
 use MksDdn\MigrateContent\Admin\Services\SelectedContentImportService;
 use MksDdn\MigrateContent\Admin\Services\ThemeImportService;
 use MksDdn\MigrateContent\Admin\Services\UnifiedImportOrchestrator;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
-use MksDdn\MigrateContent\Support\MimeTypeHelper;
-use WP_Error;
+use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
+use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -57,13 +59,29 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	private ThemeImportService $theme_import_service;
 
 	/**
+	 * Preflight report store.
+	 *
+	 * @var PreflightReportStore
+	 */
+	private PreflightReportStore $preflight_report_store;
+
+	/**
+	 * Notification service.
+	 *
+	 * @var NotificationServiceInterface
+	 */
+	private NotificationServiceInterface $notifications;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param SelectedContentImportService|null $selected_import_service Selected content import service.
-	 * @param FullSiteImportService|null        $full_import_service     Full site import service.
-	 * @param ImportTypeDetector|null           $type_detector           Import type detector.
-	 * @param UnifiedImportOrchestrator|null    $orchestrator            Unified import orchestrator.
-	 * @param ThemeImportService|null          $theme_import_service     Theme import service.
+	 * @param SelectedContentImportService|null  $selected_import_service Selected content import service.
+	 * @param FullSiteImportService|null         $full_import_service     Full site import service.
+	 * @param ImportTypeDetector|null            $type_detector           Import type detector.
+	 * @param UnifiedImportOrchestrator|null     $orchestrator            Unified import orchestrator.
+	 * @param ThemeImportService|null            $theme_import_service    Theme import service.
+	 * @param PreflightReportStore|null          $preflight_report_store  Preflight report store.
+	 * @param NotificationServiceInterface|null  $notifications           Notification service.
 	 * @since 1.0.0
 	 */
 	public function __construct(
@@ -71,7 +89,9 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 		?FullSiteImportService $full_import_service = null,
 		?ImportTypeDetector $type_detector = null,
 		?UnifiedImportOrchestrator $orchestrator = null,
-		?ThemeImportService $theme_import_service = null
+		?ThemeImportService $theme_import_service = null,
+		?PreflightReportStore $preflight_report_store = null,
+		?NotificationServiceInterface $notifications = null
 	) {
 		$this->selected_import_service = $selected_import_service ?? new SelectedContentImportService();
 		$this->full_import_service      = $full_import_service ?? new FullSiteImportService();
@@ -80,6 +100,8 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 			$this->full_import_service
 		);
 		$this->theme_import_service     = $theme_import_service ?? new ThemeImportService();
+		$this->preflight_report_store   = $preflight_report_store ?? new PreflightReportStore();
+		$this->notifications            = $notifications ?? new NotificationService();
 	}
 
 	/**
@@ -141,6 +163,53 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 
 		// Process unified import through orchestrator.
 		$this->orchestrator->process( $request_data );
+	}
+
+	/**
+	 * Dismiss a preflight report and keep the archive under imports/ for reuse.
+	 *
+	 * @return void
+	 * @since 2.7.2
+	 */
+	public function handle_dismiss_preflight_report(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to perform this action.', 'mksddn-migrate-content' ) );
+		}
+
+		$report_id = isset( $_POST['preflight_report_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_report_id'] ) ) : '';
+		check_admin_referer( 'mksddn_mc_dismiss_preflight_' . $report_id );
+
+		if ( '' === $report_id ) {
+			$this->notifications->redirect_with_notice( 'error', __( 'Preflight report identifier is missing.', 'mksddn-migrate-content' ) );
+		}
+
+		$user_id = (int) get_current_user_id();
+		$bucket  = $this->preflight_report_store->get_bucket_for_user( $report_id, $user_id );
+		if ( ! $bucket ) {
+			$this->notifications->redirect_with_notice(
+				'error',
+				__( 'Preflight report not found or has expired.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$kept = false;
+		if ( ! empty( $bucket['import_handle'] ) && is_array( $bucket['import_handle'] ) ) {
+			$kept = ImportArtifactCleanup::persist_import_handle_for_reuse( $bucket['import_handle'] );
+		}
+
+		$this->preflight_report_store->delete_for_user( $report_id, $user_id );
+
+		if ( $kept ) {
+			$this->notifications->redirect_with_notice(
+				'success',
+				__( 'Preflight report dismissed. The backup was kept under Server files for reuse.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$this->notifications->redirect_with_notice(
+			'error',
+			__( 'Preflight report dismissed, but the backup could not be moved to Server files. Re-upload the archive if you need it again.', 'mksddn-migrate-content' )
+		);
 	}
 
 }

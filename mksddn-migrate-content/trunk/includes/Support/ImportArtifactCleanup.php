@@ -1,13 +1,14 @@
 <?php
 /**
  * @file: ImportArtifactCleanup.php
- * @description: Stages browser uploads into preflight/; promotes ephemeral archives into imports/ after success
+ * @description: Stages browser uploads into preflight/; promotes ephemeral archives into imports/ after success or abort
  * @dependencies: Chunking\ChunkJobRepository, Config\PluginConfig, Support\FilesystemHelper, Support\PreflightStagingPath
  * @created: 2026-08-25
  */
 
 namespace MksDdn\MigrateContent\Support;
 
+use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
@@ -17,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * After a successful import, keep a single reusable copy under imports/.
+ * Keeps a reusable copy under imports/ after success or explicit abort (cancel/dismiss).
  *
  * @since 2.6.1
  */
@@ -29,6 +30,80 @@ final class ImportArtifactCleanup {
 	private const COPY_FALLBACK_MAX_BYTES = 32 * MB_IN_BYTES;
 
 	/**
+	 * Promote a managed archive (or resolve a chunk job) into imports/ for reuse.
+	 *
+	 * Used on cancel/dismiss paths. Files already under imports/ are left in place.
+	 * Unmanaged PHP temps outside plugin storage are deleted.
+	 *
+	 * @param string $source_path   Absolute path (preflight/jobs/imports or empty when chunk-only).
+	 * @param string $original_name Preferred filename for imports/.
+	 * @param string $chunk_job_id  Optional chunk job id (resolves path and clears metadata).
+	 * @return bool True when the archive is available under imports/ (or already was).
+	 */
+	public static function persist_handle_for_reuse( string $source_path, string $original_name, string $chunk_job_id = '' ): bool {
+		$job = null;
+		$chunk_job_id = sanitize_key( $chunk_job_id );
+
+		if ( '' !== $chunk_job_id ) {
+			$job = ( new ChunkJobRepository() )->find( $chunk_job_id );
+			if ( ( '' === $source_path || ! is_file( $source_path ) ) && $job ) {
+				$source_path = $job->get_file_path();
+			}
+			if ( '' === $original_name ) {
+				$original_name = self::preferred_chunk_filename( $chunk_job_id, '' );
+			}
+		}
+
+		if ( '' === $source_path || ! is_file( $source_path ) ) {
+			self::delete_job_metadata( $job );
+			return false;
+		}
+
+		$real = realpath( $source_path );
+		if ( false === $real ) {
+			self::delete_job_metadata( $job );
+			return false;
+		}
+
+		if ( self::is_under_plugin_storage( $real ) ) {
+			return self::persist_for_reuse( $real, $original_name, $job );
+		}
+
+		self::discard_unmanaged_temp( $real );
+		self::delete_job_metadata( $job );
+		return false;
+	}
+
+	/**
+	 * Promote an archive described by a preflight import_handle into imports/.
+	 *
+	 * Server-sourced handles are a no-op (already under imports/).
+	 *
+	 * @param array $handle Keys: source_type, staged_path, chunk_job_id, original_name, server_file.
+	 * @return bool True when the archive is available under imports/ (or already was).
+	 */
+	public static function persist_import_handle_for_reuse( array $handle ): bool {
+		$source_type   = isset( $handle['source_type'] ) ? sanitize_key( (string) $handle['source_type'] ) : '';
+		$original_name = isset( $handle['original_name'] ) ? sanitize_file_name( (string) $handle['original_name'] ) : '';
+
+		if ( 'server' === $source_type ) {
+			return true;
+		}
+
+		if ( 'chunked' === $source_type ) {
+			$chunk_job_id = isset( $handle['chunk_job_id'] ) ? sanitize_text_field( (string) $handle['chunk_job_id'] ) : '';
+			return self::persist_handle_for_reuse( '', $original_name, $chunk_job_id );
+		}
+
+		if ( 'staged' === $source_type ) {
+			$path = isset( $handle['staged_path'] ) ? (string) $handle['staged_path'] : '';
+			return self::persist_handle_for_reuse( $path, $original_name, '' );
+		}
+
+		return false;
+	}
+
+	/**
 	 * Rename an ephemeral backup into imports/ and drop chunk-job metadata.
 	 *
 	 * Prefers rename (no second copy). Falls back to copy+delete for small files
@@ -38,30 +113,30 @@ final class ImportArtifactCleanup {
 	 * @param string      $source_path   Absolute path used for the import.
 	 * @param string      $original_name Preferred filename for imports/.
 	 * @param object|null $job           Chunk job (deleted after a successful move).
-	 * @return void
+	 * @return bool True when the archive is available under imports/ (or already was).
 	 */
-	public static function persist_for_reuse( string $source_path, string $original_name, $job = null ): void {
+	public static function persist_for_reuse( string $source_path, string $original_name, $job = null ): bool {
 		if ( '' === $source_path || ! is_file( $source_path ) ) {
 			self::delete_job_metadata( $job );
-			return;
+			return false;
 		}
 
 		$real = realpath( $source_path );
 		if ( false === $real ) {
 			self::delete_job_metadata( $job );
-			return;
+			return false;
 		}
 
 		if ( self::is_under_imports( $real ) ) {
 			self::delete_job_metadata( $job );
-			return;
+			return true;
 		}
 
 		$extension = self::resolve_extension( $original_name, $real );
 		$imports_dir = PluginConfig::imports_dir();
 		if ( ! is_dir( $imports_dir ) && ! wp_mkdir_p( $imports_dir ) ) {
 			PluginLogger::log( 'Could not create imports directory for backup reuse.', 'ImportArtifactCleanup' );
-			return;
+			return false;
 		}
 
 		FilesystemHelper::protect_directory_from_web( $imports_dir );
@@ -74,11 +149,12 @@ final class ImportArtifactCleanup {
 				sprintf( 'Could not relocate import archive into imports/: %s -> %s', $real, $dest ),
 				'ImportArtifactCleanup'
 			);
-			return;
+			return false;
 		}
 
 		delete_transient( 'mksddn_mc_server_backups' );
 		self::delete_job_metadata( $job );
+		return true;
 	}
 
 	/**

@@ -147,6 +147,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
 		add_action( 'admin_post_mksddn_mc_import_theme', array( $this->import_handler, 'handle_theme_import' ) );
 		add_action( 'admin_post_mksddn_mc_unified_import', array( $this->import_handler, 'handle_unified_import' ) );
+		add_action( 'admin_post_mksddn_mc_dismiss_preflight_report', array( $this->import_handler, 'handle_dismiss_preflight_report' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_theme_preview', array( $this->theme_preview_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );

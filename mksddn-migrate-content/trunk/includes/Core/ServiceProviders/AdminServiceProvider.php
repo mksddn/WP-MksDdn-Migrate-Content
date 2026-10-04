@@ -228,7 +228,9 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( FullSiteImportService::class ),
 					$container->get( ImportTypeDetector::class ),
 					$container->get( UnifiedImportOrchestrator::class ),
-					$container->get( ThemeImportService::class )
+					$container->get( ThemeImportService::class ),
+					$container->get( PreflightReportStore::class ),
+					$container->get( NotificationServiceInterface::class )
 				);
 			}
 		);

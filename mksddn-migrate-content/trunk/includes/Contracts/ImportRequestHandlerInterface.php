@@ -42,5 +42,13 @@ interface ImportRequestHandlerInterface extends RequestHandlerInterface {
 	 * @since 2.1.0
 	 */
 	public function handle_theme_import(): void;
+
+	/**
+	 * Dismiss a preflight report and keep the archive for reuse.
+	 *
+	 * @return void
+	 * @since 2.7.2
+	 */
+	public function handle_dismiss_preflight_report(): void;
 }
 

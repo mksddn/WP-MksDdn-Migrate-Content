@@ -83,4 +83,25 @@ class PreflightReportStore {
 		$bucket = $this->get_bucket_for_user( $id, $user_id );
 		return $bucket ? $bucket['report'] : null;
 	}
+
+	/**
+	 * Delete a stored preflight report bucket when it belongs to the user.
+	 *
+	 * @param string $id      Report id.
+	 * @param int    $user_id Current user id.
+	 * @return bool True when a matching bucket was deleted.
+	 */
+	public function delete_for_user( string $id, int $user_id ): bool {
+		if ( null === $this->get_bucket_for_user( $id, $user_id ) ) {
+			return false;
+		}
+
+		$id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $id );
+		if ( '' === $id ) {
+			return false;
+		}
+
+		delete_transient( self::KEY_PREFIX . $id );
+		return true;
+	}
 }
