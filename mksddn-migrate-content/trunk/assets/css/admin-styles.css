@@ -156,7 +156,7 @@
 .mksddn-mc-field select[multiple],
 .mksddn-mc-selection-grid select {
 	width: 100%;
-	min-height: 140px;
+	min-height: 180px;
 	height: auto;
 	padding: 8px;
 }
@@ -230,11 +230,28 @@
 	min-width: 0;
 }
 
-/* Selection grid */
+/* Selection grid — equal inset panels for any picker count */
 .mksddn-mc-selection-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 	gap: 1rem;
+	align-items: stretch;
+}
+
+.mksddn-mc-selection-grid > .mksddn-mc-basic-selection {
+	box-sizing: border-box;
+	min-width: 0;
+	height: 100%;
+	margin-bottom: 0;
+	padding: 0.875rem;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+	background: #f9fafb;
+}
+
+.mksddn-mc-selection-grid > .mksddn-mc-basic-selection select[multiple] {
+	flex: 1 1 auto;
+	min-height: 180px;
 }
 
 .mksddn-mc-load-more {

@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 $options_pages    = isset( $options_pages ) && is_array( $options_pages ) ? $options_pages : array();
 $exportable_types = isset( $exportable_types ) && is_array( $exportable_types ) ? $exportable_types : array();
+$has_picker_items = ! empty( $exportable_types ) || ! empty( $options_pages );
 ?>
 <div class="mksddn-mc-card">
 	<h3><?php esc_html_e( 'Export', 'mksddn-migrate-content' ); ?></h3>
@@ -21,9 +22,13 @@ $exportable_types = isset( $exportable_types ) && is_array( $exportable_types ) 
 		<input type="hidden" name="action" value="mksddn_mc_export_selected">
 		<div class="mksddn-mc-field">
 			<h4><?php esc_html_e( 'Choose content', 'mksddn-migrate-content' ); ?></h4>
-			<p class="description"><?php esc_html_e( 'Hold Cmd/Ctrl to pick multiple entries. Search matches titles. Scroll a list or use Load more.', 'mksddn-migrate-content' ); ?></p>
+			<?php if ( ! empty( $options_pages ) ) : ?>
+				<p class="description"><?php esc_html_e( 'Hold Cmd/Ctrl to pick multiple entries or Options Pages. Search matches titles. Scroll a list or use Load more.', 'mksddn-migrate-content' ); ?></p>
+			<?php else : ?>
+				<p class="description"><?php esc_html_e( 'Hold Cmd/Ctrl to pick multiple entries. Search matches titles. Scroll a list or use Load more.', 'mksddn-migrate-content' ); ?></p>
+			<?php endif; ?>
 
-			<?php if ( ! empty( $exportable_types ) ) : ?>
+			<?php if ( $has_picker_items ) : ?>
 				<div class="mksddn-mc-selection-grid" data-mksddn-mc-content-picker>
 					<?php foreach ( $exportable_types as $type => $label ) : ?>
 						<?php
@@ -67,42 +72,38 @@ $exportable_types = isset( $exportable_types ) && is_array( $exportable_types ) 
 							>
 						</div>
 					<?php endforeach; ?>
+
+					<?php if ( ! empty( $options_pages ) ) : ?>
+						<div class="mksddn-mc-basic-selection">
+							<label for="selected_options_page_slugs">
+								<?php esc_html_e( 'Options Pages', 'mksddn-migrate-content' ); ?>
+							</label>
+							<select id="selected_options_page_slugs" name="selected_options_page_slugs[]" multiple size="12">
+								<?php foreach ( $options_pages as $options_page ) : ?>
+									<?php
+									if ( ! is_array( $options_page ) ) {
+										continue;
+									}
+									$menu_slug  = sanitize_key( (string) ( $options_page['menu_slug'] ?? '' ) );
+									$page_title = sanitize_text_field( (string) ( $options_page['page_title'] ?? '' ) );
+									$menu_title = sanitize_text_field( (string) ( $options_page['menu_title'] ?? '' ) );
+									if ( '' === $menu_slug ) {
+										continue;
+									}
+									$label = '' !== $page_title ? $page_title : ( '' !== $menu_title ? $menu_title : $menu_slug );
+									?>
+									<option value="<?php echo esc_attr( $menu_slug ); ?>">
+										<?php echo esc_html( $label ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+					<?php endif; ?>
 				</div>
 			<?php else : ?>
 				<p class="description"><?php esc_html_e( 'No exportable post types were found.', 'mksddn-migrate-content' ); ?></p>
 			<?php endif; ?>
 		</div>
-
-		<?php if ( ! empty( $options_pages ) ) : ?>
-			<div class="mksddn-mc-field">
-				<h4><?php esc_html_e( 'ACF Options Pages', 'mksddn-migrate-content' ); ?></h4>
-				<p class="description"><?php esc_html_e( 'Hold Cmd/Ctrl to select multiple options pages. Field values are exported via ACF.', 'mksddn-migrate-content' ); ?></p>
-				<div class="mksddn-mc-basic-selection">
-					<label for="selected_options_page_slugs">
-						<?php esc_html_e( 'Options Pages', 'mksddn-migrate-content' ); ?>
-					</label>
-					<select id="selected_options_page_slugs" name="selected_options_page_slugs[]" multiple size="8">
-						<?php foreach ( $options_pages as $options_page ) : ?>
-							<?php
-							if ( ! is_array( $options_page ) ) {
-								continue;
-							}
-							$menu_slug  = sanitize_key( (string) ( $options_page['menu_slug'] ?? '' ) );
-							$page_title = sanitize_text_field( (string) ( $options_page['page_title'] ?? '' ) );
-							$menu_title = sanitize_text_field( (string) ( $options_page['menu_title'] ?? '' ) );
-							if ( '' === $menu_slug ) {
-								continue;
-							}
-							$label = '' !== $page_title ? $page_title : ( '' !== $menu_title ? $menu_title : $menu_slug );
-							?>
-							<option value="<?php echo esc_attr( $menu_slug ); ?>">
-								<?php echo esc_html( $label ); ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</div>
-			</div>
-		<?php endif; ?>
 
 		<div class="mksddn-mc-field">
 			<h4><?php esc_html_e( 'File format', 'mksddn-migrate-content' ); ?></h4>

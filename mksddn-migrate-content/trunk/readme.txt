@@ -79,7 +79,7 @@ Step 1 runs file detection and read-only analysis (payload parsing, user diff sc
 == Screenshots ==
 
 1. Export page with Full Site, Selected Content, and Theme Export tabs.
-2. Selected Content picker with multi-select grid per post type, ACF Options Pages, and media toggles.
+2. Selected Content picker with a shared multi-select grid for post types and ACF Options Pages, plus media toggles.
 3. Unified import form with drag-and-drop upload and server file selector.
 4. Import preflight report before the real import starts.
 5. User merge dialog showing archive/current comparison.
@@ -105,7 +105,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 = Admin UI =
 * Top-level **Migrate Content** menu with **Export** and **Import** subpages
 * Export tabs: Full Site, Selected Content, Theme Export (`AdminPageView`, `views/admin/*`)
-* Selected Content picker: multi-select grid per post type (`content-picker.js`) with title-only search, scroll lazy load, and a Load more button; selected options stay pinned in each list; ACF Options Pages stay on a multi-select
+* Selected Content picker: shared multi-select grid for post types and ACF Options Pages (`content-picker.js`) with title-only search, scroll lazy load, and a Load more button on post-type columns; selected options stay pinned in each list
 * Unified import form with preflight report, user preview, and theme preview screens
 * Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `content-picker.js`, `admin-scripts.js`, `admin-styles.css`
 
