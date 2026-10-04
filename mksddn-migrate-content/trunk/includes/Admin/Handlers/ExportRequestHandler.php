@@ -269,6 +269,18 @@ class ExportRequestHandler implements ExportRequestHandlerInterface {
 				: array();
 		}
 
+		// Extract and sanitize ACF Options Page menu slugs if present.
+		if ( isset( $post_data['selected_options_page_slugs'] ) ) {
+			$slugs = array();
+			$value = $post_data['selected_options_page_slugs'];
+			if ( is_array( $value ) ) {
+				$slugs = array_map( 'sanitize_key', $value );
+			} elseif ( is_string( $value ) && '' !== trim( $value ) ) {
+				$slugs = array_map( 'sanitize_key', explode( ',', $value ) );
+			}
+			$allowed['selected_options_page_slugs'] = array_values( array_filter( array_unique( $slugs ) ) );
+		}
+
 		return $allowed;
 	}
 }

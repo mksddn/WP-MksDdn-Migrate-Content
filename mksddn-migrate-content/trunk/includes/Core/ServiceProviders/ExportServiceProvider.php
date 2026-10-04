@@ -17,6 +17,7 @@ use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 use MksDdn\MigrateContent\Export\ExportHandler;
 use MksDdn\MigrateContent\Media\AttachmentCollector;
 use MksDdn\MigrateContent\Options\OptionsExporter;
+use MksDdn\MigrateContent\Options\OptionsHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -60,13 +61,21 @@ class ExportServiceProvider implements ServiceProviderInterface {
 		);
 
 		$container->register(
+			OptionsHelper::class,
+			function ( ServiceContainer $container ) {
+				return new OptionsHelper();
+			}
+		);
+
+		$container->register(
 			ExporterInterface::class,
 			function ( ServiceContainer $container ) {
 				return new ExportHandler(
 					$container->get( \MksDdn\MigrateContent\Archive\Packer::class ),
 					$container->get( MediaCollectorInterface::class ),
 					$container->get( OptionsExporter::class ),
-					$container->get( BatchLoader::class )
+					$container->get( BatchLoader::class ),
+					$container->get( OptionsHelper::class )
 				);
 			}
 		);

@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
+use MksDdn\MigrateContent\Options\OptionsHelper;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
 use MksDdn\MigrateContent\Support\ThemeArchivePathHelper;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
@@ -44,12 +45,21 @@ class ImportPreflightService {
 	private ImportPayloadPreparer $payload_preparer;
 
 	/**
+	 * ACF Options Pages helper.
+	 *
+	 * @var OptionsHelper
+	 */
+	private OptionsHelper $options_helper;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ImportPayloadPreparer|null $payload_preparer Payload preparer.
+	 * @param OptionsHelper|null         $options_helper   ACF options helper.
 	 */
-	public function __construct( ?ImportPayloadPreparer $payload_preparer = null ) {
+	public function __construct( ?ImportPayloadPreparer $payload_preparer = null, ?OptionsHelper $options_helper = null ) {
 		$this->payload_preparer = $payload_preparer ?? new ImportPayloadPreparer();
+		$this->options_helper   = $options_helper ?? new OptionsHelper();
 	}
 
 	/**
@@ -125,10 +135,12 @@ class ImportPreflightService {
 		$type    = sanitize_key( $prepared['type'] ?? 'page' );
 		$media   = isset( $prepared['media'] ) && is_array( $prepared['media'] ) ? $prepared['media'] : array();
 
-		$warnings       = array();
-		$errors         = array();
-		$slug_conflicts = array();
-		$content_items  = array();
+		$warnings               = array();
+		$errors                 = array();
+		$slug_conflicts         = array();
+		$content_items          = array();
+		$options_pages          = array();
+		$options_may_need_media = false;
 
 		if ( 'bundle' === $type ) {
 			$items = isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array();
@@ -141,6 +153,25 @@ class ImportPreflightService {
 					continue;
 				}
 				$content_items[] = $row;
+			}
+
+			$raw_options_pages = isset( $payload['options_pages'] ) && is_array( $payload['options_pages'] )
+				? $payload['options_pages']
+				: array();
+			foreach ( $raw_options_pages as $page ) {
+				if ( ! is_array( $page ) ) {
+					$errors[] = __( 'Archive contains an invalid ACF Options Page entry.', 'mksddn-migrate-content' );
+					continue;
+				}
+				$row = $this->build_options_page_row( $page );
+				if ( empty( $row ) ) {
+					$errors[] = __( 'Archive contains an ACF Options Page without a valid menu_slug.', 'mksddn-migrate-content' );
+					continue;
+				}
+				$options_pages[] = $row;
+				if ( $this->options_page_payload_may_reference_media( $page ) ) {
+					$options_may_need_media = true;
+				}
 			}
 		} else {
 			$row = $this->build_selected_content_row( $payload, $type );
@@ -167,32 +198,324 @@ class ImportPreflightService {
 			$warnings[] = __( 'Some slugs already exist on this site; existing posts may be updated.', 'mksddn-migrate-content' );
 		}
 
-		$media_count = count( $media );
-		if ( 'archive' === ( $prepared['media_source'] ?? '' ) && $media_count > 0 ) {
+		if ( ! empty( $options_pages ) && ! function_exists( 'update_field' ) ) {
+			$errors[] = __( 'This archive includes ACF Options Pages, but Advanced Custom Fields is not available on this site.', 'mksddn-migrate-content' );
+		} elseif ( ! empty( $options_pages ) ) {
+			$missing_count = 0;
+			foreach ( $options_pages as $options_page_row ) {
+				if ( isset( $options_page_row['action'] ) && 'missing' === $options_page_row['action'] ) {
+					++$missing_count;
+				}
+			}
+
+			if ( $missing_count > 0 ) {
+				$errors[] = sprintf(
+					/* translators: %d: number of missing ACF Options Pages */
+					_n(
+						'%d ACF Options Page from the archive is not registered on this site (matched by menu_slug).',
+						'%d ACF Options Pages from the archive are not registered on this site (matched by menu_slug).',
+						$missing_count,
+						'mksddn-migrate-content'
+					),
+					$missing_count
+				);
+			} else {
+				$warnings[] = __( 'ACF Options Page fields will be overwritten on import. There is no automatic rollback if a later step fails.', 'mksddn-migrate-content' );
+			}
+
+			foreach ( $options_pages as $options_page_row ) {
+				if ( empty( $options_page_row['post_id_mismatch'] ) ) {
+					continue;
+				}
+				$warnings[] = sprintf(
+					/* translators: 1: menu_slug, 2: archive post_id, 3: local post_id */
+					__( 'ACF Options Page "%1$s" uses a different post_id locally (%3$s) than in the archive (%2$s); import will write to the local post_id.', 'mksddn-migrate-content' ),
+					(string) ( $options_page_row['menu_slug'] ?? '' ),
+					(string) ( $options_page_row['archive_post_id'] ?? '' ),
+					(string) ( $options_page_row['local_post_id'] ?? '' )
+				);
+			}
+		}
+
+		$media_count  = count( $media );
+		$media_source = (string) ( $prepared['media_source'] ?? '' );
+		if ( 'archive' === $media_source && $media_count > 0 ) {
 			$warnings[] = __( 'Archive includes media files; real import will write uploads.', 'mksddn-migrate-content' );
 		}
 
+		if ( 'json' === $media_source && $options_may_need_media ) {
+			$warnings[] = __( 'This JSON payload appears to reference media in ACF Options Page fields, but JSON cannot carry media files. Re-export as .wpbkp, or image/file fields may point to missing attachments.', 'mksddn-migrate-content' );
+		}
+
 		$status = ! empty( $errors ) ? 'error' : ( ! empty( $warnings ) ? 'warning' : 'ok' );
+
+		if ( 'error' === $status ) {
+			$next_step = __( 'Resolve the errors above, then run preflight again. Start import is unavailable until preflight succeeds.', 'mksddn-migrate-content' );
+		} else {
+			$next_step = __( 'Use “Start import” below to run the real import with the same file (no upload needed).', 'mksddn-migrate-content' );
+		}
 
 		return array(
 			'status'              => $status,
 			'import_type'         => 'selected',
 			'source'              => $this->normalize_source( $file_info['source'] ?? 'upload' ),
 			'summary'             => array(
-				'file_name'            => $file_info['name'] ?? basename( $path ),
-				'file_size'            => $this->file_size( $path ),
-				'payload_type'         => $type,
-				'item_count'           => count( $content_items ),
-				'media_files'          => $media_count,
-				'slug_conflicts_count' => count( $slug_conflicts ),
+				'file_name'              => $file_info['name'] ?? basename( $path ),
+				'file_size'              => $this->file_size( $path ),
+				'payload_type'           => $type,
+				'item_count'             => count( $content_items ),
+				'options_pages_count'    => count( $options_pages ),
+				'media_files'            => $media_count,
+				'slug_conflicts_count'   => count( $slug_conflicts ),
 			),
 			'warnings'            => $warnings,
 			'errors'              => $errors,
 			'estimated_changes'   => array(
 				'items'          => $content_items,
+				'options_pages'  => $options_pages,
 				'slug_conflicts' => $slug_conflicts,
 			),
-			'next_step'           => __( 'Use “Start import” below to run the real import with the same file (no upload needed).', 'mksddn-migrate-content' ),
+			'next_step'           => $next_step,
+		);
+	}
+
+	/**
+	 * Whether an Options Page payload looks like it references media (IDs/URLs/HTML).
+	 *
+	 * Used for JSON preflight warnings; does not require attachments to exist locally.
+	 *
+	 * @param array $page Options page payload.
+	 */
+	private function options_page_payload_may_reference_media( array $page ): bool {
+		if ( ! empty( $page['_mksddn_media'] ) && is_array( $page['_mksddn_media'] ) ) {
+			return true;
+		}
+
+		$fields = array();
+		if ( isset( $page['acf_fields'] ) && is_array( $page['acf_fields'] ) ) {
+			$fields = $page['acf_fields'];
+		} elseif ( isset( $page['data'] ) && is_array( $page['data'] ) ) {
+			$fields = $page['data'];
+		}
+
+		$schema = ( isset( $page['acf_field_schema'] ) && is_array( $page['acf_field_schema'] ) ) ? $page['acf_field_schema'] : array();
+		if ( array() !== $schema ) {
+			return $this->schema_fields_reference_media( $fields, $schema );
+		}
+
+		return $this->acf_values_may_reference_media( $fields );
+	}
+
+	/**
+	 * Whether typed ACF fields reference media (image/file/gallery or embedded HTML).
+	 *
+	 * Bare numbers are media only when the field type is image, file, or gallery.
+	 *
+	 * @param array $values Name => value.
+	 * @param array $schema Name => schema node.
+	 */
+	private function schema_fields_reference_media( array $values, array $schema ): bool {
+		foreach ( $values as $name => $child ) {
+			if ( 'acf_fc_layout' === (string) $name ) {
+				continue;
+			}
+			$field_schema = ( isset( $schema[ $name ] ) && is_array( $schema[ $name ] ) ) ? $schema[ $name ] : array();
+			if ( $this->schema_value_references_media( $child, $field_schema ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether one typed field value references media.
+	 *
+	 * @param mixed $value  Field value.
+	 * @param array $schema Field schema node.
+	 */
+	private function schema_value_references_media( $value, array $schema ): bool {
+		$type = (string) ( $schema['type'] ?? '' );
+
+		if ( in_array( $type, array( 'image', 'file' ), true ) ) {
+			return $this->attachment_leaf_is_set( $value );
+		}
+
+		if ( 'gallery' === $type ) {
+			if ( is_string( $value ) && preg_match( '/^\d+(?:\s*,\s*\d+)*$/', $value ) ) {
+				return true;
+			}
+			if ( ! is_array( $value ) ) {
+				return $this->attachment_leaf_is_set( $value );
+			}
+			foreach ( $value as $item ) {
+				if ( $this->attachment_leaf_is_set( $item ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		if ( in_array( $type, array( 'wysiwyg', 'textarea' ), true ) ) {
+			return is_string( $value ) && $this->string_references_embedded_media( $value );
+		}
+
+		if ( in_array( $type, array( 'group', 'clone' ), true ) && is_array( $value ) ) {
+			$sub = ( isset( $schema['sub_fields'] ) && is_array( $schema['sub_fields'] ) ) ? $schema['sub_fields'] : array();
+			return $this->schema_fields_reference_media( $value, $sub );
+		}
+
+		if ( 'repeater' === $type && is_array( $value ) ) {
+			$sub = ( isset( $schema['sub_fields'] ) && is_array( $schema['sub_fields'] ) ) ? $schema['sub_fields'] : array();
+			foreach ( $value as $row ) {
+				if ( is_array( $row ) && $this->schema_fields_reference_media( $row, $sub ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		if ( 'flexible_content' === $type && is_array( $value ) ) {
+			$layouts = ( isset( $schema['layouts'] ) && is_array( $schema['layouts'] ) ) ? $schema['layouts'] : array();
+			foreach ( $value as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$layout_name = isset( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+				$sub         = ( isset( $layouts[ $layout_name ]['sub_fields'] ) && is_array( $layouts[ $layout_name ]['sub_fields'] ) )
+					? $layouts[ $layout_name ]['sub_fields']
+					: array();
+				if ( $this->schema_fields_reference_media( $row, $sub ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		return $this->acf_values_may_reference_media( $value );
+	}
+
+	/**
+	 * Whether an image/file leaf has an ID, uploads URL, or attachment array.
+	 *
+	 * @param mixed $value Leaf value.
+	 */
+	private function attachment_leaf_is_set( $value ): bool {
+		if ( is_numeric( $value ) ) {
+			return (int) $value > 0;
+		}
+
+		if ( is_string( $value ) ) {
+			return $this->string_references_embedded_media( $value );
+		}
+
+		if ( ! is_array( $value ) ) {
+			return false;
+		}
+
+		$has_id = ( isset( $value['ID'] ) && is_numeric( $value['ID'] ) && (int) $value['ID'] > 0 )
+			|| ( isset( $value['id'] ) && is_numeric( $value['id'] ) && (int) $value['id'] > 0 );
+		if ( $has_id && ( isset( $value['url'] ) || isset( $value['filename'] ) || isset( $value['mime_type'] ) || isset( $value['sizes'] ) || isset( $value['type'] ) ) ) {
+			return true;
+		}
+
+		return isset( $value['url'] ) && is_string( $value['url'] ) && $this->string_references_embedded_media( $value['url'] );
+	}
+
+	/**
+	 * Heuristic for payloads without field schema.
+	 *
+	 * Bare integers are not treated as media. Uploads URLs, wp-image markup,
+	 * gallery shortcodes, and attachment arrays are.
+	 *
+	 * @param mixed $value Value node.
+	 */
+	private function acf_values_may_reference_media( $value ): bool {
+		if ( is_string( $value ) ) {
+			return $this->string_references_embedded_media( $value );
+		}
+
+		if ( ! is_array( $value ) ) {
+			return false;
+		}
+
+		$has_id = ( isset( $value['ID'] ) && is_numeric( $value['ID'] ) )
+			|| ( isset( $value['id'] ) && is_numeric( $value['id'] ) );
+		if ( $has_id && ( isset( $value['url'] ) || isset( $value['filename'] ) || isset( $value['mime_type'] ) || isset( $value['sizes'] ) || isset( $value['type'] ) ) ) {
+			return true;
+		}
+
+		foreach ( $value as $child ) {
+			if ( $this->acf_values_may_reference_media( $child ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether a string contains an uploads URL, wp-image class, or gallery shortcode.
+	 *
+	 * @param string $value Candidate string.
+	 */
+	private function string_references_embedded_media( string $value ): bool {
+		if ( '' === $value ) {
+			return false;
+		}
+
+		if ( false !== strpos( $value, '/wp-content/uploads/' ) ) {
+			return true;
+		}
+
+		return 1 === preg_match( '/wp-image-\d+/', $value ) || false !== strpos( $value, '[gallery' );
+	}
+
+	/**
+	 * Build one inventory row for an ACF Options Page preflight entry.
+	 *
+	 * @param array $page Options page payload.
+	 * @return array{title:string,menu_slug:string,post_id:string,archive_post_id:string,local_post_id:string,action:string,post_id_mismatch:bool}|array{}
+	 */
+	private function build_options_page_row( array $page ): array {
+		$menu_slug = sanitize_key( (string) ( $page['menu_slug'] ?? '' ) );
+		if ( '' === $menu_slug ) {
+			return array();
+		}
+
+		$title = isset( $page['page_title'] ) ? sanitize_text_field( (string) $page['page_title'] ) : '';
+		if ( '' === $title && isset( $page['menu_title'] ) ) {
+			$title = sanitize_text_field( (string) $page['menu_title'] );
+		}
+		if ( '' === $title ) {
+			$title = $menu_slug;
+		}
+
+		$archive_post_id = sanitize_text_field( (string) ( $page['post_id'] ?? '' ) );
+		$local           = $this->options_helper->find_options_page_by_slug( $menu_slug );
+		$local_post_id   = '';
+		$action          = 'missing';
+
+		if ( is_array( $local ) && isset( $local['post_id'] ) && '' !== (string) $local['post_id'] ) {
+			$local_post_id = sanitize_text_field( (string) $local['post_id'] );
+			$action        = 'update';
+		}
+
+		$post_id_mismatch = (
+			'update' === $action
+			&& '' !== $archive_post_id
+			&& '' !== $local_post_id
+			&& $archive_post_id !== $local_post_id
+		);
+
+		return array(
+			'title'            => $title,
+			'menu_slug'        => $menu_slug,
+			'post_id'          => '' !== $local_post_id ? $local_post_id : $archive_post_id,
+			'archive_post_id'  => $archive_post_id,
+			'local_post_id'    => $local_post_id,
+			'action'           => $action,
+			'post_id_mismatch' => $post_id_mismatch,
 		);
 	}
 

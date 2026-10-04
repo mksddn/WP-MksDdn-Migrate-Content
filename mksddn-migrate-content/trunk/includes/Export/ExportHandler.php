@@ -14,6 +14,7 @@ use MksDdn\MigrateContent\Contracts\MediaCollectorInterface;
 use MksDdn\MigrateContent\Core\BatchLoader;
 use MksDdn\MigrateContent\Media\AttachmentCollection;
 use MksDdn\MigrateContent\Options\OptionsExporter;
+use MksDdn\MigrateContent\Options\OptionsHelper;
 use MksDdn\MigrateContent\Selection\ContentSelection;
 use MksDdn\MigrateContent\Support\FilenameBuilder;
 use MksDdn\MigrateContent\Support\FilesystemHelper;
@@ -52,6 +53,8 @@ class ExportHandler implements ExporterInterface {
 
 	private OptionsExporter $options_exporter;
 
+	private OptionsHelper $options_helper;
+
 	/**
 	 * Batch loader for optimizing database queries.
 	 *
@@ -71,13 +74,15 @@ class ExportHandler implements ExporterInterface {
 	 * @param MediaCollectorInterface|null $media_collector  Optional collector.
 	 * @param OptionsExporter|null         $options_exporter Optional options exporter.
 	 * @param BatchLoader|null             $batch_loader     Optional batch loader.
+	 * @param OptionsHelper|null           $options_helper   Optional ACF options helper.
 	 * @since 1.0.0
 	 */
-	public function __construct( ?Packer $packer = null, ?MediaCollectorInterface $media_collector = null, ?OptionsExporter $options_exporter = null, ?BatchLoader $batch_loader = null ) {
+	public function __construct( ?Packer $packer = null, ?MediaCollectorInterface $media_collector = null, ?OptionsExporter $options_exporter = null, ?BatchLoader $batch_loader = null, ?OptionsHelper $options_helper = null ) {
 		$this->packer           = $packer ?? new Packer();
 		$this->media_collector  = $media_collector ?? new \MksDdn\MigrateContent\Media\AttachmentCollector();
 		$this->options_exporter = $options_exporter ?? new OptionsExporter();
 		$this->batch_loader     = $batch_loader ?? new BatchLoader();
+		$this->options_helper   = $options_helper ?? new OptionsHelper();
 	}
 
 	/**
@@ -109,13 +114,13 @@ class ExportHandler implements ExporterInterface {
 	 * @since 1.0.0
 	 */
 	public function export_selected_content( ContentSelection $selection, string $format = 'archive' ): void {
-		if ( ! $selection->has_items() && ! $selection->has_options() ) {
+		if ( ! $selection->has_items() && ! $selection->has_options() && ! $selection->has_options_pages() ) {
 			\wp_die( \esc_html__( 'Select at least one item to export.', 'mksddn-migrate-content' ) );
 		}
 
 		$this->format = $this->normalize_format( $format );
 
-		if ( 1 === $selection->count_items() && ! $selection->has_options() ) {
+		if ( 1 === $selection->count_items() && ! $selection->has_options() && ! $selection->has_options_pages() ) {
 			$first = $selection->first_item();
 			if ( $first ) {
 				$this->export_post_by_id( (int) $first['id'] );
@@ -193,9 +198,10 @@ class ExportHandler implements ExporterInterface {
 	}
 	private function export_selection_bundle( ContentSelection $selection ): void {
 		$bundle = array(
-			'type'    => 'bundle',
-			'items'   => array(),
-			'options' => array(
+			'type'          => 'bundle',
+			'items'         => array(),
+			'options_pages' => array(),
+			'options'       => array(
 				'options' => array(),
 				'widgets' => array(),
 			),
@@ -284,9 +290,91 @@ class ExportHandler implements ExporterInterface {
 			}
 		}
 
+		if ( $selection->has_options_pages() ) {
+			$missing_options_pages = array();
+			$empty_options_pages   = array();
+
+			foreach ( $selection->get_options_pages() as $menu_slug ) {
+				$page = $this->options_helper->find_options_page_by_slug( $menu_slug );
+				if ( ! $page ) {
+					$missing_options_pages[] = $menu_slug;
+					continue;
+				}
+
+				$payload    = $this->options_helper->format_options_page_export( $page );
+				$acf_fields = isset( $payload['acf_fields'] ) && is_array( $payload['acf_fields'] ) ? $payload['acf_fields'] : array();
+				if ( array() === $acf_fields ) {
+					$empty_options_pages[] = $menu_slug;
+					continue;
+				}
+
+				$schema = isset( $payload['acf_field_schema'] ) && is_array( $payload['acf_field_schema'] ) ? $payload['acf_field_schema'] : array();
+				$media  = $this->collect_media_for_options_page( $acf_fields, $schema );
+				if ( $media && $media->has_items() ) {
+					$payload['_mksddn_media'] = $media->get_manifest();
+					$combined_media->absorb( $media );
+				}
+
+				$bundle['options_pages'][] = $payload;
+			}
+
+			if ( ! empty( $missing_options_pages ) ) {
+				\wp_die(
+					\esc_html(
+						sprintf(
+							/* translators: %s: comma-separated ACF Options Page menu slugs */
+							__( 'Selected ACF Options Pages could not be found: %s', 'mksddn-migrate-content' ),
+							implode( ', ', $missing_options_pages )
+						)
+					)
+				);
+			}
+
+			if ( ! empty( $empty_options_pages ) ) {
+				\wp_die(
+					\esc_html(
+						sprintf(
+							/* translators: %s: comma-separated ACF Options Page menu slugs */
+							__( 'Selected ACF Options Pages have no field groups located on their menu_slug, so there is nothing to export: %s', 'mksddn-migrate-content' ),
+							implode( ', ', $empty_options_pages )
+						)
+					)
+				);
+			}
+
+			// JSON cannot carry binary media; block when Options Pages reference attachments.
+			if ( 'json' === $this->format ) {
+				foreach ( $bundle['options_pages'] as $options_page_payload ) {
+					$acf_fields = isset( $options_page_payload['acf_fields'] ) && is_array( $options_page_payload['acf_fields'] )
+						? $options_page_payload['acf_fields']
+						: array();
+					$schema     = isset( $options_page_payload['acf_field_schema'] ) && is_array( $options_page_payload['acf_field_schema'] )
+						? $options_page_payload['acf_field_schema']
+						: array();
+					$media_ids  = $this->media_collector->extract_attachment_ids_from_acf_values( $acf_fields, $schema );
+					if ( array() !== $media_ids ) {
+						\wp_die(
+							\esc_html__(
+								'JSON export cannot include media referenced by ACF Options Pages. Choose the .wpbkp archive format, or remove Options Pages that contain image/file/gallery fields.',
+								'mksddn-migrate-content'
+							)
+						);
+					}
+				}
+			}
+		}
+
 		if ( $selection->has_options() ) {
 			$bundle['options']['options'] = $this->options_exporter->export_options( $selection->get_options() );
 			$bundle['options']['widgets'] = $this->options_exporter->export_widgets( $selection->get_widgets() );
+		}
+
+		if (
+			empty( $bundle['items'] )
+			&& empty( $bundle['options_pages'] )
+			&& ! $selection->has_options()
+		) {
+			\wp_die( \esc_html__( 'Nothing to export. Selected items could not be resolved.', 'mksddn-migrate-content' ) );
 		}
 
 		$media_payload = $combined_media->has_items() ? $combined_media : null;
@@ -618,14 +706,33 @@ class ExportHandler implements ExporterInterface {
 			return null;
 		}
 
-		if ( ! $this->collect_media ) {
-			return null;
-		}
-
-		if ( 'archive' !== $this->format ) {
+		if ( ! $this->should_collect_media() ) {
 			return null;
 		}
 
 		return $this->media_collector->collect_for_post( $post );
+	}
+
+	/**
+	 * Collect media referenced by ACF Options Page field values.
+	 *
+	 * @param array $acf_fields  ACF field values.
+	 * @param array $field_schema Field type schema (image/file/gallery only contribute IDs).
+	 * @return AttachmentCollection|null
+	 */
+	private function collect_media_for_options_page( array $acf_fields, array $field_schema ): ?AttachmentCollection {
+		if ( ! $this->should_collect_media() || empty( $acf_fields ) ) {
+			return null;
+		}
+
+		$ids = $this->media_collector->extract_attachment_ids_from_acf_values( $acf_fields, $field_schema );
+		return $this->media_collector->collect_from_attachment_ids( $ids, 0 );
+	}
+
+	/**
+	 * Whether media collection is enabled for the current export format.
+	 */
+	private function should_collect_media(): bool {
+		return $this->collect_media && 'archive' === $this->format;
 	}
 }

@@ -14,6 +14,7 @@ use MksDdn\MigrateContent\Core\ServiceProviderInterface;
 use MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Import\ImportHandler;
+use MksDdn\MigrateContent\Options\OptionsHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -41,7 +42,8 @@ class ImportServiceProvider implements ServiceProviderInterface {
 					null,
 					null,
 					$container->get( WpFunctionsWrapperInterface::class ),
-					$container->get( WpUserFunctionsWrapperInterface::class )
+					$container->get( WpUserFunctionsWrapperInterface::class ),
+					$container->has( OptionsHelper::class ) ? $container->get( OptionsHelper::class ) : new OptionsHelper()
 				);
 			}
 		);

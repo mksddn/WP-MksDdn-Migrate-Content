@@ -36,6 +36,7 @@ use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
 use MksDdn\MigrateContent\Contracts\UserMergeRequestHandlerInterface;
 use MksDdn\MigrateContent\Core\ServiceContainer;
 use MksDdn\MigrateContent\Core\ServiceProviderInterface;
+use MksDdn\MigrateContent\Options\OptionsHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -119,7 +120,8 @@ class AdminServiceProvider implements ServiceProviderInterface {
 			ImportPreflightService::class,
 			function ( ServiceContainer $container ): ImportPreflightService {
 				return new ImportPreflightService(
-					$container->get( ImportPayloadPreparer::class )
+					$container->get( ImportPayloadPreparer::class ),
+					$container->has( OptionsHelper::class ) ? $container->get( OptionsHelper::class ) : new OptionsHelper()
 				);
 			}
 		);
@@ -160,7 +162,10 @@ class AdminServiceProvider implements ServiceProviderInterface {
 		$container->register(
 			AdminPageView::class,
 			function ( ServiceContainer $container ) {
-				return new AdminPageView();
+				return new AdminPageView(
+					null,
+					$container->has( OptionsHelper::class ) ? $container->get( OptionsHelper::class ) : new OptionsHelper()
+				);
 			}
 		);
 

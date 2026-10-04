@@ -5,11 +5,14 @@
  * @package MksDdn\MigrateContent
  * @var array $exportable_types Exportable post types.
  * @var array $items_by_type    Items grouped by post type.
+ * @var array $options_pages    ACF Options Pages for UI (optional).
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+$options_pages = isset( $options_pages ) && is_array( $options_pages ) ? $options_pages : array();
 ?>
 <div class="mksddn-mc-card">
 	<h3><?php esc_html_e( 'Export', 'mksddn-migrate-content' ); ?></h3>
@@ -53,6 +56,37 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<?php endforeach; ?>
 			</div>
 		</div>
+
+		<?php if ( ! empty( $options_pages ) ) : ?>
+			<div class="mksddn-mc-field">
+				<h4><?php esc_html_e( 'ACF Options Pages', 'mksddn-migrate-content' ); ?></h4>
+				<p class="description"><?php esc_html_e( 'Hold Cmd/Ctrl to select multiple options pages. Field values are exported via ACF.', 'mksddn-migrate-content' ); ?></p>
+				<div class="mksddn-mc-basic-selection">
+					<label for="selected_options_page_slugs">
+						<?php esc_html_e( 'Options Pages', 'mksddn-migrate-content' ); ?>
+					</label>
+					<select id="selected_options_page_slugs" name="selected_options_page_slugs[]" multiple size="8">
+						<?php foreach ( $options_pages as $options_page ) : ?>
+							<?php
+							if ( ! is_array( $options_page ) ) {
+								continue;
+							}
+							$menu_slug  = sanitize_key( (string) ( $options_page['menu_slug'] ?? '' ) );
+							$page_title = sanitize_text_field( (string) ( $options_page['page_title'] ?? '' ) );
+							$menu_title = sanitize_text_field( (string) ( $options_page['menu_title'] ?? '' ) );
+							if ( '' === $menu_slug ) {
+								continue;
+							}
+							$label = '' !== $page_title ? $page_title : ( '' !== $menu_title ? $menu_title : $menu_slug );
+							?>
+							<option value="<?php echo esc_attr( $menu_slug ); ?>">
+								<?php echo esc_html( $label ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</div>
+			</div>
+		<?php endif; ?>
 
 		<div class="mksddn-mc-field">
 			<h4><?php esc_html_e( 'File format', 'mksddn-migrate-content' ); ?></h4>

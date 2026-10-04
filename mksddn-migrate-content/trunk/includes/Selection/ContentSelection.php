@@ -38,6 +38,13 @@ class ContentSelection {
 	private array $widgets = array();
 
 	/**
+	 * ACF Options Page menu slugs requested for export.
+	 *
+	 * @var string[]
+	 */
+	private array $options_pages = array();
+
+	/**
 	 * Record post ID for a given type.
 	 *
 	 * @param string $type    Post type.
@@ -108,6 +115,38 @@ class ContentSelection {
 	 */
 	public function get_widgets(): array {
 		return $this->widgets;
+	}
+
+	/**
+	 * Add ACF Options Page menu slug for export.
+	 *
+	 * @param string $menu_slug Options page menu_slug.
+	 */
+	public function add_options_page( string $menu_slug ): void {
+		$slug = sanitize_key( $menu_slug );
+		if ( '' === $slug ) {
+			return;
+		}
+
+		if ( ! in_array( $slug, $this->options_pages, true ) ) {
+			$this->options_pages[] = $slug;
+		}
+	}
+
+	/**
+	 * Get ACF Options Page menu slugs.
+	 *
+	 * @return string[]
+	 */
+	public function get_options_pages(): array {
+		return $this->options_pages;
+	}
+
+	/**
+	 * Whether selection includes ACF Options Pages.
+	 */
+	public function has_options_pages(): bool {
+		return ! empty( $this->options_pages );
 	}
 
 	/**

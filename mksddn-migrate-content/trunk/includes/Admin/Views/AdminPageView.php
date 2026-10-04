@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Admin\Views;
 
 use MksDdn\MigrateContent\Core\View\ViewRenderer;
+use MksDdn\MigrateContent\Options\OptionsHelper;
 use WP_Post;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -30,15 +31,25 @@ class AdminPageView {
 	private ViewRenderer $renderer;
 
 	/**
+	 * ACF Options Pages helper.
+	 *
+	 * @var OptionsHelper
+	 */
+	private OptionsHelper $options_helper;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param ViewRenderer|null      $renderer         View renderer.
+	 * @param ViewRenderer|null  $renderer       View renderer.
+	 * @param OptionsHelper|null $options_helper ACF options helper.
 	 * @since 1.0.0
 	 */
 	public function __construct(
-		?ViewRenderer $renderer = null
+		?ViewRenderer $renderer = null,
+		?OptionsHelper $options_helper = null
 	) {
-		$this->renderer         = $renderer ?? new ViewRenderer();
+		$this->renderer       = $renderer ?? new ViewRenderer();
+		$this->options_helper = $options_helper ?? new OptionsHelper();
 	}
 
 	/**
@@ -95,6 +106,7 @@ class AdminPageView {
 				array(
 					'exportable_types' => $exportable_types,
 					'items_by_type'    => $items_by_type,
+					'options_pages'    => $this->get_acf_options_pages_for_ui(),
 				)
 			);
 		} else {
@@ -201,6 +213,33 @@ class AdminPageView {
 		}
 
 		return $types;
+	}
+
+	/**
+	 * List ACF Options Pages for the Selected Content export UI.
+	 *
+	 * @return array<int, array{menu_slug:string,page_title:string,menu_title:string,post_id:string}>
+	 */
+	private function get_acf_options_pages_for_ui(): array {
+		if ( ! $this->options_helper->is_acf_options_available() ) {
+			return array();
+		}
+
+		$pages  = $this->options_helper->get_all_options_pages();
+		$result = array();
+
+		foreach ( $pages as $page ) {
+			if ( ! is_array( $page ) ) {
+				continue;
+			}
+			$formatted = $this->options_helper->format_options_page_for_ui( $page );
+			if ( '' === sanitize_key( $formatted['menu_slug'] ) ) {
+				continue;
+			}
+			$result[] = $formatted;
+		}
+
+		return $result;
 	}
 
 	/**

@@ -131,6 +131,9 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 			<?php if ( isset( $mksddn_mc_summary['item_count'] ) ) : ?>
 				<li><?php echo esc_html( sprintf( /* translators: %d: content item count */ __( 'Items to import: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['item_count'] ) ); ?></li>
 			<?php endif; ?>
+			<?php if ( isset( $mksddn_mc_summary['options_pages_count'] ) && (int) $mksddn_mc_summary['options_pages_count'] > 0 ) : ?>
+				<li><?php echo esc_html( sprintf( /* translators: %d: options pages count */ __( 'ACF Options Pages: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['options_pages_count'] ) ); ?></li>
+			<?php endif; ?>
 			<?php if ( isset( $mksddn_mc_summary['media_files'] ) ) : ?>
 				<li><?php echo esc_html( sprintf( /* translators: %d: media file count */ __( 'Media files in archive: %d', 'mksddn-migrate-content' ), (int) $mksddn_mc_summary['media_files'] ) ); ?></li>
 			<?php endif; ?>
@@ -333,6 +336,46 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 						<td><?php echo esc_html( (string) ( $mksddn_mc_item['slug'] ?? '' ) ); ?></td>
 						<td><?php echo esc_html( $mksddn_mc_preflight_post_type_label( (string) ( $mksddn_mc_item['post_type'] ?? '' ) ) ); ?></td>
 						<td><?php echo esc_html( $mksddn_mc_action_label ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+	<?php endif; ?>
+
+	<?php if ( ! empty( $mksddn_mc_estimated['options_pages'] ) && is_array( $mksddn_mc_estimated['options_pages'] ) ) : ?>
+		<p><strong><?php esc_html_e( 'ACF Options Pages to import', 'mksddn-migrate-content' ); ?></strong></p>
+		<table class="widefat striped" style="max-width: 720px;">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Title', 'mksddn-migrate-content' ); ?></th>
+					<th><?php esc_html_e( 'Menu slug', 'mksddn-migrate-content' ); ?></th>
+					<th><?php esc_html_e( 'ACF post_id', 'mksddn-migrate-content' ); ?></th>
+					<th><?php esc_html_e( 'Action', 'mksddn-migrate-content' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( $mksddn_mc_estimated['options_pages'] as $mksddn_mc_options_page ) : ?>
+					<?php
+					if ( ! is_array( $mksddn_mc_options_page ) ) {
+						continue;
+					}
+					$mksddn_mc_op_title  = (string) ( $mksddn_mc_options_page['title'] ?? '' );
+					$mksddn_mc_op_slug   = (string) ( $mksddn_mc_options_page['menu_slug'] ?? '' );
+					$mksddn_mc_op_action = (string) ( $mksddn_mc_options_page['action'] ?? 'update' );
+					if ( '' === $mksddn_mc_op_title ) {
+						$mksddn_mc_op_title = $mksddn_mc_op_slug;
+					}
+					if ( 'missing' === $mksddn_mc_op_action ) {
+						$mksddn_mc_op_action_label = __( 'Missing on site', 'mksddn-migrate-content' );
+					} else {
+						$mksddn_mc_op_action_label = __( 'Update fields', 'mksddn-migrate-content' );
+					}
+					?>
+					<tr>
+						<td><?php echo esc_html( $mksddn_mc_op_title ); ?></td>
+						<td><?php echo esc_html( $mksddn_mc_op_slug ); ?></td>
+						<td><?php echo esc_html( (string) ( $mksddn_mc_options_page['post_id'] ?? '' ) ); ?></td>
+						<td><?php echo esc_html( $mksddn_mc_op_action_label ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>

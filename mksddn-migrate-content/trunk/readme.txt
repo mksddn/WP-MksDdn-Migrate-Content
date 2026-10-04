@@ -16,7 +16,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 
 = Why MksDdn Migrate Content? =
 
-* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (multi-select posts/pages/CPTs with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
+* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (multi-select posts/pages/CPTs and ACF Options Pages, with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
@@ -50,7 +50,7 @@ Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads 
 `.json` exports are lightweight (content only) and convenient for quick edits. `.wpbkp` adds media, filesystem slices, and checksums. Use `.wpbkp` for full fidelity.
 
 = Does it support ACF and custom post types? =
-Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported. Taxonomies, menus, widgets, and serialized options are also covered.
+Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported. Selected Content can also export/import ACF Options Pages (matched by `menu_slug`, written via the ACF API). Taxonomies, menus, widgets, and serialized options are also covered in full-site flows.
 
 = How do chunked uploads resume? =
 The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via REST API endpoints (`mksddn/v1/chunk/*`). If the browser reloads, the resume token restarts from the last confirmed chunk.
@@ -79,7 +79,7 @@ Step 1 runs file detection and read-only analysis (payload parsing, user diff sc
 == Screenshots ==
 
 1. Export page with Full Site, Selected Content, and Theme Export tabs.
-2. Selected Content picker with multi-select lists and media toggles.
+2. Selected Content picker with multi-select lists, ACF Options Pages, and media toggles.
 3. Unified import form with drag-and-drop upload and server file selector.
 4. Import preflight report before the real import starts.
 5. User merge dialog showing archive/current comparison.
@@ -109,14 +109,15 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `admin-scripts.js`, `admin-styles.css`
 
 = Export & Import Core =
-* `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF)
-* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF)
-* `SelectionBuilder`, `ContentSelection` — build export selections from admin input
+* `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF, ACF Options Pages)
+* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF, ACF Options Pages)
+* `SelectionBuilder`, `ContentSelection` — build export selections from admin input (posts/CPTs and Options Page `menu_slug`s)
 * `FullContentExporter`, `FullContentImporter` — full-site archive assembly and restore
 * `FullDatabaseExporter`, `FullDatabaseImporter`, `SwapTableNames` — streaming database export/import; schema recreate uses a swap table then atomic RENAME
 * `ThemeExporter`, `ThemeImporter` — theme archive export and filesystem apply
-* `OptionsExporter`, `OptionsImporter`, `OptionsHelper` — WordPress options slices
-* `AttachmentCollector`, `AttachmentRestorer`, `AttachmentCollection` — media pipeline
+* `OptionsExporter`, `OptionsImporter` — raw WordPress options / widget slices
+* `OptionsHelper` — discovers ACF Options Pages and exports only field groups located on the selected `menu_slug` (avoids shared `post_id` leakage), plus a field-type schema so image/file/gallery IDs are not confused with number fields
+* `AttachmentCollector`, `AttachmentRestorer`, `AttachmentCollection` — media pipeline (posts and ACF Options Page image/file/gallery values)
 * `ExportPreflight`, `ExportMemoryHelper` — pre-export disk/memory checks and memory budgeting
 * `FilenameBuilder` — deterministic archive filenames
 

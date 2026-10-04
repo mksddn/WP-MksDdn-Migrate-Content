@@ -312,7 +312,11 @@ class SelectedContentImportService {
 					$this->notifications->redirect_with_selected_import_success( $payload_type, $slug, $title, $post_type );
 				}
 			} else {
-				$this->notifications->redirect_with_notice( 'error', __( 'Failed to import content.', 'mksddn-migrate-content' ) );
+				$message = $import_handler->get_last_error();
+				if ( '' === $message ) {
+					$message = __( 'Failed to import content.', 'mksddn-migrate-content' );
+				}
+				$this->notifications->redirect_with_notice( 'error', $message );
 			}
 		} finally {
 			if ( $lock_token ) {
