@@ -16,7 +16,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 
 = Why MksDdn Migrate Content? =
 
-* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (multi-select posts/pages/CPTs and ACF Options Pages, with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
+* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (grid of multi-selects for posts/pages/CPTs with title search, scroll lazy load, and Load more, plus ACF Options Pages, with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
@@ -79,7 +79,7 @@ Step 1 runs file detection and read-only analysis (payload parsing, user diff sc
 == Screenshots ==
 
 1. Export page with Full Site, Selected Content, and Theme Export tabs.
-2. Selected Content picker with multi-select lists, ACF Options Pages, and media toggles.
+2. Selected Content picker with multi-select grid per post type, ACF Options Pages, and media toggles.
 3. Unified import form with drag-and-drop upload and server file selector.
 4. Import preflight report before the real import starts.
 5. User merge dialog showing archive/current comparison.
@@ -105,8 +105,9 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 = Admin UI =
 * Top-level **Migrate Content** menu with **Export** and **Import** subpages
 * Export tabs: Full Site, Selected Content, Theme Export (`AdminPageView`, `views/admin/*`)
+* Selected Content picker: multi-select grid per post type (`content-picker.js`) with title-only search, scroll lazy load, and a Load more button; selected options stay pinned in each list; ACF Options Pages stay on a multi-select
 * Unified import form with preflight report, user preview, and theme preview screens
-* Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `admin-scripts.js`, `admin-styles.css`
+* Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `content-picker.js`, `admin-scripts.js`, `admin-styles.css`
 
 = Export & Import Core =
 * `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF, ACF Options Pages)
@@ -131,6 +132,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ImportTypeDetector` — detects import type (full site, selected content, or theme) from archive file
 * `ImportFileValidator` — validates uploaded files
 * `ImportPayloadPreparer` — prepares import payloads
+* `ContentPickerQueryService` — WP_Query helper for the Selected Content picker (exportable post-type allowlist, title-only search scoped to that query, paginated published posts)
 * `ServerBackupScanner` — scans, validates, and deletes backup files on the server
 * `ResponseHandler` — manages redirects and status messages
 * `NotificationService` — handles user notifications

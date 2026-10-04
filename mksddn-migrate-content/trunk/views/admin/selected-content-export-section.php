@@ -4,7 +4,6 @@
  *
  * @package MksDdn\MigrateContent
  * @var array $exportable_types Exportable post types.
- * @var array $items_by_type    Items grouped by post type.
  * @var array $options_pages    ACF Options Pages for UI (optional).
  */
 
@@ -22,7 +21,6 @@ $options_pages = isset( $options_pages ) && is_array( $options_pages ) ? $option
 			'admin/selected-export-card.php',
 			array(
 				'exportable_types' => $exportable_types,
-				'items_by_type'    => $items_by_type,
 				'options_pages'    => $options_pages,
 			)
 		);

@@ -237,6 +237,15 @@
 	gap: 1rem;
 }
 
+.mksddn-mc-load-more {
+	align-self: flex-start;
+	margin-top: 0.5rem;
+}
+
+.mksddn-mc-load-more[hidden] {
+	display: none !important;
+}
+
 /* User table */
 .mksddn-mc-user-toolbar {
 	display: flex;
