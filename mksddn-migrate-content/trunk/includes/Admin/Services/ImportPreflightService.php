@@ -199,6 +199,11 @@ class ImportPreflightService {
 			$warnings[] = __( 'Some slugs already exist on this site; existing posts may be updated.', 'mksddn-migrate-content' );
 		}
 
+		$acf_field_warnings = $this->collect_selected_acf_field_warnings( $payload, $type );
+		foreach ( $acf_field_warnings as $acf_warning ) {
+			$warnings[] = $acf_warning;
+		}
+
 		if ( ! empty( $options_pages ) && ! function_exists( 'update_field' ) ) {
 			$errors[] = __( 'This archive includes ACF Options Pages, but Advanced Custom Fields is not available on this site.', 'mksddn-migrate-content' );
 		} elseif ( ! empty( $options_pages ) ) {
@@ -518,6 +523,163 @@ class ImportPreflightService {
 			'action'           => $action,
 			'post_id_mismatch' => $post_id_mismatch,
 		);
+	}
+
+	/**
+	 * Build preflight warnings for post ACF/SCF fields that lack local definitions.
+	 *
+	 * Import remains allowed: posts can restore scoped ACF meta from the archive
+	 * when field groups are missing, but repeaters/groups bind more reliably when
+	 * matching groups are registered and attached first.
+	 *
+	 * @param array  $payload Prepared selected-content payload.
+	 * @param string $type    Payload type (bundle|page|post|…).
+	 * @return array<int, string>
+	 */
+	private function collect_selected_acf_field_warnings( array $payload, string $type ): array {
+		$fields_by_type = $this->collect_payload_acf_field_names_by_post_type( $payload, $type );
+		if ( array() === $fields_by_type ) {
+			return array();
+		}
+
+		$warnings = array();
+
+		if ( ! function_exists( 'update_field' ) ) {
+			$warnings[] = __( 'This archive includes ACF/SCF field values on posts, but Advanced Custom Fields (or a compatible plugin) is not available. Import may still restore raw field meta when present in the archive.', 'mksddn-migrate-content' );
+			return $warnings;
+		}
+
+		$unresolved = array();
+		foreach ( $fields_by_type as $post_type => $field_names ) {
+			$local_names = $this->get_local_acf_field_names_for_post_type( $post_type );
+			foreach ( $field_names as $field_name ) {
+				// Match location rules for this post type. A same-named field on another
+				// type still leaves import on the raw-meta path.
+				if ( isset( $local_names[ $field_name ] ) ) {
+					continue;
+				}
+				$unresolved[ $field_name ] = true;
+			}
+		}
+
+		if ( array() === $unresolved ) {
+			return $warnings;
+		}
+
+		$sample = array_slice( array_keys( $unresolved ), 0, 8 );
+		$extra  = count( $unresolved ) - count( $sample );
+		$list   = implode( ', ', $sample );
+		if ( $extra > 0 ) {
+			$list .= sprintf(
+				/* translators: %d: number of additional unresolved field names */
+				__( ' (+%d more)', 'mksddn-migrate-content' ),
+				$extra
+			);
+		}
+
+		$warnings[] = sprintf(
+			/* translators: %s: comma-separated ACF/SCF field names */
+			__( 'Some ACF/SCF fields from the archive are not registered for the target post type(s) on this site (%s). Attach matching field groups before import for reliable repeaters/groups; import may still restore raw field meta when present.', 'mksddn-migrate-content' ),
+			$list
+		);
+
+		return $warnings;
+	}
+
+	/**
+	 * Collect top-level ACF field names from selected-content payload items, grouped by post type.
+	 *
+	 * @param array  $payload Prepared selected-content payload.
+	 * @param string $type    Payload type.
+	 * @return array<string, array<int, string>> Post type => list of field names.
+	 */
+	private function collect_payload_acf_field_names_by_post_type( array $payload, string $type ): array {
+		$items = array();
+		if ( 'bundle' === $type ) {
+			$raw_items = isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array();
+			foreach ( $raw_items as $item ) {
+				if ( is_array( $item ) ) {
+					$items[] = $item;
+				}
+			}
+		} else {
+			$items[] = $payload;
+		}
+
+		$by_type = array();
+		foreach ( $items as $item ) {
+			if ( empty( $item['acf_fields'] ) || ! is_array( $item['acf_fields'] ) ) {
+				continue;
+			}
+			$post_type = sanitize_key( $item['type'] ?? ( 'bundle' === $type ? 'page' : $type ) );
+			if ( '' === $post_type ) {
+				$post_type = 'page';
+			}
+			if ( ! isset( $by_type[ $post_type ] ) ) {
+				$by_type[ $post_type ] = array();
+			}
+			foreach ( array_keys( $item['acf_fields'] ) as $field_name ) {
+				$name = sanitize_text_field( (string) $field_name );
+				if ( '' === $name ) {
+					continue;
+				}
+				$by_type[ $post_type ][ $name ] = $name;
+			}
+		}
+
+		foreach ( $by_type as $post_type => $names ) {
+			$by_type[ $post_type ] = array_values( $names );
+		}
+
+		return $by_type;
+	}
+
+	/**
+	 * Local top-level ACF/SCF field names available for a post type.
+	 *
+	 * @param string $post_type Post type.
+	 * @return array<string, true> Field name => true.
+	 */
+	private function get_local_acf_field_names_for_post_type( string $post_type ): array {
+		$names = array();
+		if ( '' === $post_type || ! function_exists( 'acf_get_field_groups' ) || ! function_exists( 'acf_get_fields' ) ) {
+			return $names;
+		}
+
+		$groups = acf_get_field_groups(
+			array(
+				'post_type' => $post_type,
+			)
+		);
+		if ( ! is_array( $groups ) ) {
+			return $names;
+		}
+
+		foreach ( $groups as $group ) {
+			$parent = null;
+			if ( is_array( $group ) ) {
+				if ( ! empty( $group['key'] ) ) {
+					$parent = $group['key'];
+				} elseif ( ! empty( $group['ID'] ) ) {
+					$parent = (int) $group['ID'];
+				}
+			}
+			if ( null === $parent ) {
+				continue;
+			}
+			$fields = acf_get_fields( $parent );
+			if ( ! is_array( $fields ) ) {
+				continue;
+			}
+			foreach ( $fields as $field ) {
+				if ( ! is_array( $field ) || empty( $field['name'] ) ) {
+					continue;
+				}
+				$names[ (string) $field['name'] ] = true;
+			}
+		}
+
+		return $names;
 	}
 
 	/**

@@ -991,6 +991,12 @@ class ImportHandler implements ImporterInterface {
 	/**
 	 * Import ACF field values onto a post or Options Page post_id.
 	 *
+	 * For numeric posts: when the local field object is missing (SCF/ACF group
+	 * not attached yet), restore scoped postmeta from the payload instead of
+	 * relying on update_field(). When the field object exists, update_field()
+	 * runs first; meta fallback still runs if the value is missing or nested
+	 * structural meta is incomplete (e.g. a non-expanded repeater blob).
+	 *
 	 * @param array      $data          Payload with acf_fields.
 	 * @param int|string $post_id       Target post ID or ACF options post_id.
 	 * @param array      $id_map        Media ID mapping.
@@ -1000,7 +1006,7 @@ class ImportHandler implements ImporterInterface {
 	 * @return bool True on success (or non-strict soft failure), false when strict and a field is missing.
 	 */
 	private function import_acf_fields( array $data, $post_id, array $id_map = array(), array $url_map = array(), array $url_to_new_id = array(), bool $strict = false ): bool {
-		if ( ! function_exists( 'update_field' ) || ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
+		if ( ! isset( $data['acf_fields'] ) || ! is_array( $data['acf_fields'] ) ) {
 			return true;
 		}
 
@@ -1012,6 +1018,24 @@ class ImportHandler implements ImporterInterface {
 		$failed_fields = array();
 		$schema_map    = ( isset( $data['acf_field_schema'] ) && is_array( $data['acf_field_schema'] ) ) ? $data['acf_field_schema'] : array();
 		$use_schema    = $strict || array() !== $schema_map;
+		$payload_meta  = ( isset( $data['meta'] ) && is_array( $data['meta'] ) ) ? $data['meta'] : array();
+		$is_post       = $this->is_numeric_acf_post_id( $acf_post_id );
+		$can_update    = function_exists( 'update_field' );
+
+		// Posts can still restore scoped ACF meta when the ACF/SCF API is unavailable.
+		if ( ! $can_update ) {
+			if ( ! $is_post || array() === $payload_meta ) {
+				return true;
+			}
+			foreach ( array_keys( $data['acf_fields'] ) as $field_name ) {
+				$name = sanitize_text_field( (string) $field_name );
+				if ( '' === $name ) {
+					continue;
+				}
+				$this->acf_import_meta_fallback_from_payload( $payload_meta, $name, (int) $acf_post_id, $id_map, $url_map, $url_to_new_id );
+			}
+			return true;
+		}
 
 		foreach ( $data['acf_fields'] as $field_name => $field_value ) {
 			$name = sanitize_text_field( (string) $field_name );
@@ -1026,15 +1050,31 @@ class ImportHandler implements ImporterInterface {
 			} else {
 				$value = $this->remap_media_values( $field_value, $id_map, $url_map, $url_to_new_id );
 			}
-			$field_selector = $this->acf_resolve_field_selector( $name, $acf_post_id );
+
+			$field_object = $this->acf_get_local_field_object( $name, $acf_post_id );
+			$has_object   = is_array( $field_object ) && ! empty( $field_object['key'] );
+
+			// Without a local field definition, update_field() cannot expand repeaters/groups.
+			if ( $is_post && ! $has_object && array() !== $payload_meta ) {
+				$this->acf_import_meta_fallback_from_payload( $payload_meta, $name, (int) $acf_post_id, $id_map, $url_map, $url_to_new_id );
+				continue;
+			}
+
+			$field_selector = ( $has_object && is_string( $field_object['key'] ) )
+				? $field_object['key']
+				: $name;
 			update_field( $field_selector, $value, $acf_post_id );
 			if ( $strict ) {
 				$this->options_page_mutation_started = true;
 			}
 
 			// Meta fallback only applies to real WP posts (options pages use wp_options, not postmeta).
-			if ( $this->is_numeric_acf_post_id( $acf_post_id ) && $this->acf_is_value_missing_after_import( $name, $value, $acf_post_id ) ) {
-				$this->acf_import_meta_fallback_from_payload( $data['meta'] ?? array(), $name, (int) $acf_post_id, $id_map, $url_map, $url_to_new_id );
+			if ( $is_post ) {
+				$needs_fallback = $this->acf_is_value_missing_after_import( $name, $value, $acf_post_id )
+					|| $this->acf_is_structural_meta_incomplete( $name, $value, (int) $acf_post_id, $payload_meta );
+				if ( $needs_fallback ) {
+					$this->acf_import_meta_fallback_from_payload( $payload_meta, $name, (int) $acf_post_id, $id_map, $url_map, $url_to_new_id );
+				}
 			}
 
 			if ( $strict && $this->acf_is_value_missing_after_import( $name, $value, $acf_post_id ) ) {
@@ -1055,31 +1095,31 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
-	 * Resolve ACF field selector (prefer field key when duplicate names or Polylang/SCF contexts).
+	 * Get the local ACF/SCF field object for a field name on a post_id, if registered.
 	 *
 	 * @param string     $field_name Sanitized field name from payload.
 	 * @param int|string $post_id    Target post ID or ACF options post_id.
-	 * @return string Field key or name for update_field().
+	 * @return array|null Field object array or null when unresolved.
 	 */
-	private function acf_resolve_field_selector( string $field_name, $post_id ): string {
+	private function acf_get_local_field_object( string $field_name, $post_id ): ?array {
 		if ( ! function_exists( 'get_field_object' ) ) {
-			return $field_name;
+			return null;
 		}
 
 		if ( $this->is_numeric_acf_post_id( $post_id ) && (int) $post_id <= 0 ) {
-			return $field_name;
+			return null;
 		}
 
 		if ( is_string( $post_id ) && '' === $post_id ) {
-			return $field_name;
+			return null;
 		}
 
 		$object = get_field_object( $field_name, $post_id, false, false );
-		if ( is_array( $object ) && ! empty( $object['key'] ) && is_string( $object['key'] ) ) {
-			return $object['key'];
+		if ( ! is_array( $object ) || empty( $object['key'] ) ) {
+			return null;
 		}
 
-		return $field_name;
+		return $object;
 	}
 
 	/**
@@ -1112,9 +1152,88 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
+	 * Whether complex field meta is incomplete after update_field().
+	 *
+	 * Catches the case where get_field() returns a non-empty blob under the root
+	 * key but nested repeater/group leaf keys were never written.
+	 *
+	 * @param string $field_name   Field name from payload.
+	 * @param mixed  $expected     Remapped payload value.
+	 * @param int    $post_id      Target post ID.
+	 * @param array  $payload_meta Full payload meta (used to know if source had leaves).
+	 * @return bool
+	 */
+	private function acf_is_structural_meta_incomplete( string $field_name, $expected, int $post_id, array $payload_meta ): bool {
+		if ( $post_id <= 0 || ! is_array( $expected ) || ! $this->acf_has_meaningful_value( $expected ) ) {
+			return false;
+		}
+
+		if ( ! $this->acf_payload_meta_has_nested_leaves( $payload_meta, $field_name ) ) {
+			return false;
+		}
+
+		return ! $this->acf_post_has_nested_leaf_meta( $post_id, $field_name );
+	}
+
+	/**
+	 * Whether payload meta includes nested leaf keys for a field (repeater/group rows).
+	 *
+	 * @param array  $meta       Payload meta.
+	 * @param string $field_name Field name.
+	 * @return bool
+	 */
+	private function acf_payload_meta_has_nested_leaves( array $meta, string $field_name ): bool {
+		$prefix_pattern = '/^' . preg_quote( $field_name, '/' ) . '_[^_]+_/';
+		$ref_pattern    = '/^_' . preg_quote( $field_name, '/' ) . '_[^_]+_/';
+
+		foreach ( $meta as $raw_key => $values ) {
+			$mk = sanitize_text_field( (string) $raw_key );
+			if ( ! preg_match( $prefix_pattern, $mk ) && ! preg_match( $ref_pattern, $mk ) ) {
+				continue;
+			}
+			$stored = $this->acf_single_meta_payload_value( $values );
+			if ( null !== $stored && '' !== $stored && array() !== $stored ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether the post already has nested ACF leaf meta for a field.
+	 *
+	 * @param int    $post_id    Target post ID.
+	 * @param string $field_name Field name.
+	 * @return bool
+	 */
+	private function acf_post_has_nested_leaf_meta( int $post_id, string $field_name ): bool {
+		$all = get_post_meta( $post_id );
+		if ( ! is_array( $all ) || array() === $all ) {
+			return false;
+		}
+
+		$prefix_pattern = '/^' . preg_quote( $field_name, '/' ) . '_[^_]+_/';
+		foreach ( $all as $meta_key => $values ) {
+			$mk = (string) $meta_key;
+			if ( ! preg_match( $prefix_pattern, $mk ) ) {
+				continue;
+			}
+			$first = is_array( $values ) && array() !== $values ? reset( $values ) : $values;
+			if ( null !== $first && '' !== $first && array() !== $first ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Import ACF meta keys for a single field directly from payload meta.
 	 *
-	 * Used as a fallback when update_field() succeeds for some groups but one group remains empty.
+	 * Used when update_field() cannot expand nested fields (missing field group)
+	 * or leaves them incomplete. After writing leaves, clears a non-scalar root
+	 * blob left by a failed update_field() and restores ACF row-count when present.
 	 *
 	 * @param array  $meta          Full payload meta array.
 	 * @param string $field_name    Target field/group name.
@@ -1130,56 +1249,168 @@ class ImportHandler implements ImporterInterface {
 		}
 
 		$prefix          = $field_name . '_';
-		$prefix_pattern  = '/^' . preg_quote( $field_name, '/' ) . '_[^_]+_/';
-		$has_nested_leaf = false;
-		foreach ( $meta as $raw_key => $values ) {
-			$mk = sanitize_text_field( (string) $raw_key );
-			if ( ! preg_match( $prefix_pattern, $mk ) && ! preg_match( '/^_' . preg_quote( $prefix, '/' ) . '/', $mk ) ) {
+		$has_nested_leaf = $this->acf_payload_meta_has_nested_leaves( $meta, $field_name );
+		$root_count      = null;
+		$payload_keys    = array();
+
+		foreach ( array_keys( $meta ) as $raw_key ) {
+			$meta_key = sanitize_text_field( (string) $raw_key );
+			if ( ! $this->acf_meta_key_belongs_to_field( $meta_key, $field_name, $prefix ) ) {
 				continue;
 			}
-			$first = is_array( $values ) && array() !== $values ? reset( $values ) : $values;
-			if ( null !== $first && '' !== $first && array() !== $first ) {
-				$has_nested_leaf = true;
-				break;
-			}
+			$payload_keys[ $meta_key ] = true;
 		}
+
+		// Drop destination rows that are not in the archive (shorter repeater on re-import).
+		$this->acf_delete_stale_field_meta( $post_id, $field_name, $prefix, $payload_keys );
 
 		foreach ( $meta as $raw_key => $values ) {
 			$meta_key = sanitize_text_field( (string) $raw_key );
-
-			$is_target_key = (
-				$field_name === $meta_key
-				|| '_' . $field_name === $meta_key
-				|| 0 === strpos( $meta_key, $prefix )
-				|| 0 === strpos( $meta_key, '_' . $prefix )
-			);
-
-			if ( ! $is_target_key ) {
+			if ( ! isset( $payload_keys[ $meta_key ] ) ) {
 				continue;
 			}
 
+			$stored = $this->acf_single_meta_payload_value( $values );
+
 			// ACF often stores an empty root meta row while leaf keys use "{$field_name}_..."; writing '' breaks nested groups.
 			if ( $has_nested_leaf && $field_name === $meta_key ) {
-				$first_val = is_array( $values ) && array() !== $values ? reset( $values ) : $values;
-				if ( null === $first_val || '' === $first_val || array() === $first_val ) {
+				if ( null === $stored || '' === $stored || array() === $stored ) {
+					continue;
+				}
+				// Remember scalar row count from source (repeater/flexible store an integer count).
+				if ( is_numeric( $stored ) && ! is_array( $stored ) ) {
+					$root_count = $stored;
+				}
+				// Do not restore a serialized array blob under the root key; leaves carry the data.
+				if ( is_array( $stored ) ) {
 					continue;
 				}
 			}
 
 			delete_post_meta( $post_id, $meta_key );
 
-			if ( is_array( $values ) ) {
-				foreach ( $values as $value ) {
-					$value = maybe_unserialize( $value );
-					$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
-					add_post_meta( $post_id, $meta_key, $value );
-				}
+			$value = maybe_unserialize( $stored );
+			// Row count is a small integer and collides with exported attachment IDs.
+			$is_row_count = $has_nested_leaf && $field_name === $meta_key && is_numeric( $value ) && ! is_array( $value );
+			if ( ! $is_row_count ) {
+				$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
+			}
+			update_post_meta( $post_id, $meta_key, $value );
+		}
+
+		if ( $has_nested_leaf ) {
+			$this->acf_cleanup_root_field_blob( $post_id, $field_name, $root_count, $payload_keys );
+		}
+	}
+
+	/**
+	 * Whether a meta key is the field root, its reference, or a nested leaf.
+	 *
+	 * @param string $meta_key   Sanitized meta key.
+	 * @param string $field_name Field name.
+	 * @param string $prefix     Field name plus underscore.
+	 * @return bool
+	 */
+	private function acf_meta_key_belongs_to_field( string $meta_key, string $field_name, string $prefix ): bool {
+		return (
+			$field_name === $meta_key
+			|| '_' . $field_name === $meta_key
+			|| 0 === strpos( $meta_key, $prefix )
+			|| 0 === strpos( $meta_key, '_' . $prefix )
+		);
+	}
+
+	/**
+	 * Delete post meta for this field that the archive does not contain.
+	 *
+	 * @param int                  $post_id      Target post ID.
+	 * @param string               $field_name   Field name.
+	 * @param string               $prefix       Field name plus underscore.
+	 * @param array<string, true> $payload_keys Keys present in the archive for this field.
+	 * @return void
+	 */
+	private function acf_delete_stale_field_meta( int $post_id, string $field_name, string $prefix, array $payload_keys ): void {
+		$all = get_post_meta( $post_id );
+		if ( ! is_array( $all ) ) {
+			return;
+		}
+
+		foreach ( array_keys( $all ) as $meta_key ) {
+			$meta_key = (string) $meta_key;
+			if ( isset( $payload_keys[ $meta_key ] ) ) {
 				continue;
 			}
+			if ( ! $this->acf_meta_key_belongs_to_field( $meta_key, $field_name, $prefix ) ) {
+				continue;
+			}
+			delete_post_meta( $post_id, $meta_key );
+		}
+	}
 
-			$value = maybe_unserialize( $values );
-			$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
-			update_post_meta( $post_id, $meta_key, $value );
+	/**
+	 * One stored meta value from a selected-content payload entry.
+	 *
+	 * BatchLoader exports `meta_key => unserialized_value`. A list (gallery,
+	 * checkbox, relationship) is that single value, not several postmeta rows.
+	 *
+	 * @param mixed $values Payload meta value.
+	 * @return mixed
+	 */
+	private function acf_single_meta_payload_value( $values ) {
+		if ( is_string( $values ) ) {
+			return maybe_unserialize( $values );
+		}
+
+		return $values;
+	}
+
+	/**
+	 * Replace a non-scalar or stale root value with the archive row count.
+	 *
+	 * Count is taken from the payload root when it is numeric, otherwise from
+	 * row indexes present in the archive — not from leftover rows on the post.
+	 *
+	 * @param int                  $post_id      Target post ID.
+	 * @param string               $field_name   Field name.
+	 * @param int|string|null      $root_count   Optional row count from payload meta.
+	 * @param array<string, true> $payload_keys Keys present in the archive for this field.
+	 * @return void
+	 */
+	private function acf_cleanup_root_field_blob( int $post_id, string $field_name, $root_count, array $payload_keys ): void {
+		if ( $post_id <= 0 || '' === $field_name ) {
+			return;
+		}
+
+		if ( ! $this->acf_post_has_nested_leaf_meta( $post_id, $field_name ) ) {
+			return;
+		}
+
+		$count = null;
+		if ( null !== $root_count && is_numeric( $root_count ) && ! is_array( $root_count ) ) {
+			$count = $root_count;
+		} else {
+			$max_index = -1;
+			$pattern   = '/^' . preg_quote( $field_name, '/' ) . '_(\d+)_/';
+			foreach ( array_keys( $payload_keys ) as $meta_key ) {
+				if ( preg_match( $pattern, (string) $meta_key, $matches ) ) {
+					$max_index = max( $max_index, (int) $matches[1] );
+				}
+			}
+			if ( $max_index >= 0 ) {
+				$count = (string) ( $max_index + 1 );
+			}
+		}
+
+		$current = get_post_meta( $post_id, $field_name, true );
+		if ( null === $count ) {
+			if ( is_array( $current ) ) {
+				delete_post_meta( $post_id, $field_name );
+			}
+			return;
+		}
+
+		if ( is_array( $current ) || (string) $current !== (string) $count ) {
+			update_post_meta( $post_id, $field_name, $count );
 		}
 	}
 

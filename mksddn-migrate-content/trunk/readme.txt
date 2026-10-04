@@ -50,7 +50,7 @@ Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads 
 `.json` exports are lightweight (content only) and convenient for quick edits. `.wpbkp` adds media, filesystem slices, and checksums. Use `.wpbkp` for full fidelity.
 
 = Does it support ACF and custom post types? =
-Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported. Selected Content can also export/import ACF Options Pages (matched by `menu_slug`, written via the ACF API). Taxonomies, menus, widgets, and serialized options are also covered in full-site flows.
+Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported (including Secure Custom Fields / other ACF-compatible APIs that provide `get_field` / `update_field`). Selected Content can also export/import ACF Options Pages (matched by `menu_slug`, written via the ACF API). For best results with repeaters and nested groups, register and attach matching field groups on the destination before import (same field keys as the source, e.g. via ACF/SCF JSON sync). Preflight warns when archive field names are not found locally; for posts the importer still falls back to scoped raw ACF meta from the archive when `update_field()` cannot expand nested fields. Taxonomies, menus, widgets, and serialized options are also covered in full-site flows.
 
 = How do chunked uploads resume? =
 The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via REST API endpoints (`mksddn/v1/chunk/*`). If the browser reloads, the resume token restarts from the last confirmed chunk.
@@ -111,7 +111,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 
 = Export & Import Core =
 * `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF, ACF Options Pages)
-* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF, ACF Options Pages)
+* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF, ACF Options Pages). For post ACF/SCF fields: `update_field()` when a local field object exists; scoped `meta` fallback when the field group is missing or nested structural meta is incomplete; cleanup of non-scalar root “blob” meta left by a failed expand so leaf repeater/group keys remain authoritative
 * `SelectionBuilder`, `ContentSelection` — build export selections from admin input (posts/CPTs and Options Page `menu_slug`s)
 * `FullContentExporter`, `FullContentImporter` — full-site archive assembly and restore
 * `FullDatabaseExporter`, `FullDatabaseImporter`, `SwapTableNames` — streaming database export/import; schema recreate uses a swap table then atomic RENAME
@@ -127,7 +127,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `FullSiteImportService` — manages full site imports
 * `ThemeImportService` — handles theme archive imports
 * `UnifiedImportOrchestrator` — orchestrates unified import with automatic type detection; step 1 is always preflight, step 2 runs the real import using a stored file reference
-* `ImportPreflightService` — read-only analysis for unified import preflight (including PHP/WordPress version mismatch warnings for full-site and theme archives)
+* `ImportPreflightService` — read-only analysis for unified import preflight (including PHP/WordPress version mismatch warnings for full-site and theme archives, and warnings when Selected Content ACF/SCF field names are not registered locally)
 * `PreflightReportStore` — short-lived transient storage for preflight reports and follow-up import handles (staged browser uploads under `wp-content/uploads/mksddn-mc/preflight/`, or chunk/server identifiers)
 * `ImportTypeDetector` — detects import type (full site, selected content, or theme) from archive file
 * `ImportFileValidator` — validates uploaded files
