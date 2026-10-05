@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.7.2
+Stable tag: 2.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -197,6 +197,14 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.8.0 =
+* Added: ACF Options Pages in Selected Content export and import.
+* Added: Selected Content picker with title search, lazy load, and Load more.
+* Added: Preflight diffs for fields, media, and theme files, plus PHP/WordPress version warnings on full-site and theme imports.
+* Added: ACF/SCF fields without a local definition are warned in preflight and imported as scoped meta.
+* Added: Bulk delete and click-to-select for server backup files on the import screen.
+* Improved: Dismissing a preflight report also clears the related user and theme preview sessions.
 
 = 2.7.2 =
 * Fixed: Dismissing the preflight report or cancelling user/theme preview promotes the staged or chunked archive into `imports/` so it remains available under Select from server.
