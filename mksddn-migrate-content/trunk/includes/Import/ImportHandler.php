@@ -665,9 +665,50 @@ class ImportHandler implements ImporterInterface {
 				);
 				return false;
 			}
+
+			$post_id = $this->normalize_acf_post_id( $local['post_id'] );
+			if ( false === $this->validate_options_page_fields_ready( $page, $post_id ) ) {
+				return false;
+			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Ensure Options Page ACF fields resolve to registered local field objects before any write.
+	 *
+	 * @param array      $page    Normalized options page payload.
+	 * @param int|string $post_id Local ACF post_id.
+	 * @return bool
+	 */
+	private function validate_options_page_fields_ready( array $page, $post_id ): bool {
+		if ( ! isset( $page['acf_fields'] ) || ! is_array( $page['acf_fields'] ) || array() === $page['acf_fields'] ) {
+			return true;
+		}
+
+		$missing = array();
+		foreach ( array_keys( $page['acf_fields'] ) as $field_name ) {
+			$name = sanitize_text_field( (string) $field_name );
+			if ( '' === $name ) {
+				continue;
+			}
+			if ( null === $this->acf_get_local_field_object( $name, $post_id ) ) {
+				$missing[] = $name;
+			}
+		}
+
+		if ( array() === $missing ) {
+			return true;
+		}
+
+		$this->last_error = sprintf(
+			/* translators: 1: Options Page menu_slug, 2: comma-separated field names */
+			__( 'ACF Options Page "%1$s" cannot be imported until matching field groups are registered for: %2$s.', 'mksddn-migrate-content' ),
+			sanitize_key( (string) ( $page['menu_slug'] ?? '' ) ),
+			implode( ', ', $missing )
+		);
+		return false;
 	}
 
 	/**
@@ -761,16 +802,64 @@ class ImportHandler implements ImporterInterface {
 
 		$post_id = $this->normalize_acf_post_id( $local['post_id'] );
 
-		if ( ! empty( $data['_mksddn_media'] ) && is_array( $data['_mksddn_media'] ) ) {
-			$this->options_page_mutation_started = true;
+		$media_maps = $this->restore_media_for_options_page( $data );
+		if ( false === $this->assert_options_page_media_remapped( $data, $media_maps ) ) {
+			if ( ! empty( $media_maps['id_map'] ) && is_array( $media_maps['id_map'] ) ) {
+				// Some attachments may already exist in the Media Library.
+				$this->options_page_mutation_started = true;
+			}
+			return false;
 		}
 
-		$media_maps    = $this->restore_media_for_options_page( $data );
 		$media_id_map  = $media_maps['id_map'] ?? array();
 		$url_map       = $media_maps['url_map'] ?? array();
 		$url_to_new_id = $this->build_url_to_new_id_map( $data, $media_id_map );
 
 		return $this->import_acf_fields( $data, $post_id, $media_id_map, $url_map, $url_to_new_id, true );
+	}
+
+	/**
+	 * Fail Options Page import when archive media entries were not fully remapped.
+	 *
+	 * Prevents writing source-site attachment IDs into options fields after a soft sideload failure.
+	 *
+	 * @param array $data       Options page payload.
+	 * @param array $media_maps Restorer maps (id_map, url_map).
+	 * @return bool True when remap is complete (or no media entries).
+	 */
+	private function assert_options_page_media_remapped( array $data, array $media_maps ): bool {
+		$entries = isset( $data['_mksddn_media'] ) && is_array( $data['_mksddn_media'] ) ? $data['_mksddn_media'] : array();
+		if ( array() === $entries ) {
+			return true;
+		}
+
+		$id_map  = isset( $media_maps['id_map'] ) && is_array( $media_maps['id_map'] ) ? $media_maps['id_map'] : array();
+		$missing = array();
+
+		foreach ( $entries as $entry ) {
+			if ( ! is_array( $entry ) || ! isset( $entry['original_id'] ) || ! is_numeric( $entry['original_id'] ) ) {
+				continue;
+			}
+			$old_id = (int) $entry['original_id'];
+			if ( $old_id <= 0 ) {
+				continue;
+			}
+			if ( ! isset( $id_map[ $old_id ] ) ) {
+				$missing[] = $old_id;
+			}
+		}
+
+		if ( array() === $missing ) {
+			return true;
+		}
+
+		$this->last_error = sprintf(
+			/* translators: 1: Options Page menu_slug, 2: comma-separated attachment IDs */
+			__( 'ACF Options Page "%1$s" media restore failed for attachment ID(s): %2$s. Import aborted to avoid writing source-site IDs.', 'mksddn-migrate-content' ),
+			sanitize_key( (string) ( $data['menu_slug'] ?? '' ) ),
+			implode( ', ', array_unique( $missing ) )
+		);
+		return false;
 	}
 
 	/**
@@ -1079,6 +1168,8 @@ class ImportHandler implements ImporterInterface {
 
 			if ( $strict && $this->acf_is_value_missing_after_import( $name, $value, $acf_post_id ) ) {
 				$failed_fields[] = $name;
+			} elseif ( $strict && ! $is_post && $this->acf_is_options_structure_incomplete( $name, $value, $acf_post_id ) ) {
+				$failed_fields[] = $name;
 			}
 		}
 
@@ -1149,6 +1240,134 @@ class ImportHandler implements ImporterInterface {
 
 		$stored = get_field( $field_name, $post_id, false );
 		return ! $this->acf_has_meaningful_value( $stored );
+	}
+
+	/**
+	 * Whether complex Options Page field structures look incomplete after update_field().
+	 *
+	 * Options live in wp_options (not postmeta), so compare remapped payload shape vs get_field().
+	 * Attachment-shaped payload arrays are compatible with scalar IDs from get_field(..., false).
+	 *
+	 * @param string     $field_name Field name from payload.
+	 * @param mixed      $expected   Remapped payload value.
+	 * @param int|string $post_id    ACF options post_id.
+	 * @return bool
+	 */
+	private function acf_is_options_structure_incomplete( string $field_name, $expected, $post_id ): bool {
+		if ( ! function_exists( 'get_field' ) || ! is_array( $expected ) || ! $this->acf_has_meaningful_value( $expected ) ) {
+			return false;
+		}
+
+		$stored = get_field( $field_name, $post_id, false );
+
+		if ( $this->acf_is_attachment_shaped_value( $expected ) ) {
+			return ! $this->acf_stored_matches_attachment_payload( $stored );
+		}
+
+		if ( ! is_array( $stored ) ) {
+			return true;
+		}
+
+		return $this->acf_array_structure_shallower( $expected, $stored );
+	}
+
+	/**
+	 * Whether a value looks like an ACF attachment array (ID/id keys).
+	 *
+	 * @param mixed $value Value from payload or get_field().
+	 * @return bool
+	 */
+	private function acf_is_attachment_shaped_value( $value ): bool {
+		return is_array( $value ) && ( isset( $value['ID'] ) || isset( $value['id'] ) );
+	}
+
+	/**
+	 * Whether stored get_field() value matches an attachment-shaped payload.
+	 *
+	 * Unformatted image/file fields often return a positive attachment ID, while
+	 * the remapped archive payload keeps the full attachment array.
+	 *
+	 * @param mixed $stored Value from get_field(..., false).
+	 * @return bool
+	 */
+	private function acf_stored_matches_attachment_payload( $stored ): bool {
+		if ( is_numeric( $stored ) ) {
+			return (int) $stored > 0;
+		}
+
+		if ( $this->acf_is_attachment_shaped_value( $stored ) ) {
+			$id = isset( $stored['ID'] ) ? (int) $stored['ID'] : (int) ( $stored['id'] ?? 0 );
+			return $id > 0;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether stored array structure is shallower than expected (missing rows/keys).
+	 *
+	 * @param array $expected Expected remapped value.
+	 * @param array $stored   Value returned by get_field().
+	 * @return bool
+	 */
+	private function acf_array_structure_shallower( array $expected, array $stored ): bool {
+		$expected_is_list = array() === $expected || array_keys( $expected ) === range( 0, count( $expected ) - 1 );
+		$stored_is_list   = array() === $stored || array_keys( $stored ) === range( 0, count( $stored ) - 1 );
+
+		if ( $expected_is_list ) {
+			if ( ! $stored_is_list ) {
+				return true;
+			}
+			if ( count( $stored ) < count( $expected ) ) {
+				return true;
+			}
+			foreach ( $expected as $index => $expected_row ) {
+				if ( ! array_key_exists( $index, $stored ) ) {
+					return true;
+				}
+				if ( $this->acf_expected_child_incomplete( $expected_row, $stored[ $index ] ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		foreach ( $expected as $key => $expected_child ) {
+			if ( 'acf_fc_layout' === (string) $key ) {
+				continue;
+			}
+			if ( ! array_key_exists( $key, $stored ) ) {
+				return true;
+			}
+			if ( $this->acf_expected_child_incomplete( $expected_child, $stored[ $key ] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether an expected nested value looks incomplete vs stored get_field() data.
+	 *
+	 * @param mixed $expected Expected remapped child value.
+	 * @param mixed $stored   Stored child value.
+	 * @return bool
+	 */
+	private function acf_expected_child_incomplete( $expected, $stored ): bool {
+		if ( ! is_array( $expected ) ) {
+			return false;
+		}
+
+		if ( $this->acf_is_attachment_shaped_value( $expected ) ) {
+			return ! $this->acf_stored_matches_attachment_payload( $stored );
+		}
+
+		if ( ! is_array( $stored ) ) {
+			return true;
+		}
+
+		return $this->acf_array_structure_shallower( $expected, $stored );
 	}
 
 	/**

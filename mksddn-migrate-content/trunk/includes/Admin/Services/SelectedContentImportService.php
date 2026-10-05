@@ -2,7 +2,7 @@
 /**
  * @file: SelectedContentImportService.php
  * @description: Service for importing selected content (pages, posts, etc.)
- * @dependencies: Archive\Extractor, Import\ImportHandler, Admin\Services\NotificationService, Admin\Services\ProgressService, Admin\Services\ImportFileValidator, Admin\Services\ImportPayloadPreparer
+ * @dependencies: Archive\Extractor, Import\ImportHandler, Admin\Services\NotificationService, Admin\Services\ProgressService, Admin\Services\ImportFileValidator, Admin\Services\ImportPayloadPreparer, Admin\Services\PreflightReportStore
  * @created: 2024-12-15
  */
 
@@ -127,7 +127,7 @@ class SelectedContentImportService {
 		try {
 			$lock_token = $lock->acquire();
 			if ( ! $lock_token ) {
-				$this->notifications->redirect_with_notice( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+				$this->fail_import( __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
 				return;
 			}
 
@@ -149,7 +149,7 @@ class SelectedContentImportService {
 				// Chunk files are stored in a controlled directory, so this is safe.
 				$real_path = realpath( $chunk_file_path );
 				if ( false === $real_path ) {
-					$this->notifications->redirect_with_notice( 'error', __( 'Invalid chunked file path.', 'mksddn-migrate-content' ) );
+					$this->fail_import( __( 'Invalid chunked file path.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
@@ -179,7 +179,7 @@ class SelectedContentImportService {
 					$file_info = $this->server_scanner->get_file( $server_file );
 
 					if ( is_wp_error( $file_info ) ) {
-						$this->notifications->redirect_with_notice( 'error', $file_info->get_error_message() );
+						$this->fail_import( $file_info->get_error_message() );
 						return;
 					}
 
@@ -195,13 +195,13 @@ class SelectedContentImportService {
 				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 				$raw_path = isset( $_POST['preflight_staged_path'] ) ? sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) ) : '';
 				if ( ! PreflightStagingPath::is_allowed_path( $raw_path ) ) {
-					$this->notifications->redirect_with_notice( 'error', __( 'Invalid preflight file path.', 'mksddn-migrate-content' ) );
+					$this->fail_import( __( 'Invalid preflight file path.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
 				$real_path = realpath( $raw_path );
 				if ( false === $real_path || ! is_readable( $real_path ) ) {
-					$this->notifications->redirect_with_notice( 'error', __( 'Preflight staged file is not readable.', 'mksddn-migrate-content' ) );
+					$this->fail_import( __( 'Preflight staged file is not readable.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
@@ -213,7 +213,7 @@ class SelectedContentImportService {
 					$extension = isset( $_POST['preflight_staged_ext'] ) ? strtolower( sanitize_key( wp_unslash( (string) $_POST['preflight_staged_ext'] ) ) ) : '';
 				}
 				if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
-					$this->notifications->redirect_with_notice( 'error', __( 'Unsupported file extension.', 'mksddn-migrate-content' ) );
+					$this->fail_import( __( 'Unsupported file extension.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
@@ -229,21 +229,21 @@ class SelectedContentImportService {
 			// If no file data was set (from chunk or server file), check for uploaded file.
 			if ( ! isset( $file_data ) ) {
 				if ( ! isset( $_FILES['import_file'], $_FILES['import_file']['error'] ) || UPLOAD_ERR_OK !== (int) $_FILES['import_file']['error'] ) {
-					$this->notifications->redirect_with_notice( 'error', __( 'Failed to upload file.', 'mksddn-migrate-content' ) );
+					$this->fail_import( __( 'Failed to upload file.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
 				// Verify that the file was actually uploaded via HTTP POST.
 				$tmp_name = isset( $_FILES['import_file']['tmp_name'] ) ? sanitize_text_field( wp_unslash( $_FILES['import_file']['tmp_name'] ) ) : '';
 				if ( ! $tmp_name || ! is_uploaded_file( $tmp_name ) ) {
-					$this->notifications->redirect_with_notice( 'error', __( 'File upload security check failed.', 'mksddn-migrate-content' ) );
+					$this->fail_import( __( 'File upload security check failed.', 'mksddn-migrate-content' ) );
 					return;
 				}
 
 				// Pass file data to validator which will sanitize all fields.
 				$file_data = $this->file_validator->validate( $_FILES['import_file'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- file validated and sanitized by validator
 				if ( is_wp_error( $file_data ) ) {
-					$this->notifications->redirect_with_notice( 'error', $file_data->get_error_message() );
+					$this->fail_import( $file_data->get_error_message() );
 					return;
 				}
 
@@ -253,7 +253,7 @@ class SelectedContentImportService {
 					(string) $file_data['extension']
 				);
 				if ( is_wp_error( $staged ) ) {
-					$this->notifications->redirect_with_notice( 'error', $staged->get_error_message() );
+					$this->fail_import( $staged->get_error_message() );
 					return;
 				}
 
@@ -270,7 +270,7 @@ class SelectedContentImportService {
 			);
 
 			if ( is_wp_error( $result ) ) {
-				$this->notifications->redirect_with_notice( 'error', $result->get_error_message() );
+				$this->fail_import( $result->get_error_message() );
 				return;
 			}
 
@@ -299,6 +299,7 @@ class SelectedContentImportService {
 					$job
 				);
 				$import_handler->purge_selected_import_caches();
+				$this->release_preflight_claim_if_any();
 
 				// Get import details for redirect.
 				// For bundle, don't pass slug/title as it contains multiple items.
@@ -316,7 +317,7 @@ class SelectedContentImportService {
 				if ( '' === $message ) {
 					$message = __( 'Failed to import content.', 'mksddn-migrate-content' );
 				}
-				$this->notifications->redirect_with_notice( 'error', $message );
+				$this->fail_import( $message );
 			}
 		} finally {
 			if ( $lock_token ) {
@@ -338,6 +339,34 @@ class SelectedContentImportService {
 		$path = sanitize_text_field( wp_unslash( $_POST['preflight_staged_path'] ) );
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 		return '' !== trim( $path );
+	}
+
+	/**
+	 * Fail the import step and release a preflight claim when present.
+	 *
+	 * @param string $message Error message.
+	 * @return void
+	 */
+	private function fail_import( string $message ): void {
+		$this->release_preflight_claim_if_any();
+		$this->notifications->redirect_with_notice( 'error', $message );
+	}
+
+	/**
+	 * Release preflight import claim (retry/dismiss after failure, or leave claim after success).
+	 *
+	 * @return void
+	 */
+	private function release_preflight_claim_if_any(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+		$report_id = isset( $_POST['preflight_report_id'] )
+			? sanitize_text_field( wp_unslash( (string) $_POST['preflight_report_id'] ) )
+			: '';
+		if ( '' === $report_id ) {
+			return;
+		}
+
+		( new PreflightReportStore() )->release_import_claim( $report_id, (int) get_current_user_id() );
 	}
 
 	/**

@@ -45,5 +45,15 @@ interface UserPreviewStoreInterface {
 	 * @since 1.0.0
 	 */
 	public function delete( string $id ): void;
+
+	/**
+	 * Delete previews owned by the user that match a preflight report or archive path.
+	 *
+	 * @param string   $report_id  Preflight report id (may be empty).
+	 * @param string[] $file_paths Absolute archive paths to match.
+	 * @param int      $user_id    Owner user id.
+	 * @return int Number of deleted preview sessions.
+	 */
+	public function delete_related_to_preflight( string $report_id, array $file_paths, int $user_id ): int;
 }
 

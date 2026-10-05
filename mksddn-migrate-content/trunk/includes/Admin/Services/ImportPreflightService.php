@@ -357,6 +357,7 @@ class ImportPreflightService {
 				'media_files'            => $media_count,
 				'slug_conflicts_count'   => count( $slug_conflicts ),
 				'fields_changed_count'   => $fields_changed_total,
+				'field_diff_omitted'     => $diff_detail_omitted,
 			),
 			'warnings'            => $warnings,
 			'errors'              => $errors,

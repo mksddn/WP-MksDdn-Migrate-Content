@@ -2,7 +2,7 @@
 /**
  * @file: FullSiteImportService.php
  * @description: Service for importing full site archives
- * @dependencies: Users\UserDiffBuilder, Users\UserPreviewStore, Filesystem\FullContentImporter, Support\SiteUrlGuard, Support\ImportArtifactCleanup, Chunking\ChunkJobRepository, Config\PluginConfig, Admin\Services\ResponseHandler
+ * @dependencies: Users\UserDiffBuilder, Users\UserPreviewStore, Filesystem\FullContentImporter, Support\SiteUrlGuard, Support\ImportArtifactCleanup, Chunking\ChunkJobRepository, Config\PluginConfig, Admin\Services\ResponseHandler, Admin\Services\PreflightReportStore
  * @created: 2024-12-15
  */
 
@@ -100,7 +100,7 @@ class FullSiteImportService {
 		$upload       = $this->resolve_upload( $chunk_job_id );
 
 		if ( is_wp_error( $upload ) ) {
-			$this->response_handler->redirect_with_status( 'error', $upload->get_error_message() );
+			$this->fail_import( $upload->get_error_message() );
 		}
 
 		$diff_builder = new UserDiffBuilder();
@@ -109,7 +109,7 @@ class FullSiteImportService {
 		if ( is_wp_error( $diff ) ) {
 			// Keep preflight/jobs archives for retry; only drop unmanaged PHP temps.
 			ImportArtifactCleanup::discard_unmanaged_temp( (string) ( $upload['temp'] ?? '' ) );
-			$this->response_handler->redirect_with_status( 'error', $diff->get_error_message() );
+			$this->fail_import( $diff->get_error_message() );
 		}
 
 		if ( empty( $diff['incoming'] ) ) {
@@ -127,12 +127,19 @@ class FullSiteImportService {
 
 		$preview_id = $this->preview_store->create(
 			array(
-				'file_path'     => $upload['temp'],
-				'chunk_job_id'  => $upload['chunk_job_id'],
-				'original_name' => $upload['original_name'],
-				'summary'       => $diff,
+				'file_path'           => $upload['temp'],
+				'chunk_job_id'        => $upload['chunk_job_id'],
+				'original_name'       => $upload['original_name'],
+				'summary'             => $diff,
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+				'preflight_report_id' => isset( $_POST['preflight_report_id'] )
+					? sanitize_text_field( wp_unslash( (string) $_POST['preflight_report_id'] ) )
+					: '',
 			)
 		);
+
+		// Preview UI is idle — release claim so dismiss/retry work; finalize uses the preview session.
+		$this->release_preflight_claim_if_any();
 
 		$this->response_handler->redirect_to_user_preview( $preview_id );
 	}
@@ -215,7 +222,7 @@ class FullSiteImportService {
 		$temp = $upload['temp'] ?? '';
 		if ( '' === $temp || ! file_exists( $temp ) ) {
 			$this->log( 'Import file missing: ' . $temp );
-			$this->response_handler->redirect_with_status( 'error', __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
+			$this->fail_import( __( 'Import file is missing on disk.', 'mksddn-migrate-content' ) );
 			return;
 		}
 
@@ -236,7 +243,7 @@ class FullSiteImportService {
 		try {
 			$lock_token = $lock->acquire();
 			if ( ! $lock_token ) {
-				$this->response_handler->redirect_with_status( 'error', __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
+				$this->fail_import( __( 'Another import is already running. Please wait for it to finish.', 'mksddn-migrate-content' ) );
 				return;
 			}
 
@@ -309,10 +316,11 @@ class FullSiteImportService {
 		}
 
 		if ( 'error' === $status ) {
-			$this->response_handler->redirect_with_status( 'error', $message );
+			$this->fail_import( (string) $message );
 			return;
 		}
 
+		$this->release_preflight_claim_if_any();
 		$this->response_handler->redirect_with_status( 'success' );
 	}
 
@@ -627,6 +635,34 @@ class FullSiteImportService {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Fail the import step and release a preflight claim when present.
+	 *
+	 * @param string $message Error message.
+	 * @return void
+	 */
+	private function fail_import( string $message ): void {
+		$this->release_preflight_claim_if_any();
+		$this->response_handler->redirect_with_status( 'error', $message );
+	}
+
+	/**
+	 * Release preflight import claim (retry/dismiss after failure, or leave claim after success/preview).
+	 *
+	 * @return void
+	 */
+	private function release_preflight_claim_if_any(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+		$report_id = isset( $_POST['preflight_report_id'] )
+			? sanitize_text_field( wp_unslash( (string) $_POST['preflight_report_id'] ) )
+			: '';
+		if ( '' === $report_id ) {
+			return;
+		}
+
+		( new PreflightReportStore() )->release_import_claim( $report_id, (int) get_current_user_id() );
 	}
 
 	/**

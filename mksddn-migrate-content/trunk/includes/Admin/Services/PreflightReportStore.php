@@ -69,6 +69,7 @@ class PreflightReportStore {
 			'user_id'       => $user_id,
 			'report_file'   => basename( $report_file ),
 			'import_handle' => $import_handle,
+			'phase'         => 'ready',
 		);
 
 		$saved = set_transient( $key, $data, self::TTL_SECONDS );
@@ -84,11 +85,82 @@ class PreflightReportStore {
 	}
 
 	/**
+	 * Claim a ready preflight session for the import step.
+	 *
+	 * Validates report status, marks the session as importing (blocks concurrent
+	 * Start import / dismiss races), and returns the bucket.
+	 *
+	 * @param string $id      Report id.
+	 * @param int    $user_id Current user id.
+	 * @return array|WP_Error Keys: report, import_handle, phase.
+	 */
+	public function claim_for_import( string $id, int $user_id ) {
+		$id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $id );
+		if ( '' === $id ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$key  = self::KEY_PREFIX . $id;
+		$data = get_transient( $key );
+		if ( ! is_array( $data ) || (int) ( $data['user_id'] ?? 0 ) !== $user_id ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$report = $this->resolve_report_payload( $data, $id );
+		if ( null === $report ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$status = isset( $report['status'] ) ? sanitize_key( (string) $report['status'] ) : 'ok';
+		$errors = isset( $report['errors'] ) && is_array( $report['errors'] ) ? $report['errors'] : array();
+		if ( 'error' === $status || array() !== $errors ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_blocked',
+				__( 'This preflight report has errors. Resolve them and run preflight again before importing.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$handle = isset( $data['import_handle'] ) && is_array( $data['import_handle'] ) ? $data['import_handle'] : array();
+		if ( array() === $handle ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_invalid',
+				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$phase = isset( $data['phase'] ) ? sanitize_key( (string) $data['phase'] ) : 'ready';
+		if ( 'importing' === $phase ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_busy',
+				__( 'Import already started for this preflight session. Finish or wait for it to complete before starting again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		$data['phase'] = 'importing';
+		set_transient( $key, $data, self::TTL_SECONDS );
+
+		return array(
+			'report'        => $report,
+			'import_handle' => $handle,
+			'phase'         => 'importing',
+		);
+	}
+
+	/**
 	 * Load stored bucket (report + handle) if valid for the user.
 	 *
 	 * @param string $id      Report id.
 	 * @param int    $user_id Current user id.
-	 * @return array|null Keys: report, import_handle; or null.
+	 * @return array|null Keys: report, import_handle, phase; or null.
 	 */
 	public function get_bucket_for_user( string $id, int $user_id ): ?array {
 		$id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $id );
@@ -111,10 +183,45 @@ class PreflightReportStore {
 			return null;
 		}
 
+		$phase = isset( $data['phase'] ) ? sanitize_key( (string) $data['phase'] ) : 'ready';
+
 		return array(
 			'report'        => $report,
 			'import_handle' => $handle,
+			'phase'         => '' !== $phase ? $phase : 'ready',
 		);
+	}
+
+	/**
+	 * Release an import claim so the user can retry or dismiss after a failed start.
+	 *
+	 * Only resets phase from importing → ready; does not delete the report or handle.
+	 *
+	 * @param string $id      Report id.
+	 * @param int    $user_id Current user id.
+	 * @return bool True when phase was reset.
+	 */
+	public function release_import_claim( string $id, int $user_id ): bool {
+		$id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $id );
+		if ( '' === $id ) {
+			return false;
+		}
+
+		$key  = self::KEY_PREFIX . $id;
+		$data = get_transient( $key );
+		if ( ! is_array( $data ) || (int) ( $data['user_id'] ?? 0 ) !== $user_id ) {
+			return false;
+		}
+
+		$phase = isset( $data['phase'] ) ? sanitize_key( (string) $data['phase'] ) : 'ready';
+		if ( 'importing' !== $phase ) {
+			return false;
+		}
+
+		$data['phase'] = 'ready';
+		set_transient( $key, $data, self::TTL_SECONDS );
+
+		return true;
 	}
 
 	/**

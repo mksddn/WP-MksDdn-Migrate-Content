@@ -2,7 +2,7 @@
 /**
  * @file: ImportRequestHandler.php
  * @description: Handler for import request operations
- * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator, Admin\Services\PreflightReportStore, Admin\Services\NotificationService, Support\ImportArtifactCleanup
+ * @dependencies: Admin\Services\SelectedContentImportService, Admin\Services\FullSiteImportService, Admin\Services\ThemeImportService, Admin\Services\UnifiedImportOrchestrator, Admin\Services\PreflightReportStore, Admin\Services\NotificationService, Support\ImportArtifactCleanup, Themes\ThemePreviewStore, Users\UserPreviewStore
  * @created: 2024-12-15
  */
 
@@ -17,7 +17,11 @@ use MksDdn\MigrateContent\Admin\Services\ThemeImportService;
 use MksDdn\MigrateContent\Admin\Services\UnifiedImportOrchestrator;
 use MksDdn\MigrateContent\Contracts\ImportRequestHandlerInterface;
 use MksDdn\MigrateContent\Contracts\NotificationServiceInterface;
+use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
+use MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface;
 use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
+use MksDdn\MigrateContent\Themes\ThemePreviewStore;
+use MksDdn\MigrateContent\Users\UserPreviewStore;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -66,6 +70,20 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	private PreflightReportStore $preflight_report_store;
 
 	/**
+	 * Theme preview store.
+	 *
+	 * @var ThemePreviewStoreInterface
+	 */
+	private ThemePreviewStoreInterface $theme_preview_store;
+
+	/**
+	 * User preview store.
+	 *
+	 * @var UserPreviewStoreInterface
+	 */
+	private UserPreviewStoreInterface $user_preview_store;
+
+	/**
 	 * Notification service.
 	 *
 	 * @var NotificationServiceInterface
@@ -82,6 +100,8 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	 * @param ThemeImportService|null            $theme_import_service    Theme import service.
 	 * @param PreflightReportStore|null          $preflight_report_store  Preflight report store.
 	 * @param NotificationServiceInterface|null  $notifications           Notification service.
+	 * @param ThemePreviewStoreInterface|null    $theme_preview_store     Theme preview store.
+	 * @param UserPreviewStoreInterface|null     $user_preview_store      User preview store.
 	 * @since 1.0.0
 	 */
 	public function __construct(
@@ -91,7 +111,9 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 		?UnifiedImportOrchestrator $orchestrator = null,
 		?ThemeImportService $theme_import_service = null,
 		?PreflightReportStore $preflight_report_store = null,
-		?NotificationServiceInterface $notifications = null
+		?NotificationServiceInterface $notifications = null,
+		?ThemePreviewStoreInterface $theme_preview_store = null,
+		?UserPreviewStoreInterface $user_preview_store = null
 	) {
 		$this->selected_import_service = $selected_import_service ?? new SelectedContentImportService();
 		$this->full_import_service      = $full_import_service ?? new FullSiteImportService();
@@ -102,6 +124,8 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 		$this->theme_import_service     = $theme_import_service ?? new ThemeImportService();
 		$this->preflight_report_store   = $preflight_report_store ?? new PreflightReportStore();
 		$this->notifications            = $notifications ?? new NotificationService();
+		$this->theme_preview_store      = $theme_preview_store ?? new ThemePreviewStore();
+		$this->user_preview_store       = $user_preview_store ?? new UserPreviewStore();
 	}
 
 	/**
@@ -169,6 +193,9 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	/**
 	 * Dismiss a preflight report and keep the archive under imports/ for reuse.
 	 *
+	 * Invalidates theme/user preview sessions that still reference this report or
+	 * staged archive so apply cannot run against a moved/missing path.
+	 *
 	 * @return void
 	 * @since 2.7.2
 	 */
@@ -193,10 +220,23 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 			);
 		}
 
-		$kept = false;
-		if ( ! empty( $bucket['import_handle'] ) && is_array( $bucket['import_handle'] ) ) {
-			$kept = ImportArtifactCleanup::persist_import_handle_for_reuse( $bucket['import_handle'] );
+		$phase = isset( $bucket['phase'] ) ? sanitize_key( (string) $bucket['phase'] ) : 'ready';
+		if ( 'importing' === $phase ) {
+			$this->notifications->redirect_with_notice(
+				'error',
+				__( 'Cannot dismiss this preflight report while import is in progress. Finish the import (or wait for it to complete) first.', 'mksddn-migrate-content' )
+			);
 		}
+
+		$handle = ! empty( $bucket['import_handle'] ) && is_array( $bucket['import_handle'] )
+			? $bucket['import_handle']
+			: array();
+		$paths  = ImportArtifactCleanup::paths_from_import_handle( $handle );
+
+		$this->theme_preview_store->delete_related_to_preflight( $report_id, $paths, $user_id );
+		$this->user_preview_store->delete_related_to_preflight( $report_id, $paths, $user_id );
+
+		$kept = array() !== $handle ? ImportArtifactCleanup::persist_import_handle_for_reuse( $handle ) : false;
 
 		$this->preflight_report_store->delete_for_user( $report_id, $user_id );
 
@@ -214,4 +254,3 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 	}
 
 }
-

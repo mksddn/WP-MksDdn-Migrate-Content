@@ -229,6 +229,16 @@ $mksddn_mc_preflight_post_type_label = static function ( string $post_type ): st
 					(int) $mksddn_mc_summary['fields_changed_count']
 				)
 			);
+			if ( ! empty( $mksddn_mc_summary['field_diff_omitted'] ) ) {
+				echo ' ';
+				echo esc_html(
+					sprintf(
+						/* translators: %d: number of content items skipped in field-level analysis */
+						__( '(%d more content items not included in this total.)', 'mksddn-migrate-content' ),
+						(int) $mksddn_mc_summary['field_diff_omitted']
+					)
+				);
+			}
 			?>
 		</p>
 	<?php endif; ?>

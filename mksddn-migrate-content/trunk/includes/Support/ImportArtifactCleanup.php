@@ -111,6 +111,54 @@ final class ImportArtifactCleanup {
 	}
 
 	/**
+	 * Resolve absolute archive paths referenced by a preflight import handle.
+	 *
+	 * Used to invalidate preview sessions that still point at the staged/chunk path.
+	 *
+	 * @param array $handle Import handle from PreflightReportStore.
+	 * @return string[] Absolute paths (may be empty).
+	 */
+	public static function paths_from_import_handle( array $handle ): array {
+		$paths       = array();
+		$source_type = isset( $handle['source_type'] ) ? sanitize_key( (string) $handle['source_type'] ) : '';
+
+		if ( 'staged' === $source_type ) {
+			$path = isset( $handle['staged_path'] ) ? (string) $handle['staged_path'] : '';
+			if ( '' !== $path ) {
+				$paths[] = $path;
+			}
+		}
+
+		if ( 'chunked' === $source_type ) {
+			$chunk_job_id = isset( $handle['chunk_job_id'] ) ? sanitize_text_field( (string) $handle['chunk_job_id'] ) : '';
+			if ( '' !== $chunk_job_id ) {
+				$job = ( new ChunkJobRepository() )->find( $chunk_job_id );
+				if ( $job ) {
+					$path = $job->get_file_path();
+					if ( is_string( $path ) && '' !== $path ) {
+						$paths[] = $path;
+					}
+				}
+			}
+		}
+
+		if ( 'server' === $source_type ) {
+			$server_file = isset( $handle['server_file'] ) ? sanitize_file_name( (string) $handle['server_file'] ) : '';
+			if ( '' !== $server_file ) {
+				$paths[] = trailingslashit( PluginConfig::imports_dir() ) . $server_file;
+			}
+		}
+
+		$normalized = array();
+		foreach ( $paths as $path ) {
+			$real = realpath( $path );
+			$normalized[] = false !== $real ? $real : $path;
+		}
+
+		return array_values( array_unique( $normalized ) );
+	}
+
+	/**
 	 * Rename an ephemeral backup into imports/ and drop chunk-job metadata.
 	 *
 	 * Prefers rename (no second copy). Falls back to copy+delete for small files

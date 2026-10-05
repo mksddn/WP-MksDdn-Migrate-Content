@@ -230,7 +230,9 @@ class AdminServiceProvider implements ServiceProviderInterface {
 					$container->get( UnifiedImportOrchestrator::class ),
 					$container->get( ThemeImportService::class ),
 					$container->get( PreflightReportStore::class ),
-					$container->get( NotificationServiceInterface::class )
+					$container->get( NotificationServiceInterface::class ),
+					$container->get( ThemePreviewStoreInterface::class ),
+					$container->get( \MksDdn\MigrateContent\Contracts\UserPreviewStoreInterface::class )
 				);
 			}
 		);
