@@ -30,6 +30,13 @@ final class ImportArtifactCleanup {
 	private const COPY_FALLBACK_MAX_BYTES = 32 * MB_IN_BYTES;
 
 	/**
+	 * Retention for preflight report JSON bodies (must match PreflightReportStore::TTL_SECONDS).
+	 *
+	 * Staged archives keep the longer default TTL; report files are session-scoped.
+	 */
+	private const REPORT_JSON_TTL_SECONDS = 900;
+
+	/**
 	 * Promote a managed archive (or resolve a chunk job) into imports/ for reuse.
 	 *
 	 * Used on cancel/dismiss paths. Files already under imports/ are left in place.
@@ -253,8 +260,8 @@ final class ImportArtifactCleanup {
 			return;
 		}
 
-		$cutoff = time() - max( 60, $ttl );
-		$files  = glob( trailingslashit( $dir ) . '*' );
+		$now   = time();
+		$files = glob( trailingslashit( $dir ) . '*' );
 		if ( ! is_array( $files ) ) {
 			return;
 		}
@@ -265,7 +272,15 @@ final class ImportArtifactCleanup {
 			}
 
 			$mtime = filemtime( $path );
-			if ( false === $mtime || $mtime >= $cutoff ) {
+			if ( false === $mtime ) {
+				continue;
+			}
+
+			$file_ttl = self::is_preflight_report_json( $path )
+				? self::REPORT_JSON_TTL_SECONDS
+				: max( 60, $ttl );
+
+			if ( $mtime >= ( $now - $file_ttl ) ) {
 				continue;
 			}
 
@@ -273,6 +288,16 @@ final class ImportArtifactCleanup {
 				FilesystemHelper::delete( $path );
 			}
 		}
+	}
+
+	/**
+	 * Whether path is a file-backed preflight report JSON (short TTL).
+	 *
+	 * @param string $path Absolute path.
+	 * @return bool
+	 */
+	private static function is_preflight_report_json( string $path ): bool {
+		return (bool) preg_match( '/^report-[a-zA-Z0-9_-]+\.json$/', basename( $path ) );
 	}
 
 	/**

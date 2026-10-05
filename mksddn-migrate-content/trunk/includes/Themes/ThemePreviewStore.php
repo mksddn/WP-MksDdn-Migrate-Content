@@ -30,9 +30,9 @@ class ThemePreviewStore implements ThemePreviewStoreInterface {
 	 * Save preview payload and return generated ID.
 	 *
 	 * @param array $payload Preview data.
-	 * @return string
+	 * @return string|\WP_Error
 	 */
-	public function create( array $payload ): string {
+	public function create( array $payload ) {
 		$this->cleanup_expired();
 
 		$id   = wp_generate_uuid4();
@@ -45,7 +45,14 @@ class ThemePreviewStore implements ThemePreviewStoreInterface {
 			$payload
 		);
 
-		set_transient( $this->build_key( $id ), $data, self::TTL );
+		$saved = set_transient( $this->build_key( $id ), $data, self::TTL );
+		if ( ! $saved ) {
+			return new \WP_Error(
+				'mksddn_mc_theme_preview_save',
+				__( 'Could not store the theme preview session. Check object cache / database limits and try again.', 'mksddn-migrate-content' )
+			);
+		}
+
 		$this->store_index_entry( $id, $data );
 
 		return $id;

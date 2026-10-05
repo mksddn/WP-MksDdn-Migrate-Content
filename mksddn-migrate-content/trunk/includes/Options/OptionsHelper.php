@@ -160,6 +160,36 @@ class OptionsHelper {
 	}
 
 	/**
+	 * Load unformatted ACF values for one Options Page, scoped by menu_slug.
+	 *
+	 * Matches export semantics (`get_field( …, false )`) and does not call
+	 * `get_fields( $post_id )`, which would pull sibling Options Page values
+	 * when several pages share the same post_id.
+	 *
+	 * @param string          $menu_slug Options page menu_slug.
+	 * @param int|string|null $post_id   Optional post_id; null uses the registered page post_id.
+	 * @return array<string, mixed>
+	 */
+	public function get_unformatted_field_values( string $menu_slug, $post_id = null ): array {
+		$slug = sanitize_key( $menu_slug );
+		if ( '' === $slug ) {
+			return array();
+		}
+
+		$page = $this->find_options_page_by_slug( $slug );
+		if ( null === $page ) {
+			return array();
+		}
+
+		$resolved_post_id = null !== $post_id && '' !== $post_id
+			? $post_id
+			: ( $page['post_id'] ?? 'options' );
+
+		$export = $this->get_acf_fields_for_options_page( $slug, $resolved_post_id );
+		return is_array( $export['values'] ) ? $export['values'] : array();
+	}
+
+	/**
 	 * Load ACF field values and type schema for one Options Page.
 	 *
 	 * Does not fall back to get_fields( $post_id ): a shared post_id would

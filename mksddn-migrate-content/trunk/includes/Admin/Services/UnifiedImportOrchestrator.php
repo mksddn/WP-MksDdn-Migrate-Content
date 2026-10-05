@@ -15,6 +15,7 @@ use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
+use MksDdn\MigrateContent\Filesystem\ThemeFileDiffBuilder;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
@@ -226,7 +227,7 @@ class UnifiedImportOrchestrator {
 			$this->log( 'Routing to full site import service.' );
 			$this->route_to_full_import( $file_info );
 		} elseif ( 'themes' === $import_type ) {
-			$this->route_to_theme_preview( $file_info );
+			$this->route_to_theme_preview( $file_info, $preflight_report_id );
 		} else {
 			$this->route_to_selected_import( $file_info );
 		}
@@ -568,19 +569,61 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Route to theme preview step before import.
 	 *
-	 * @param array $file_info File information.
+	 * @param array  $file_info           File information.
+	 * @param string $preflight_report_id Preflight report id (to reuse theme_files).
 	 * @return void
 	 * @since 2.1.0
 	 */
-	private function route_to_theme_preview( array $file_info ): void {
+	private function route_to_theme_preview( array $file_info, string $preflight_report_id = '' ): void {
 		$preview_payload = $this->prepare_file_for_preview( $file_info );
 
 		if ( is_wp_error( $preview_payload ) ) {
 			wp_die( esc_html( $preview_payload->get_error_message() ) );
 		}
 
+		$theme_files = $this->theme_files_from_preflight( $preflight_report_id );
+		if ( null === $theme_files ) {
+			$diff = ( new ThemeFileDiffBuilder() )->build( (string) ( $file_info['path'] ?? '' ) );
+			if ( ! is_wp_error( $diff ) && ! empty( $diff['themes'] ) && is_array( $diff['themes'] ) ) {
+				$theme_files = $diff['themes'];
+			}
+		}
+		if ( is_array( $theme_files ) ) {
+			// Keep counts only in the theme-preview transient; path samples stay on the preflight report.
+			$preview_payload['theme_files'] = ThemeFileDiffBuilder::slim_for_preview_store( $theme_files );
+		}
+		if ( '' !== $preflight_report_id ) {
+			$preview_payload['preflight_report_id'] = $preflight_report_id;
+		}
+
 		$preview_id = $this->theme_preview_store->create( $preview_payload );
+		if ( is_wp_error( $preview_id ) ) {
+			wp_die( esc_html( $preview_id->get_error_message() ) );
+		}
 		$this->response_handler->redirect_to_theme_preview( $preview_id );
+	}
+
+	/**
+	 * Pull theme_files inventory from a still-valid preflight report.
+	 *
+	 * @param string $preflight_report_id Report id.
+	 * @return array|null
+	 */
+	private function theme_files_from_preflight( string $preflight_report_id ): ?array {
+		if ( '' === $preflight_report_id ) {
+			return null;
+		}
+		$report = $this->preflight_report_store->get_for_user( $preflight_report_id, (int) get_current_user_id() );
+		if ( ! is_array( $report ) ) {
+			return null;
+		}
+		$estimated = isset( $report['estimated_changes'] ) && is_array( $report['estimated_changes'] )
+			? $report['estimated_changes']
+			: array();
+		if ( empty( $estimated['theme_files'] ) || ! is_array( $estimated['theme_files'] ) ) {
+			return null;
+		}
+		return $estimated['theme_files'];
 	}
 
 	/**
@@ -631,7 +674,16 @@ class UnifiedImportOrchestrator {
 	 * @return void
 	 */
 	private function run_preflight( array $file_info, string $import_type ): void {
-		$report    = $this->preflight_service->analyze( $file_info, $import_type );
+		$this->log( 'Running preflight analysis for type=' . $import_type );
+		$report = $this->preflight_service->analyze( $file_info, $import_type );
+		$this->log(
+			sprintf(
+				'Preflight analysis done status=%s items=%s',
+				isset( $report['status'] ) ? (string) $report['status'] : '?',
+				isset( $report['summary']['item_count'] ) ? (string) (int) $report['summary']['item_count'] : '-'
+			)
+		);
+
 		$report_id = wp_generate_password( 24, false, false );
 		$handle    = $this->build_import_handle( $file_info );
 
@@ -639,8 +691,14 @@ class UnifiedImportOrchestrator {
 			wp_die( esc_html( $handle->get_error_message() ) );
 		}
 
-		$this->preflight_report_store->save( (int) get_current_user_id(), $report, $handle, $report_id );
-		$this->response_handler->redirect_to_preflight_report( $report_id );
+		$saved = $this->preflight_report_store->save( (int) get_current_user_id(), $report, $handle, $report_id );
+		if ( is_wp_error( $saved ) ) {
+			$this->log( 'Preflight save failed: ' . $saved->get_error_message() );
+			wp_die( esc_html( $saved->get_error_message() ) );
+		}
+
+		$this->log( 'Preflight saved id=' . $saved );
+		$this->response_handler->redirect_to_preflight_report( $saved );
 	}
 
 	/**

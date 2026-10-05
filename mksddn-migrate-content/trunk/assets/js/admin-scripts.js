@@ -112,7 +112,7 @@
 	 */
 	function initFinalImportSubmitHandler() {
 		const i18n = (window.mksddnMcAdmin || {}).i18n || {};
-		const forms = document.querySelectorAll('.mksddn-mc-preflight-import-form, .mksddn-mc-user-plan');
+		const forms = document.querySelectorAll('.mksddn-mc-preflight-import-form, .mksddn-mc-user-plan, .mksddn-mc-theme-plan');
 
 		forms.forEach(function(form) {
 			let busy = false;
@@ -140,11 +140,46 @@
 		});
 	}
 
+	/**
+	 * Toggle Replace/Merge summary blocks on the theme preview screen.
+	 */
+	function initThemeModeSummaryToggle() {
+		const form = document.querySelector('.mksddn-mc-theme-plan');
+		if (!form) {
+			return;
+		}
+
+		const radios = form.querySelectorAll('input[name="import_mode"]');
+		const summaries = document.querySelectorAll('.mksddn-mc-theme-mode-summary');
+		if (!radios.length || !summaries.length) {
+			return;
+		}
+
+		function applyMode(mode) {
+			summaries.forEach(function(block) {
+				const blockMode = block.getAttribute('data-mode') || '';
+				block.hidden = blockMode !== mode;
+			});
+		}
+
+		radios.forEach(function(radio) {
+			radio.addEventListener('change', function() {
+				if (radio.checked) {
+					applyMode(radio.value);
+				}
+			});
+		});
+
+		const checked = form.querySelector('input[name="import_mode"]:checked');
+		applyMode(checked ? checked.value : 'replace');
+	}
+
 	// Initialize progress bar and import helpers when DOM is ready.
 	function init() {
 		window.mksddnMcProgress = initProgressBar();
 		initUserPlanToggle();
 		initFinalImportSubmitHandler();
+		initThemeModeSummaryToggle();
 	}
 
 	if (document.readyState === 'loading') {

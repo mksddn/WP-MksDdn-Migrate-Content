@@ -23,9 +23,9 @@ interface ThemePreviewStoreInterface {
 	 * Save preview payload and return generated ID.
 	 *
 	 * @param array $payload Preview data.
-	 * @return string
+	 * @return string|\WP_Error Preview id or error when the session could not be stored.
 	 */
-	public function create( array $payload ): string;
+	public function create( array $payload );
 
 	/**
 	 * Fetch preview by ID.

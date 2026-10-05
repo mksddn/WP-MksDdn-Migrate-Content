@@ -593,8 +593,14 @@ class AdminPageController {
 		}
 
 		return array(
-			'id'            => $preview_id,
-			'original_name' => $preview['original_name'] ?? '',
+			'id'                  => $preview_id,
+			'original_name'       => $preview['original_name'] ?? '',
+			'theme_files'         => ( ! empty( $preview['theme_files'] ) && is_array( $preview['theme_files'] ) )
+				? $preview['theme_files']
+				: array(),
+			'preflight_report_id' => isset( $preview['preflight_report_id'] )
+				? sanitize_text_field( (string) $preview['preflight_report_id'] )
+				: '',
 		);
 	}
 
