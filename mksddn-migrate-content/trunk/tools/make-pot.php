@@ -164,11 +164,20 @@ final class PotGenerator {
 
 		for ( $index = 0; $index < $total; $index++ ) {
 			$token = $tokens[ $index ];
-			if ( ! is_array( $token ) || T_STRING !== $token[0] ) {
+			if ( ! is_array( $token ) ) {
 				continue;
 			}
 
-			$functionName = $token[1];
+			// PHP 8+ tokenizes \esc_html__() as T_NAME_FULLY_QUALIFIED, not T_STRING.
+			$token_id = $token[0];
+			if ( T_STRING !== $token_id
+				&& ! ( defined( 'T_NAME_FULLY_QUALIFIED' ) && T_NAME_FULLY_QUALIFIED === $token_id )
+				&& ! ( defined( 'T_NAME_QUALIFIED' ) && T_NAME_QUALIFIED === $token_id )
+			) {
+				continue;
+			}
+
+			$functionName = ltrim( $token[1], '\\' );
 			if ( ! isset( $this->functionMap[ $functionName ] ) ) {
 				continue;
 			}

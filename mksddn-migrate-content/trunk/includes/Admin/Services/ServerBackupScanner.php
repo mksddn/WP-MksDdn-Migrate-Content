@@ -25,6 +25,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ServerBackupScanner {
 
 	/**
+	 * Maximum number of files accepted by a single bulk-delete request.
+	 *
+	 * @since 2.6.0
+	 */
+	public const MAX_BULK_DELETE = 100;
+
+	/**
 	 * Cache TTL in seconds.
 	 *
 	 * @var int
@@ -300,11 +307,12 @@ class ServerBackupScanner {
 	/**
 	 * Delete an import backup file from the server imports directory.
 	 *
-	 * @param string $filename Import filename (basename only).
+	 * @param string $filename               Import filename (basename only).
+	 * @param bool   $invalidate_list_cache Whether to clear the scan cache after delete.
 	 * @return true|WP_Error True on success, WP_Error on failure.
 	 * @since 2.5.0
 	 */
-	public function delete_file( string $filename ) {
+	public function delete_file( string $filename, bool $invalidate_list_cache = true ) {
 		$file = $this->get_file( $filename );
 		if ( is_wp_error( $file ) ) {
 			return $file;
@@ -330,7 +338,9 @@ class ServerBackupScanner {
 			);
 		}
 
-		$this->invalidate_cache();
+		if ( $invalidate_list_cache ) {
+			$this->invalidate_cache();
+		}
 
 		PluginLogger::log(
 			sprintf( 'Deleted import file: %s', $file['name'] ),
@@ -338,6 +348,48 @@ class ServerBackupScanner {
 		);
 
 		return true;
+	}
+
+	/**
+	 * Delete multiple import backup files from the server imports directory.
+	 *
+	 * @param array $filenames List of import filenames (basename only).
+	 * @return array{deleted: string[], errors: array<string, string>} Deleted names and per-file error messages.
+	 * @since 2.6.0
+	 */
+	public function delete_files( array $filenames ): array {
+		$deleted = array();
+		$errors  = array();
+		$seen    = array();
+
+		foreach ( $filenames as $filename ) {
+			if ( ! is_string( $filename ) ) {
+				continue;
+			}
+
+			$filename = basename( sanitize_text_field( $filename ) );
+			if ( '' === $filename || isset( $seen[ $filename ] ) ) {
+				continue;
+			}
+			$seen[ $filename ] = true;
+
+			$result = $this->delete_file( $filename, false );
+			if ( is_wp_error( $result ) ) {
+				$errors[ $filename ] = $result->get_error_message();
+				continue;
+			}
+
+			$deleted[] = $filename;
+		}
+
+		if ( ! empty( $deleted ) ) {
+			$this->invalidate_cache();
+		}
+
+		return array(
+			'deleted' => $deleted,
+			'errors'  => $errors,
+		);
 	}
 
 	/**

@@ -15,6 +15,7 @@ use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Chunking\ChunkJobRepository;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Contracts\ThemePreviewStoreInterface;
+use MksDdn\MigrateContent\Filesystem\ThemeFileDiffBuilder;
 use MksDdn\MigrateContent\Services\PluginLogger;
 use MksDdn\MigrateContent\Support\ImportArtifactCleanup;
 use MksDdn\MigrateContent\Support\PreflightStagingPath;
@@ -110,6 +111,13 @@ class UnifiedImportOrchestrator {
 	private ?string $fatal_memory_redirect_url = null;
 
 	/**
+	 * Active preflight report ID during import execution (for claim release on fatal abort).
+	 *
+	 * @var string
+	 */
+	private string $active_preflight_report_id = '';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param SelectedContentImportService|null $selected_import_service Selected content import service.
@@ -176,6 +184,7 @@ class UnifiedImportOrchestrator {
 		$preflight_report_id = isset( $request_data['preflight_report_id'] )
 			? sanitize_text_field( (string) $request_data['preflight_report_id'] )
 			: '';
+		$this->active_preflight_report_id = $preflight_report_id;
 
 		$this->log(
 			sprintf(
@@ -210,6 +219,9 @@ class UnifiedImportOrchestrator {
 
 		if ( is_wp_error( $import_type ) ) {
 			$this->log( 'Import type detection failed: ' . $import_type->get_error_message() );
+			if ( '' !== $preflight_report_id ) {
+				$this->preflight_report_store->release_import_claim( $preflight_report_id, (int) get_current_user_id() );
+			}
 			wp_die( esc_html( $import_type->get_error_message() ) );
 		}
 
@@ -224,11 +236,11 @@ class UnifiedImportOrchestrator {
 		// Second step: run the real import using the same file reference from preflight.
 		if ( 'full' === $import_type ) {
 			$this->log( 'Routing to full site import service.' );
-			$this->route_to_full_import( $file_info );
+			$this->route_to_full_import( $file_info, $preflight_report_id );
 		} elseif ( 'themes' === $import_type ) {
-			$this->route_to_theme_preview( $file_info );
+			$this->route_to_theme_preview( $file_info, $preflight_report_id );
 		} else {
-			$this->route_to_selected_import( $file_info );
+			$this->route_to_selected_import( $file_info, $preflight_report_id );
 		}
 	}
 
@@ -240,6 +252,25 @@ class UnifiedImportOrchestrator {
 	 * @since 2.0.0
 	 */
 	private function resolve_file_source( array $request_data ) {
+		$import_source = isset( $request_data['import_source'] )
+			? sanitize_text_field( (string) $request_data['import_source'] )
+			: '';
+
+		// Server tab must provide an explicit backup basename (do not fall through to upload).
+		if ( 'server' === $import_source ) {
+			$server_file = isset( $request_data['server_file'] )
+				? sanitize_text_field( (string) $request_data['server_file'] )
+				: '';
+			if ( '' === $server_file ) {
+				return new WP_Error(
+					'mksddn_mc_server_file_missing',
+					__( 'Please select a file from the server.', 'mksddn-migrate-content' )
+				);
+			}
+
+			return $this->resolve_server_file( $server_file );
+		}
+
 		// Check for chunked upload.
 		if ( ! empty( $request_data['chunk_job_id'] ) ) {
 			$original_name = isset( $request_data['chunk_original_name'] )
@@ -249,7 +280,7 @@ class UnifiedImportOrchestrator {
 			return $this->resolve_chunked_file( (string) $request_data['chunk_job_id'], $original_name );
 		}
 
-		// Check for server file.
+		// Check for server file (legacy / non-tab submissions).
 		if ( ! empty( $request_data['server_file'] ) ) {
 			return $this->resolve_server_file( $request_data['server_file'] );
 		}
@@ -353,44 +384,45 @@ class UnifiedImportOrchestrator {
 	 * @return array|WP_Error File info or error.
 	 */
 	private function resolve_preflight_import( string $report_id ) {
-		$bucket = $this->preflight_report_store->get_bucket_for_user( $report_id, (int) get_current_user_id() );
-		if ( ! $bucket || empty( $bucket['import_handle'] ) ) {
-			return new WP_Error(
-				'mksddn_mc_preflight_invalid',
-				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
-			);
+		$user_id = (int) get_current_user_id();
+		$bucket  = $this->preflight_report_store->claim_for_import( $report_id, $user_id );
+		if ( is_wp_error( $bucket ) ) {
+			return $bucket;
 		}
 
 		$h  = $bucket['import_handle'];
 		$st = isset( $h['source_type'] ) ? sanitize_key( (string) $h['source_type'] ) : '';
 
 		if ( 'chunked' === $st ) {
-			$jid = isset( $h['chunk_job_id'] ) ? sanitize_text_field( (string) $h['chunk_job_id'] ) : '';
+			$jid  = isset( $h['chunk_job_id'] ) ? sanitize_text_field( (string) $h['chunk_job_id'] ) : '';
 			$orig = isset( $h['original_name'] ) ? sanitize_file_name( (string) $h['original_name'] ) : '';
-			return '' !== $jid ? $this->resolve_chunked_file( $jid, $orig ) : new WP_Error(
+			$result = '' !== $jid ? $this->resolve_chunked_file( $jid, $orig ) : new WP_Error(
 				'mksddn_mc_preflight_invalid',
 				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
 			);
+			return $this->with_claim_release_on_error( $result, $report_id, $user_id );
 		}
 
 		if ( 'server' === $st ) {
-			$sf = isset( $h['server_file'] ) ? sanitize_text_field( (string) $h['server_file'] ) : '';
-			return '' !== $sf ? $this->resolve_server_file( $sf ) : new WP_Error(
+			$sf     = isset( $h['server_file'] ) ? sanitize_text_field( (string) $h['server_file'] ) : '';
+			$result = '' !== $sf ? $this->resolve_server_file( $sf ) : new WP_Error(
 				'mksddn_mc_preflight_invalid',
 				__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
 			);
+			return $this->with_claim_release_on_error( $result, $report_id, $user_id );
 		}
 
 		if ( 'staged' === $st ) {
 			$path = isset( $h['staged_path'] ) ? (string) $h['staged_path'] : '';
 			if ( '' === $path || ! PreflightStagingPath::is_allowed_path( $path ) ) {
+				$this->preflight_report_store->release_import_claim( $report_id, $user_id );
 				return new WP_Error(
 					'mksddn_mc_staged_missing',
 					__( 'Staged import file is missing. Run preflight again.', 'mksddn-migrate-content' )
 				);
 			}
 
-			$ext = isset( $h['extension'] ) ? strtolower( (string) $h['extension'] ) : '';
+			$ext  = isset( $h['extension'] ) ? strtolower( (string) $h['extension'] ) : '';
 			$name = isset( $h['original_name'] ) ? (string) $h['original_name'] : basename( $path );
 
 			return array(
@@ -401,10 +433,27 @@ class UnifiedImportOrchestrator {
 			);
 		}
 
+		$this->preflight_report_store->release_import_claim( $report_id, $user_id );
+
 		return new WP_Error(
 			'mksddn_mc_preflight_invalid',
 			__( 'Preflight session expired or invalid. Run preflight again.', 'mksddn-migrate-content' )
 		);
+	}
+
+	/**
+	 * Release the import claim when a post-claim resolve step fails.
+	 *
+	 * @param array|WP_Error $result    Resolve result.
+	 * @param string         $report_id Preflight report id.
+	 * @param int            $user_id   Current user id.
+	 * @return array|WP_Error
+	 */
+	private function with_claim_release_on_error( $result, string $report_id, int $user_id ) {
+		if ( is_wp_error( $result ) ) {
+			$this->preflight_report_store->release_import_claim( $report_id, $user_id );
+		}
+		return $result;
 	}
 
 	/**
@@ -525,11 +574,15 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Route to full site import service.
 	 *
-	 * @param array $file_info File information.
+	 * @param array  $file_info           File information.
+	 * @param string $preflight_report_id Preflight report id (stored on user preview for dismiss cleanup).
 	 * @return void
 	 * @since 2.0.0
 	 */
-	private function route_to_full_import( array $file_info ): void {
+	private function route_to_full_import( array $file_info, string $preflight_report_id = '' ): void {
+		if ( '' !== $preflight_report_id ) {
+			$_POST['preflight_report_id'] = $preflight_report_id;
+		}
 		$this->prepare_file_for_import( $file_info, 'full_import_file', 'mksddn_mc_full_import' );
 		$this->full_import_service->import();
 	}
@@ -537,11 +590,16 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Route to selected content import service.
 	 *
-	 * @param array $file_info File information.
+	 * @param array  $file_info           File information.
+	 * @param string $preflight_report_id Preflight report id (for claim release on failure).
 	 * @return void
 	 * @since 2.0.0
 	 */
-	private function route_to_selected_import( array $file_info ): void {
+	private function route_to_selected_import( array $file_info, string $preflight_report_id = '' ): void {
+		if ( '' !== $preflight_report_id ) {
+			$_POST['preflight_report_id'] = $preflight_report_id;
+		}
+
 		if ( 'chunked' === $file_info['source'] ) {
 			// For chunked uploads, set chunk data in POST.
 			$_POST['chunk_job_id']   = $file_info['chunk_job_id'];
@@ -568,19 +626,73 @@ class UnifiedImportOrchestrator {
 	/**
 	 * Route to theme preview step before import.
 	 *
-	 * @param array $file_info File information.
+	 * @param array  $file_info           File information.
+	 * @param string $preflight_report_id Preflight report id (to reuse theme_files).
 	 * @return void
 	 * @since 2.1.0
 	 */
-	private function route_to_theme_preview( array $file_info ): void {
+	private function route_to_theme_preview( array $file_info, string $preflight_report_id = '' ): void {
 		$preview_payload = $this->prepare_file_for_preview( $file_info );
 
 		if ( is_wp_error( $preview_payload ) ) {
+			if ( '' !== $preflight_report_id ) {
+				$this->preflight_report_store->release_import_claim( $preflight_report_id, (int) get_current_user_id() );
+			}
 			wp_die( esc_html( $preview_payload->get_error_message() ) );
 		}
 
+		$theme_files = $this->theme_files_from_preflight( $preflight_report_id );
+		if ( null === $theme_files ) {
+			$diff = ( new ThemeFileDiffBuilder() )->build( (string) ( $file_info['path'] ?? '' ) );
+			if ( ! is_wp_error( $diff ) && ! empty( $diff['themes'] ) && is_array( $diff['themes'] ) ) {
+				$theme_files = $diff['themes'];
+			}
+		}
+		if ( is_array( $theme_files ) ) {
+			// Keep counts only in the theme-preview transient; path samples stay on the preflight report.
+			$preview_payload['theme_files'] = ThemeFileDiffBuilder::slim_for_preview_store( $theme_files );
+		}
+		if ( '' !== $preflight_report_id ) {
+			$preview_payload['preflight_report_id'] = $preflight_report_id;
+		}
+
 		$preview_id = $this->theme_preview_store->create( $preview_payload );
+		if ( is_wp_error( $preview_id ) ) {
+			if ( '' !== $preflight_report_id ) {
+				$this->preflight_report_store->release_import_claim( $preflight_report_id, (int) get_current_user_id() );
+			}
+			wp_die( esc_html( $preview_id->get_error_message() ) );
+		}
+
+		// Preview UI is idle — release claim so dismiss/retry work; apply uses the preview session.
+		if ( '' !== $preflight_report_id ) {
+			$this->preflight_report_store->release_import_claim( $preflight_report_id, (int) get_current_user_id() );
+		}
+
 		$this->response_handler->redirect_to_theme_preview( $preview_id );
+	}
+
+	/**
+	 * Pull theme_files inventory from a still-valid preflight report.
+	 *
+	 * @param string $preflight_report_id Report id.
+	 * @return array|null
+	 */
+	private function theme_files_from_preflight( string $preflight_report_id ): ?array {
+		if ( '' === $preflight_report_id ) {
+			return null;
+		}
+		$report = $this->preflight_report_store->get_for_user( $preflight_report_id, (int) get_current_user_id() );
+		if ( ! is_array( $report ) ) {
+			return null;
+		}
+		$estimated = isset( $report['estimated_changes'] ) && is_array( $report['estimated_changes'] )
+			? $report['estimated_changes']
+			: array();
+		if ( empty( $estimated['theme_files'] ) || ! is_array( $estimated['theme_files'] ) ) {
+			return null;
+		}
+		return $estimated['theme_files'];
 	}
 
 	/**
@@ -631,7 +743,16 @@ class UnifiedImportOrchestrator {
 	 * @return void
 	 */
 	private function run_preflight( array $file_info, string $import_type ): void {
-		$report    = $this->preflight_service->analyze( $file_info, $import_type );
+		$this->log( 'Running preflight analysis for type=' . $import_type );
+		$report = $this->preflight_service->analyze( $file_info, $import_type );
+		$this->log(
+			sprintf(
+				'Preflight analysis done status=%s items=%s',
+				isset( $report['status'] ) ? (string) $report['status'] : '?',
+				isset( $report['summary']['item_count'] ) ? (string) (int) $report['summary']['item_count'] : '-'
+			)
+		);
+
 		$report_id = wp_generate_password( 24, false, false );
 		$handle    = $this->build_import_handle( $file_info );
 
@@ -639,8 +760,14 @@ class UnifiedImportOrchestrator {
 			wp_die( esc_html( $handle->get_error_message() ) );
 		}
 
-		$this->preflight_report_store->save( (int) get_current_user_id(), $report, $handle, $report_id );
-		$this->response_handler->redirect_to_preflight_report( $report_id );
+		$saved = $this->preflight_report_store->save( (int) get_current_user_id(), $report, $handle, $report_id );
+		if ( is_wp_error( $saved ) ) {
+			$this->log( 'Preflight save failed: ' . $saved->get_error_message() );
+			wp_die( esc_html( $saved->get_error_message() ) );
+		}
+
+		$this->log( 'Preflight saved id=' . $saved );
+		$this->response_handler->redirect_to_preflight_report( $saved );
 	}
 
 	/**
@@ -701,6 +828,13 @@ class UnifiedImportOrchestrator {
 				$url = $this->fatal_memory_redirect_url;
 				if ( ! is_string( $url ) || '' === $url ) {
 					return;
+				}
+
+				if ( '' !== $this->active_preflight_report_id ) {
+					$current_user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+					if ( $current_user > 0 ) {
+						( new PreflightReportStore() )->release_import_claim( $this->active_preflight_report_id, $current_user );
+					}
 				}
 
 				while ( ob_get_level() > 0 ) {

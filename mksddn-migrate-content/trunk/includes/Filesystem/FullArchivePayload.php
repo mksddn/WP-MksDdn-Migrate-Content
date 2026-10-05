@@ -29,6 +29,23 @@ class FullArchivePayload {
 	 * @return array|WP_Error
 	 */
 	public static function read( string $archive_path ) {
+		$bundle = self::read_with_manifest( $archive_path );
+		if ( is_wp_error( $bundle ) ) {
+			return $bundle;
+		}
+
+		return $bundle['payload'];
+	}
+
+	/**
+	 * Read payload and manifest.json from the archive in one open.
+	 *
+	 * Missing or invalid manifests yield an empty array (callers continue).
+	 *
+	 * @param string $archive_path Absolute archive path.
+	 * @return array{payload:array,manifest:array}|WP_Error
+	 */
+	public static function read_with_manifest( string $archive_path ) {
 		if ( '' === $archive_path || ! file_exists( $archive_path ) ) {
 			return new WP_Error( 'mksddn_mc_payload_missing', __( 'Archive payload is missing on disk.', 'mksddn-migrate-content' ) );
 		}
@@ -57,14 +74,36 @@ class FullArchivePayload {
 			return new WP_Error( 'mksddn_mc_payload_corrupted', __( 'Archive payload is corrupted or unreadable.', 'mksddn-migrate-content' ) );
 		}
 
-		return $data;
+		return array(
+			'payload'  => $data,
+			'manifest' => self::decode_manifest_json( isset( $loaded['manifest_json'] ) ? (string) $loaded['manifest_json'] : '' ),
+		);
 	}
 
 	/**
-	 * Open archive once: size check, memory raise, then read payload JSON.
+	 * Decode a raw manifest.json string.
+	 *
+	 * @param string $raw_manifest Raw JSON (may be empty).
+	 * @return array
+	 */
+	private static function decode_manifest_json( string $raw_manifest ): array {
+		if ( '' === $raw_manifest ) {
+			return array();
+		}
+
+		$manifest = json_decode( $raw_manifest, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $manifest ) ) {
+			return array();
+		}
+
+		return $manifest;
+	}
+
+	/**
+	 * Open archive once: size check, memory raise, then read payload (+ optional manifest) JSON.
 	 *
 	 * @param string $archive_path Archive path.
-	 * @return array{json:string,declared_size:int}|WP_Error
+	 * @return array{json:string,declared_size:int,manifest_json:string}|WP_Error
 	 */
 	private static function load_payload_json( string $archive_path ) {
 		if ( class_exists( ZipArchive::class ) ) {
@@ -97,6 +136,7 @@ class FullArchivePayload {
 					$payload = $zip->getFromName( 'payload/content.json' );
 				}
 
+				$manifest_raw = $zip->getFromName( 'manifest.json' );
 				$zip->close();
 
 				if ( false === $payload ) {
@@ -104,8 +144,9 @@ class FullArchivePayload {
 				}
 
 				return array(
-					'json'           => $payload,
-					'declared_size'  => $declared_size,
+					'json'          => $payload,
+					'declared_size' => $declared_size,
+					'manifest_json' => ( false !== $manifest_raw && '' !== $manifest_raw ) ? (string) $manifest_raw : '',
 				);
 			}
 		}
@@ -119,7 +160,7 @@ class FullArchivePayload {
 	 * Size is unknown before extract; memory is validated after read.
 	 *
 	 * @param string $archive_path Archive path.
-	 * @return array{json:string,declared_size:int}|WP_Error
+	 * @return array{json:string,declared_size:int,manifest_json:string}|WP_Error
 	 */
 	private static function load_payload_json_via_pclzip( string $archive_path ) {
 		if ( ! class_exists( 'PclZip' ) ) {
@@ -129,7 +170,7 @@ class FullArchivePayload {
 		$archive = new \PclZip( $archive_path );
 		$result  = $archive->extract(
 			PCLZIP_OPT_BY_NAME,
-			'payload/content.json',
+			array( 'payload/content.json', 'manifest.json' ),
 			PCLZIP_OPT_EXTRACT_AS_STRING
 		);
 
@@ -137,7 +178,21 @@ class FullArchivePayload {
 			return new WP_Error( 'mksddn_mc_payload_not_found', __( 'Full archive payload not found.', 'mksddn-migrate-content' ) );
 		}
 
-		$content = $result[0]['content'] ?? '';
+		$content       = '';
+		$manifest_json = '';
+		foreach ( $result as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+			$filename = isset( $entry['filename'] ) ? (string) $entry['filename'] : '';
+			$stored   = isset( $entry['content'] ) ? (string) $entry['content'] : '';
+			if ( 'payload/content.json' === $filename ) {
+				$content = $stored;
+			} elseif ( 'manifest.json' === $filename ) {
+				$manifest_json = $stored;
+			}
+		}
+
 		if ( '' === $content ) {
 			return new WP_Error( 'mksddn_mc_payload_empty', __( 'Full archive payload is empty.', 'mksddn-migrate-content' ) );
 		}
@@ -145,6 +200,7 @@ class FullArchivePayload {
 		return array(
 			'json'          => $content,
 			'declared_size' => 0,
+			'manifest_json' => $manifest_json,
 		);
 	}
 

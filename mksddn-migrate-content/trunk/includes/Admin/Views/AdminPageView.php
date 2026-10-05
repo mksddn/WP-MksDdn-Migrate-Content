@@ -2,14 +2,15 @@
 /**
  * @file: AdminPageView.php
  * @description: View class for rendering admin page sections
- * @dependencies: Core\View\ViewRenderer
+ * @dependencies: Core\View\ViewRenderer, Admin\Services\ContentPickerQueryService, Options\OptionsHelper
  * @created: 2024-12-15
  */
 
 namespace MksDdn\MigrateContent\Admin\Views;
 
+use MksDdn\MigrateContent\Admin\Services\ContentPickerQueryService;
 use MksDdn\MigrateContent\Core\View\ViewRenderer;
-use WP_Post;
+use MksDdn\MigrateContent\Options\OptionsHelper;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -30,15 +31,25 @@ class AdminPageView {
 	private ViewRenderer $renderer;
 
 	/**
+	 * ACF Options Pages helper.
+	 *
+	 * @var OptionsHelper
+	 */
+	private OptionsHelper $options_helper;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param ViewRenderer|null      $renderer         View renderer.
+	 * @param ViewRenderer|null  $renderer       View renderer.
+	 * @param OptionsHelper|null $options_helper ACF options helper.
 	 * @since 1.0.0
 	 */
 	public function __construct(
-		?ViewRenderer $renderer = null
+		?ViewRenderer $renderer = null,
+		?OptionsHelper $options_helper = null
 	) {
-		$this->renderer         = $renderer ?? new ViewRenderer();
+		$this->renderer       = $renderer ?? new ViewRenderer();
+		$this->options_helper = $options_helper ?? new OptionsHelper();
 	}
 
 	/**
@@ -83,18 +94,11 @@ class AdminPageView {
 		if ( 'full' === $active_tab ) {
 			$this->renderer->render( 'admin/full-site-export-section.php' );
 		} elseif ( 'selected' === $active_tab ) {
-			$exportable_types = $this->get_exportable_post_types();
-			$items_by_type    = array();
-
-			foreach ( $exportable_types as $type => $label ) {
-				$items_by_type[ $type ] = $this->get_items_for_type( $type );
-			}
-
 			$this->renderer->render(
 				'admin/selected-content-export-section.php',
 				array(
-					'exportable_types' => $exportable_types,
-					'items_by_type'    => $items_by_type,
+					'exportable_types' => ContentPickerQueryService::get_exportable_post_types(),
+					'options_pages'    => $this->get_acf_options_pages_for_ui(),
 				)
 			);
 		} else {
@@ -170,79 +174,31 @@ class AdminPageView {
 	}
 
 	/**
-	 * Get exportable post types.
+	 * List ACF Options Pages for the Selected Content export UI.
 	 *
-	 * @return array
-	 * @since 1.0.0
+	 * @return array<int, array{menu_slug:string,page_title:string,menu_title:string,post_id:string}>
 	 */
-	private function get_exportable_post_types(): array {
-		$objects = get_post_types(
-			array(
-				'show_ui' => true,
-				'public'  => true,
-			),
-			'objects'
-		);
+	private function get_acf_options_pages_for_ui(): array {
+		if ( ! $this->options_helper->is_acf_options_available() ) {
+			return array();
+		}
 
-		$types = array();
-		foreach ( $objects as $type => $object ) {
-			if ( in_array( $type, array( 'attachment', 'revision', 'nav_menu_item' ), true ) ) {
+		$pages  = $this->options_helper->get_all_options_pages();
+		$result = array();
+
+		foreach ( $pages as $page ) {
+			if ( ! is_array( $page ) ) {
 				continue;
 			}
-			$types[ $type ] = $object->labels->singular_name ?? $object->label ?? sprintf(
-				/* translators: %s: post type slug */
-				__( 'Content type: %s', 'mksddn-migrate-content' ),
-				$type
-			);
+			$formatted = $this->options_helper->format_options_page_for_ui( $page );
+			if ( '' === sanitize_key( $formatted['menu_slug'] ) ) {
+				continue;
+			}
+			$result[] = $formatted;
 		}
 
-		if ( ! isset( $types['page'] ) ) {
-			$types = array( 'page' => __( 'Page', 'mksddn-migrate-content' ) ) + $types;
-		}
-
-		return $types;
+		return $result;
 	}
-
-	/**
-	 * Get items for post type.
-	 *
-	 * @param string $type Post type.
-	 * @return WP_Post[]
-	 * @since 1.0.0
-	 */
-	private function get_items_for_type( string $type ): array {
-		$cache_key = 'mksddn_mc_export_items_' . $type;
-		$cached = wp_cache_get( $cache_key );
-
-		if ( false !== $cached ) {
-			return $cached;
-		}
-
-		if ( 'page' === $type ) {
-			$items = get_pages(
-				array(
-					'lang' => '', // Get pages from all languages (Polylang compatibility).
-				)
-			);
-		} else {
-			$items = get_posts(
-				array(
-					'post_type'      => $type,
-					'posts_per_page' => 100,
-					'post_status'    => 'publish',
-					'orderby'        => 'title',
-					'order'          => 'ASC',
-					'lang'           => '', // Get posts from all languages (Polylang compatibility).
-				)
-			);
-		}
-
-		// Cache for 5 minutes.
-		wp_cache_set( $cache_key, $items, '', 300 );
-
-		return $items;
-	}
-
 
 }
 

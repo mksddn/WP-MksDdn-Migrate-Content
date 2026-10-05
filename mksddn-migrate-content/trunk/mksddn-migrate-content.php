@@ -9,7 +9,7 @@
 Plugin Name: MksDdn Migrate Content
 Plugin URI: https://github.com/mksddn/WP-MksDdn-Migrate-Content
 Description: Reliable chunked WordPress migrations via custom .wpbkp archives — full site, selected content, and themes.
-Version: 2.7.2
+Version: 2.8.0
 Author: mksddn
 Author URI: https://github.com/mksddn
 Text Domain: mksddn-migrate-content
@@ -25,14 +25,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Constants.
-define( 'MKSDDN_MC_VERSION', '2.7.2' );
+define( 'MKSDDN_MC_VERSION', '2.8.0' );
 define( 'MKSDDN_MC_FILE', __FILE__ );
 define( 'MKSDDN_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );
 define( 'MKSDDN_MC_TEXT_DOMAIN', 'mksddn-migrate-content' );
 define( 'MKSDDN_MC_BASENAME', plugin_basename( __FILE__ ) );
 
-// I18n: For plugins hosted on WordPress.org, translations are auto-loaded since WP 4.6.
+// I18n: GlotPress / WP_LANG_DIR auto-loads since WP 4.6; bundled Domain Path
+// translations are loaded via Plugin::load_textdomain() on init.
 
 // Requirements check.
 /**

@@ -62,6 +62,11 @@ class SelectionBuilder {
 			$selection->add_widget_group( $group );
 		}
 
+		$options_page_slugs = array_map( 'sanitize_key', (array) ( $request['selected_options_page_slugs'] ?? array() ) );
+		foreach ( $options_page_slugs as $slug ) {
+			$selection->add_options_page( $slug );
+		}
+
 		return $selection;
 	}
 }

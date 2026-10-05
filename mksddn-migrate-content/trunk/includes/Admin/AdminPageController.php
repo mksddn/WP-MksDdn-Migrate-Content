@@ -8,6 +8,7 @@
 
 namespace MksDdn\MigrateContent\Admin;
 
+use MksDdn\MigrateContent\Admin\Services\ContentPickerQueryService;
 use MksDdn\MigrateContent\Admin\Services\PreflightReportStore;
 use MksDdn\MigrateContent\Admin\Services\ServerBackupScanner;
 use MksDdn\MigrateContent\Admin\Views\AdminPageView;
@@ -146,11 +147,13 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_import_full', array( $this->import_handler, 'handle_full_import' ) );
 		add_action( 'admin_post_mksddn_mc_import_theme', array( $this->import_handler, 'handle_theme_import' ) );
 		add_action( 'admin_post_mksddn_mc_unified_import', array( $this->import_handler, 'handle_unified_import' ) );
+		add_action( 'admin_post_mksddn_mc_dismiss_preflight_report', array( $this->import_handler, 'handle_dismiss_preflight_report' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_user_preview', array( $this->user_merge_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_cancel_theme_preview', array( $this->theme_preview_handler, 'handle_cancel_preview' ) );
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 		add_action( 'wp_ajax_mksddn_mc_delete_server_backup', array( $this, 'handle_ajax_delete_server_backup' ) );
+		add_action( 'wp_ajax_mksddn_mc_delete_server_backups', array( $this, 'handle_ajax_delete_server_backups' ) );
 		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
 	}
 
@@ -298,31 +301,44 @@ class AdminPageController {
 			true
 		);
 
-		// Localize script for AJAX search.
-		wp_localize_script(
-			'mksddn-mc-admin-scripts',
-			'mksddnMcSearch',
-			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'mksddn_mc_admin' ),
-				'i18n'    => array(
-					'loading'  => __( 'Loading...', 'mksddn-migrate-content' ),
-					'noResults' => __( 'No entries found', 'mksddn-migrate-content' ),
-					'error'    => __( 'Error loading entries', 'mksddn-migrate-content' ),
-					'typeMore' => __( 'Type at least 2 characters to search', 'mksddn-migrate-content' ),
-				),
-			)
-		);
+		$is_export_page = in_array( $page, array( $menu_slug, $menu_slug . '-export' ), true );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab check for asset loading.
+		$export_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'full';
+
+		if ( $is_export_page && 'selected' === $export_tab ) {
+			wp_enqueue_script(
+				'mksddn-mc-content-picker',
+				PluginConfig::assets_url() . 'js/content-picker.js',
+				array(),
+				PluginConfig::version(),
+				true
+			);
+
+			wp_localize_script(
+				'mksddn-mc-content-picker',
+				'mksddnMcContentPicker',
+				array(
+					'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+					'nonce'   => wp_create_nonce( 'mksddn_mc_admin' ),
+					'actions' => array(
+						'searchPosts' => 'mksddn_mc_search_posts',
+					),
+					'i18n'    => array(
+						'loading'   => __( 'Loading...', 'mksddn-migrate-content' ),
+						'noResults' => __( 'No entries found', 'mksddn-migrate-content' ),
+						'error'     => __( 'Error loading entries', 'mksddn-migrate-content' ),
+						'typeMore'  => __( 'Type at least 2 characters…', 'mksddn-migrate-content' ),
+					),
+				)
+			);
+		}
 
 		wp_localize_script(
 			'mksddn-mc-admin-scripts',
 			'mksddnMcAdmin',
 			array(
 				'i18n' => array(
-					'importProcessing'     => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
-					'importDone'           => __( 'Import request finished.', 'mksddn-migrate-content' ),
-					'importGatewayTimeout' => __( 'The server timed out while waiting for the import response. The import may still be running; check the site before starting it again.', 'mksddn-migrate-content' ),
-					'importRequestFailed'  => __( 'Import request failed. Check PHP error logs and try again.', 'mksddn-migrate-content' ),
+					'importProcessing' => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -340,21 +356,29 @@ class AdminPageController {
 			'mksddn-server-file-selector',
 			'mksddnServerFileSelector',
 			array(
-				'ajaxAction'       => 'mksddn_mc_get_server_backups',
-				'deleteAjaxAction' => 'mksddn_mc_delete_server_backup',
-				'nonce'            => wp_create_nonce( 'mksddn_mc_admin' ),
-				'i18n'             => array(
-					'loading'         => __( 'Loading...', 'mksddn-migrate-content' ),
-					'selectFile'      => __( 'Select a file...', 'mksddn-migrate-content' ),
-					'noFiles'         => __( 'No backup files found', 'mksddn-migrate-content' ),
-					'loadError'       => __( 'Error loading files', 'mksddn-migrate-content' ),
-					'pleaseSelect'    => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
-					'deleteConfirm'   => __( 'Delete this backup file from the server? This cannot be undone.', 'mksddn-migrate-content' ),
-					'deleteSuccess'   => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
-					'deleteError'     => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
-					'deleteSelect'    => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
-					'deleting'        => __( 'Deleting...', 'mksddn-migrate-content' ),
-					'deleteButton'    => __( 'Delete', 'mksddn-migrate-content' ),
+				'ajaxAction'           => 'mksddn_mc_get_server_backups',
+				'deleteBulkAjaxAction' => 'mksddn_mc_delete_server_backups',
+				'maxBulkDelete'        => ServerBackupScanner::MAX_BULK_DELETE,
+				'nonce'                => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'                 => array(
+					'loading'              => __( 'Loading...', 'mksddn-migrate-content' ),
+					'noFiles'              => __( 'No backup files found', 'mksddn-migrate-content' ),
+					'loadError'            => __( 'Error loading files', 'mksddn-migrate-content' ),
+					'pleaseSelect'         => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+					'chooseFile'           => __( 'Use for import', 'mksddn-migrate-content' ),
+					/* translators: %d: number of backup files to delete */
+					'deleteBulkConfirm'    => __( 'Delete %d selected backup file(s) from the server? This cannot be undone.', 'mksddn-migrate-content' ),
+					/* translators: %d: number of deleted backup files */
+					'deleteBulkSuccess'    => __( 'Deleted %d backup file(s).', 'mksddn-migrate-content' ),
+					/* translators: %d: maximum number of files allowed in one delete request */
+					'deleteBulkLimit'      => __( 'You can delete at most %d files at once.', 'mksddn-migrate-content' ),
+					'deleteError'          => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
+					'deleteSelect'         => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
+					'deleteCheckboxLabel'  => __( 'Select for deletion', 'mksddn-migrate-content' ),
+					'deleting'             => __( 'Deleting...', 'mksddn-migrate-content' ),
+					'selectAll'            => __( 'Select all', 'mksddn-migrate-content' ),
+					'deselectAll'          => __( 'Deselect all', 'mksddn-migrate-content' ),
+					'deleteSelected'       => __( 'Delete selected', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -408,53 +432,40 @@ class AdminPageController {
 					'defaultChunkSizeLabel'  => size_format( $default_chunk, 2 ),
 					'i18n'                   => array(
 						/* translators: %d: upload progress percent. */
-						'uploading'          => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
-						'uploadError'        => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
-						'restNotFound'       => __( 'WordPress REST API is not reachable (HTTP 404). Chunked transfers need working permalinks: open Settings → Permalinks and click Save without changes. If the problem remains, ask your host to fix /wp-json/ routing.', 'mksddn-migrate-content' ),
-						'restNoRoute'        => __( 'Migration REST endpoints are unavailable for this request. Hard-refresh the page (Ctrl+F5), open admin with the same URL as Settings → General → Site Address (http/https, www), save Permalinks once, and allow /wp-json/mksddn/v1/ in security or caching plugins.', 'mksddn-migrate-content' ),
-						'restRedirect'       => __( 'The chunk transfer request was redirected (often http↔https or www mismatch). Open WordPress admin using the same URL as Settings → General → Site Address, refresh the page, and try again.', 'mksddn-migrate-content' ),
+						'uploading'           => __( 'Uploading chunks… %d%', 'mksddn-migrate-content' ),
+						'uploadError'         => __( 'Chunked upload failed. Please try again.', 'mksddn-migrate-content' ),
+						'restNotFound'        => __( 'WordPress REST API is not reachable (HTTP 404). Chunked transfers need working permalinks: open Settings → Permalinks and click Save without changes. If the problem remains, ask your host to fix /wp-json/ routing.', 'mksddn-migrate-content' ),
+						'restNoRoute'         => __( 'Migration REST endpoints are unavailable for this request. Hard-refresh the page (Ctrl+F5), open admin with the same URL as Settings → General → Site Address (http/https, www), save Permalinks once, and allow /wp-json/mksddn/v1/ in security or caching plugins.', 'mksddn-migrate-content' ),
+						'restRedirect'        => __( 'The chunk transfer request was redirected (often http↔https or www mismatch). Open WordPress admin using the same URL as Settings → General → Site Address, refresh the page, and try again.', 'mksddn-migrate-content' ),
 						'restPreflightFailed' => __( 'Chunk transfer endpoints are not reachable yet. Refresh this page before uploading or exporting. If the warning remains, check permalinks and security plugins blocking /wp-json/.', 'mksddn-migrate-content' ),
-						'restForbidden'      => __( 'You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator.', 'mksddn-migrate-content' ),
-						'restServerError'    => __( 'The server returned an error during chunked transfer. Check PHP error logs or try again later.', 'mksddn-migrate-content' ),
+						'restForbidden'       => __( 'You do not have permission to use the migration REST API. Refresh the page and try again while logged in as an administrator.', 'mksddn-migrate-content' ),
+						'restServerError'     => __( 'The server returned an error during chunked transfer. Check PHP error logs or try again later.', 'mksddn-migrate-content' ),
 						'restInvalidResponse' => __( 'The server returned an unexpected response during chunked transfer.', 'mksddn-migrate-content' ),
-						'restInvalidInit'    => __( 'Invalid response when starting chunked upload.', 'mksddn-migrate-content' ),
-						/* translators: 1: selected label, 2: chunk size label. */
-						'importSelected'     => __( 'Selected %1$s (planned chunk %2$s).', 'mksddn-migrate-content' ),
+						'restInvalidInit'     => __( 'Invalid response when starting chunked upload.', 'mksddn-migrate-content' ),
 						/* translators: %d: upload progress percent. */
-						'importBusy'         => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
-						'importDone'         => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
-						'importProcessing'   => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
-						'importError'        => __( 'Upload failed. Please retry.', 'mksddn-migrate-content' ),
+						'importBusy'          => __( 'Uploading archive… %d%', 'mksddn-migrate-content' ),
+						'importDone'          => __( 'Upload finished. Processing…', 'mksddn-migrate-content' ),
+						'importProcessing'    => __( 'Server is processing the archive…', 'mksddn-migrate-content' ),
 						/* translators: %s: chunk size label. */
-						'chunkInfo'          => __( '· %s chunks', 'mksddn-migrate-content' ),
-						'preparing'        => __( 'Preparing download…', 'mksddn-migrate-content' ),
+						'chunkInfo'           => __( '· %s chunks', 'mksddn-migrate-content' ),
+						'preparing'           => __( 'Preparing download…', 'mksddn-migrate-content' ),
 						/* translators: %d: download progress percent. */
-						'downloading'      => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
-						'downloadComplete' => __( 'Download complete.', 'mksddn-migrate-content' ),
-						'downloadError'    => __( 'Chunked download failed. Falling back to direct download.', 'mksddn-migrate-content' ),
-						'exportReady'      => __( 'Ready for full export.', 'mksddn-migrate-content' ),
-						'exportBusy'       => __( 'Preparing archive…', 'mksddn-migrate-content' ),
-						/* translators: %d: streaming progress percent. */
-						'exportTransfer'   => __( 'Streaming archive… %d%', 'mksddn-migrate-content' ),
-						'exportDone'       => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
-						'exportFallback'   => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
-						'exportUnknownError' => __( 'Full site export failed.', 'mksddn-migrate-content' ),
-						'exportCancelled'  => __( 'Full site export was cancelled.', 'mksddn-migrate-content' ),
-						'exportInvalidResponse' => __( 'The server returned an invalid response during export.', 'mksddn-migrate-content' ),
-						'exportHttpError'  => __( 'Export request failed.', 'mksddn-migrate-content' ),
-						'exportInvalidInit' => __( 'Invalid export response from server.', 'mksddn-migrate-content' ),
-						'exportChunkError' => __( 'Chunk download failed.', 'mksddn-migrate-content' ),
-						'exportInvalidChunk' => __( 'Invalid chunk data from server.', 'mksddn-migrate-content' ),
-						'exportTimeout'    => __( 'Archive preparation is taking too long. Check server disk space and PHP-FPM/cron availability, then try again.', 'mksddn-migrate-content' ),
-						'fileReadError'    => __( 'File read error', 'mksddn-migrate-content' ),
-						'bytesZero'        => __( '0 B', 'mksddn-migrate-content' ),
+						'downloading'         => __( 'Downloading chunks… %d%', 'mksddn-migrate-content' ),
+						'downloadComplete'    => __( 'Download complete.', 'mksddn-migrate-content' ),
+						'exportBusy'          => __( 'Preparing archive…', 'mksddn-migrate-content' ),
+						'exportDone'          => __( 'Archive downloaded.', 'mksddn-migrate-content' ),
+						'exportFallback'      => __( 'Falling back to classic download…', 'mksddn-migrate-content' ),
+						'exportUnknownError'  => __( 'Full site export failed.', 'mksddn-migrate-content' ),
+						'exportCancelled'     => __( 'Full site export was cancelled.', 'mksddn-migrate-content' ),
+						'exportInvalidInit'   => __( 'Invalid export response from server.', 'mksddn-migrate-content' ),
+						'exportInvalidChunk'  => __( 'Invalid chunk data from server.', 'mksddn-migrate-content' ),
+						'exportTimeout'       => __( 'Archive preparation is taking too long. Check server disk space and PHP-FPM/cron availability, then try again.', 'mksddn-migrate-content' ),
+						'fileReadError'       => __( 'File read error', 'mksddn-migrate-content' ),
 						/* translators: 1: numeric value, 2: unit abbreviation (B, KB, etc.). */
-						'bytesFormat'      => _x( '%1$s %2$s', 'file size: value and unit', 'mksddn-migrate-content' ),
-						'unitB'            => _x( 'B', 'bytes unit abbreviation', 'mksddn-migrate-content' ),
-						'unitKB'           => _x( 'KB', 'kilobytes unit abbreviation', 'mksddn-migrate-content' ),
-						'unitMB'           => _x( 'MB', 'megabytes unit abbreviation', 'mksddn-migrate-content' ),
-						'unitGB'           => _x( 'GB', 'gigabytes unit abbreviation', 'mksddn-migrate-content' ),
-						'unitTB'           => _x( 'TB', 'terabytes unit abbreviation', 'mksddn-migrate-content' ),
+						'bytesFormat'         => _x( '%1$s %2$s', 'file size: value and unit', 'mksddn-migrate-content' ),
+						'unitB'               => _x( 'B', 'bytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitKB'              => _x( 'KB', 'kilobytes unit abbreviation', 'mksddn-migrate-content' ),
+						'unitMB'              => _x( 'MB', 'megabytes unit abbreviation', 'mksddn-migrate-content' ),
 					),
 				)
 			);
@@ -575,8 +586,14 @@ class AdminPageController {
 		}
 
 		return array(
-			'id'            => $preview_id,
-			'original_name' => $preview['original_name'] ?? '',
+			'id'                  => $preview_id,
+			'original_name'       => $preview['original_name'] ?? '',
+			'theme_files'         => ( ! empty( $preview['theme_files'] ) && is_array( $preview['theme_files'] ) )
+				? $preview['theme_files']
+				: array(),
+			'preflight_report_id' => isset( $preview['preflight_report_id'] )
+				? sanitize_text_field( (string) $preview['preflight_report_id'] )
+				: '',
 		);
 	}
 
@@ -648,6 +665,102 @@ class AdminPageController {
 	}
 
 	/**
+	 * Handle AJAX request to delete multiple server backup files.
+	 *
+	 * @return void
+	 * @since 2.6.0
+	 */
+	public function handle_ajax_delete_server_backups(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized per item below.
+		$raw_filenames = isset( $_POST['filenames'] ) ? wp_unslash( $_POST['filenames'] ) : array();
+		if ( ! is_array( $raw_filenames ) ) {
+			$raw_filenames = array();
+		}
+
+		$filenames = array();
+		foreach ( $raw_filenames as $raw_filename ) {
+			if ( ! is_string( $raw_filename ) && ! is_numeric( $raw_filename ) ) {
+				continue;
+			}
+			$filename = basename( sanitize_text_field( (string) $raw_filename ) );
+			if ( '' !== $filename ) {
+				$filenames[] = $filename;
+			}
+		}
+		$filenames = array_values( array_unique( $filenames ) );
+
+		if ( empty( $filenames ) ) {
+			wp_send_json_error( array( 'message' => __( 'No backup file specified.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( count( $filenames ) > ServerBackupScanner::MAX_BULK_DELETE ) {
+			wp_send_json_error(
+				array(
+					'message' => sprintf(
+						/* translators: %d: maximum number of files allowed in one delete request */
+						__( 'You can delete at most %d files at once.', 'mksddn-migrate-content' ),
+						ServerBackupScanner::MAX_BULK_DELETE
+					),
+				)
+			);
+		}
+
+		$result       = $this->server_scanner->delete_files( $filenames );
+		$deleted      = isset( $result['deleted'] ) && is_array( $result['deleted'] ) ? $result['deleted'] : array();
+		$errors       = isset( $result['errors'] ) && is_array( $result['errors'] ) ? $result['errors'] : array();
+		$deleted_count = count( $deleted );
+		$error_count   = count( $errors );
+
+		if ( 0 === $deleted_count ) {
+			$first_error = ! empty( $errors ) ? (string) reset( $errors ) : '';
+			wp_send_json_error(
+				array(
+					'message' => '' !== $first_error
+						? $first_error
+						: __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
+					'errors'  => $errors,
+				)
+			);
+		}
+
+		if ( $error_count > 0 ) {
+			$message = sprintf(
+				/* translators: 1: number deleted, 2: number failed */
+				__( 'Deleted %1$d backup file(s). %2$d could not be deleted.', 'mksddn-migrate-content' ),
+				$deleted_count,
+				$error_count
+			);
+		} else {
+			$message = sprintf(
+				/* translators: %d: number of deleted backup files */
+				__( 'Deleted %d backup file(s).', 'mksddn-migrate-content' ),
+				$deleted_count
+			);
+		}
+
+		wp_send_json_success(
+			array(
+				'message'       => $message,
+				'deleted'       => $deleted,
+				'deleted_count' => $deleted_count,
+				'errors'        => $errors,
+				'error_count'   => $error_count,
+			)
+		);
+	}
+
+	/**
 	 * Handle release import lock request.
 	 *
 	 * @return void
@@ -677,82 +790,53 @@ class AdminPageController {
 	 * @since 1.0.0
 	 */
 	public function handle_ajax_search_posts(): void {
-		// Verify nonce.
+		$params = $this->get_content_picker_request_params();
+		if ( is_wp_error( $params ) ) {
+			wp_send_json_error( array( 'message' => $params->get_error_message() ) );
+		}
+
+		$service = new ContentPickerQueryService();
+		$result  = $service->search_posts(
+			$params['post_type'],
+			$params['search'],
+			$params['page']
+		);
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		wp_send_json_success( $result );
+	}
+
+	/**
+	 * Validate nonce/caps and read content-picker AJAX parameters.
+	 *
+	 * @return array{post_type: string, search: string, page: int}|\WP_Error
+	 */
+	private function get_content_picker_request_params() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 
 		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+			return new \WP_Error( 'mksddn_mc_invalid_nonce', __( 'Invalid security token.', 'mksddn-migrate-content' ) );
 		}
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+			return new \WP_Error( 'mksddn_mc_forbidden', __( 'Insufficient permissions.', 'mksddn-migrate-content' ) );
 		}
 
-		// Get and sanitize parameters.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 		$post_type = isset( $_POST['post_type'] ) ? sanitize_key( wp_unslash( $_POST['post_type'] ) ) : '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-		$search_term = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+		$search = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 		$page = isset( $_POST['page'] ) ? absint( $_POST['page'] ) : 1;
-		$per_page = 50;
 
-		if ( empty( $post_type ) ) {
-			wp_send_json_error( array( 'message' => __( 'Post type is required.', 'mksddn-migrate-content' ) ) );
-		}
-
-		// Validate post type exists.
-		if ( ! post_type_exists( $post_type ) ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid post type.', 'mksddn-migrate-content' ) ) );
-		}
-
-		// Build query args.
-		$query_args = array(
-			'post_type'      => $post_type,
-			'posts_per_page' => $per_page,
-			'post_status'    => 'publish',
-			'orderby'        => 'title',
-			'order'          => 'ASC',
-			'paged'          => $page,
-			'lang'           => '', // Get posts from all languages (Polylang compatibility).
-		);
-
-		// Add search if provided.
-		if ( ! empty( $search_term ) ) {
-			$query_args['s'] = $search_term;
-		}
-
-		// Execute query.
-		$query = new \WP_Query( $query_args );
-
-		// Format results.
-		$results = array();
-		if ( $query->have_posts() ) {
-			while ( $query->have_posts() ) {
-				$query->the_post();
-				$post = get_post();
-				if ( ! $post ) {
-					continue;
-				}
-
-				$label_text = $post->post_title ?: ( '#' . $post->ID );
-				$results[] = array(
-					'id'    => $post->ID,
-					'label' => $label_text,
-				);
-			}
-			wp_reset_postdata();
-		}
-
-		wp_send_json_success(
-			array(
-				'posts'      => $results,
-				'total'      => $query->found_posts,
-				'page'       => $page,
-				'per_page'   => $per_page,
-				'total_pages' => (int) ceil( $query->found_posts / $per_page ),
-			)
+		return array(
+			'post_type' => $post_type,
+			'search'    => $search,
+			'page'      => max( 1, $page ),
 		);
 	}
 

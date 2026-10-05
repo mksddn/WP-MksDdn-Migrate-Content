@@ -56,6 +56,7 @@ final class DeactivationCleanup {
 		delete_option( 'mksddn_mc_storage_path' );
 
 		self::purge_user_preview_transients();
+		delete_option( 'mksddn_mc_user_preview_index' );
 		( new ThemePreviewStore() )->purge_all();
 		self::purge_theme_preview_transients_orphans();
 

@@ -2,18 +2,20 @@
 /**
  * @file: ImportPreflightService.php
  * @description: Read-only preflight analysis for unified import (dry-run)
- * @dependencies: ImportPayloadPreparer, Users\UserDiffBuilder, Support\MimeTypeHelper, Support\ThemeArchivePathHelper
+ * @dependencies: ImportPayloadPreparer, Users\UserDiffBuilder, Import\SelectedContentDiffBuilder, Filesystem\ThemeFileDiffBuilder, Support\EnvironmentVersionComparator, Support\MimeTypeHelper
  * @created: 2026-04-08
  */
 
 namespace MksDdn\MigrateContent\Admin\Services;
 
+use MksDdn\MigrateContent\Filesystem\ThemeFileDiffBuilder;
+use MksDdn\MigrateContent\Import\SelectedContentDiffBuilder;
+use MksDdn\MigrateContent\Options\OptionsHelper;
+use MksDdn\MigrateContent\Support\EnvironmentVersionComparator;
 use MksDdn\MigrateContent\Support\MimeTypeHelper;
-use MksDdn\MigrateContent\Support\ThemeArchivePathHelper;
 use MksDdn\MigrateContent\Users\UserDiffBuilder;
 use WP_Error;
 use WP_Query;
-use ZipArchive;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -27,14 +29,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 class ImportPreflightService {
 
 	/**
-	 * Max sample paths stored per action (add/overwrite) per theme.
-	 */
-	private const THEME_FILE_SAMPLE_CAP = 40;
-
-	/**
 	 * Max slugs per WP_Query when resolving existing posts.
 	 */
 	private const SLUG_LOOKUP_CHUNK = 100;
+
+	/**
+	 * Max content items that get field-level analysis in the stored report.
+	 *
+	 * Items beyond this cap are marked omitted without running ACF/meta walks,
+	 * so large Selected Content archives stay within typical request budgets.
+	 * Estimated change totals cover analyzed items only.
+	 */
+	private const FIELD_DIFF_DETAIL_CAP = 40;
 
 	/**
 	 * Payload preparer.
@@ -44,12 +50,21 @@ class ImportPreflightService {
 	private ImportPayloadPreparer $payload_preparer;
 
 	/**
+	 * ACF Options Pages helper.
+	 *
+	 * @var OptionsHelper
+	 */
+	private OptionsHelper $options_helper;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ImportPayloadPreparer|null $payload_preparer Payload preparer.
+	 * @param OptionsHelper|null         $options_helper   ACF options helper.
 	 */
-	public function __construct( ?ImportPayloadPreparer $payload_preparer = null ) {
+	public function __construct( ?ImportPayloadPreparer $payload_preparer = null, ?OptionsHelper $options_helper = null ) {
 		$this->payload_preparer = $payload_preparer ?? new ImportPayloadPreparer();
+		$this->options_helper   = $options_helper ?? new OptionsHelper();
 	}
 
 	/**
@@ -125,10 +140,12 @@ class ImportPreflightService {
 		$type    = sanitize_key( $prepared['type'] ?? 'page' );
 		$media   = isset( $prepared['media'] ) && is_array( $prepared['media'] ) ? $prepared['media'] : array();
 
-		$warnings       = array();
-		$errors         = array();
-		$slug_conflicts = array();
-		$content_items  = array();
+		$warnings               = array();
+		$errors                 = array();
+		$slug_conflicts         = array();
+		$content_items          = array();
+		$options_pages          = array();
+		$options_may_need_media = false;
 
 		if ( 'bundle' === $type ) {
 			$items = isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array();
@@ -142,6 +159,25 @@ class ImportPreflightService {
 				}
 				$content_items[] = $row;
 			}
+
+			$raw_options_pages = isset( $payload['options_pages'] ) && is_array( $payload['options_pages'] )
+				? $payload['options_pages']
+				: array();
+			foreach ( $raw_options_pages as $page ) {
+				if ( ! is_array( $page ) ) {
+					$errors[] = __( 'Archive contains an invalid ACF Options Page entry.', 'mksddn-migrate-content' );
+					continue;
+				}
+				$row = $this->build_options_page_row( $page );
+				if ( empty( $row ) ) {
+					$errors[] = __( 'Archive contains an ACF Options Page without a valid menu_slug.', 'mksddn-migrate-content' );
+					continue;
+				}
+				$options_pages[] = $row;
+				if ( $this->options_page_payload_may_reference_media( $page ) ) {
+					$options_may_need_media = true;
+				}
+			}
 		} else {
 			$row = $this->build_selected_content_row( $payload, $type );
 			if ( ! empty( $row ) ) {
@@ -152,6 +188,85 @@ class ImportPreflightService {
 		}
 
 		$this->attach_existing_post_ids( $content_items );
+
+		$diff_builder = new SelectedContentDiffBuilder();
+		$diff_builder->set_media_context( $media );
+		$media_sample = $diff_builder->build_media_sample( $media );
+
+		// Attach field-level changes. Re-walk original payload items by slug/type.
+		$payload_items_by_key = array();
+		if ( 'bundle' === $type ) {
+			$raw_items = isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array();
+			foreach ( $raw_items as $raw_item ) {
+				if ( ! is_array( $raw_item ) ) {
+					continue;
+				}
+				$pkey = sanitize_key( (string) ( $raw_item['type'] ?? 'page' ) ) . '|' . sanitize_title( (string) ( $raw_item['slug'] ?? '' ) );
+				if ( '' !== $pkey && '|' !== substr( $pkey, -1 ) ) {
+					$payload_items_by_key[ $pkey ] = $raw_item;
+				}
+			}
+		} else {
+			$pkey = sanitize_key( (string) ( $payload['type'] ?? $type ) ) . '|' . sanitize_title( (string) ( $payload['slug'] ?? '' ) );
+			if ( '' !== $pkey && '|' !== substr( $pkey, -1 ) ) {
+				$payload_items_by_key[ $pkey ] = $payload;
+			}
+		}
+
+		$fields_changed_total = 0;
+		$diff_detail_count    = 0;
+		$diff_detail_omitted  = 0;
+		foreach ( $content_items as $idx => $row ) {
+			if ( $diff_detail_count >= self::FIELD_DIFF_DETAIL_CAP ) {
+				// Skip expensive ACF/meta walks for the rest; totals cover analyzed items only.
+				$content_items[ $idx ]['changes'] = array(
+					'summary' => array(
+						'changed_count' => 0,
+						'field_count'   => 0,
+						'tax_count'     => 0,
+					),
+					'omitted' => true,
+				);
+				++$diff_detail_omitted;
+				continue;
+			}
+
+			$key     = $row['post_type'] . '|' . $row['slug'];
+			$item    = $payload_items_by_key[ $key ] ?? array();
+			$changes = $diff_builder->build_item_changes( $item, (int) $row['existing_post_id'] );
+			$fields_changed_total += (int) ( $changes['summary']['changed_count'] ?? 0 );
+			$content_items[ $idx ]['changes'] = $changes;
+			++$diff_detail_count;
+		}
+
+		$raw_options_for_diff = array();
+		if ( 'bundle' === $type && isset( $payload['options_pages'] ) && is_array( $payload['options_pages'] ) ) {
+			foreach ( $payload['options_pages'] as $page ) {
+				if ( ! is_array( $page ) ) {
+					continue;
+				}
+				$ms = sanitize_key( (string) ( $page['menu_slug'] ?? '' ) );
+				if ( '' !== $ms ) {
+					$raw_options_for_diff[ $ms ] = $page;
+				}
+			}
+		}
+		foreach ( $options_pages as $op_idx => $op_row ) {
+			$ms         = (string) ( $op_row['menu_slug'] ?? '' );
+			$page       = $raw_options_for_diff[ $ms ] ?? array();
+			$op_changes = $diff_builder->build_options_page_changes( $page, $op_row );
+			$options_pages[ $op_idx ]['changes'] = $op_changes;
+			$fields_changed_total += (int) ( $op_changes['summary']['changed_count'] ?? 0 );
+		}
+
+		if ( $diff_detail_omitted > 0 ) {
+			$warnings[] = sprintf(
+				/* translators: 1: number of items analyzed, 2: number of omitted items */
+				__( 'Field-level analysis (and the estimated change total) covers the first %1$d content items; %2$d more items were skipped to keep preflight fast.', 'mksddn-migrate-content' ),
+				$diff_detail_count,
+				$diff_detail_omitted
+			);
+		}
 
 		foreach ( $content_items as $row ) {
 			if ( ! empty( $row['existing_post_id'] ) ) {
@@ -167,33 +282,490 @@ class ImportPreflightService {
 			$warnings[] = __( 'Some slugs already exist on this site; existing posts may be updated.', 'mksddn-migrate-content' );
 		}
 
-		$media_count = count( $media );
-		if ( 'archive' === ( $prepared['media_source'] ?? '' ) && $media_count > 0 ) {
+		$acf_field_warnings = $this->collect_selected_acf_field_warnings( $payload, $type );
+		foreach ( $acf_field_warnings as $acf_warning ) {
+			$warnings[] = $acf_warning;
+		}
+
+		if ( ! empty( $options_pages ) && ! function_exists( 'update_field' ) ) {
+			$errors[] = __( 'This archive includes ACF Options Pages, but Advanced Custom Fields is not available on this site.', 'mksddn-migrate-content' );
+		} elseif ( ! empty( $options_pages ) ) {
+			$missing_count = 0;
+			foreach ( $options_pages as $options_page_row ) {
+				if ( isset( $options_page_row['action'] ) && 'missing' === $options_page_row['action'] ) {
+					++$missing_count;
+				}
+			}
+
+			if ( $missing_count > 0 ) {
+				$errors[] = sprintf(
+					/* translators: %d: number of missing ACF Options Pages */
+					_n(
+						'%d ACF Options Page from the archive is not registered on this site (matched by menu_slug).',
+						'%d ACF Options Pages from the archive are not registered on this site (matched by menu_slug).',
+						$missing_count,
+						'mksddn-migrate-content'
+					),
+					$missing_count
+				);
+			} else {
+				$warnings[] = __( 'ACF Options Page fields will be overwritten on import. There is no automatic rollback if a later step fails.', 'mksddn-migrate-content' );
+			}
+
+			foreach ( $options_pages as $options_page_row ) {
+				if ( empty( $options_page_row['post_id_mismatch'] ) ) {
+					continue;
+				}
+				$warnings[] = sprintf(
+					/* translators: 1: menu_slug, 2: archive post_id, 3: local post_id */
+					__( 'ACF Options Page "%1$s" uses a different post_id locally (%3$s) than in the archive (%2$s); import will write to the local post_id.', 'mksddn-migrate-content' ),
+					(string) ( $options_page_row['menu_slug'] ?? '' ),
+					(string) ( $options_page_row['archive_post_id'] ?? '' ),
+					(string) ( $options_page_row['local_post_id'] ?? '' )
+				);
+			}
+		}
+
+		$media_count  = count( $media );
+		$media_source = (string) ( $prepared['media_source'] ?? '' );
+		if ( 'archive' === $media_source && $media_count > 0 ) {
 			$warnings[] = __( 'Archive includes media files; real import will write uploads.', 'mksddn-migrate-content' );
 		}
 
+		if ( 'json' === $media_source && $options_may_need_media ) {
+			$warnings[] = __( 'This JSON payload appears to reference media in ACF Options Page fields, but JSON cannot carry media files. Re-export as .wpbkp, or image/file fields may point to missing attachments.', 'mksddn-migrate-content' );
+		}
+
 		$status = ! empty( $errors ) ? 'error' : ( ! empty( $warnings ) ? 'warning' : 'ok' );
+
+		if ( 'error' === $status ) {
+			$next_step = __( 'Resolve the errors above, then run preflight again. Start import is unavailable until preflight succeeds.', 'mksddn-migrate-content' );
+		} else {
+			$next_step = __( 'Use “Start import” below to run the real import with the same file (no upload needed).', 'mksddn-migrate-content' );
+		}
 
 		return array(
 			'status'              => $status,
 			'import_type'         => 'selected',
 			'source'              => $this->normalize_source( $file_info['source'] ?? 'upload' ),
 			'summary'             => array(
-				'file_name'            => $file_info['name'] ?? basename( $path ),
-				'file_size'            => $this->file_size( $path ),
-				'payload_type'         => $type,
-				'item_count'           => count( $content_items ),
-				'media_files'          => $media_count,
-				'slug_conflicts_count' => count( $slug_conflicts ),
+				'file_name'              => $file_info['name'] ?? basename( $path ),
+				'file_size'              => $this->file_size( $path ),
+				'payload_type'           => $type,
+				'item_count'             => count( $content_items ),
+				'options_pages_count'    => count( $options_pages ),
+				'media_files'            => $media_count,
+				'slug_conflicts_count'   => count( $slug_conflicts ),
+				'fields_changed_count'   => $fields_changed_total,
+				'field_diff_omitted'     => $diff_detail_omitted,
 			),
 			'warnings'            => $warnings,
 			'errors'              => $errors,
 			'estimated_changes'   => array(
 				'items'          => $content_items,
+				'options_pages'  => $options_pages,
 				'slug_conflicts' => $slug_conflicts,
+				'media_files'    => $media_sample,
 			),
-			'next_step'           => __( 'Use “Start import” below to run the real import with the same file (no upload needed).', 'mksddn-migrate-content' ),
+			'next_step'           => $next_step,
 		);
+	}
+
+	/**
+	 * Whether an Options Page payload looks like it references media (IDs/URLs/HTML).
+	 *
+	 * Used for JSON preflight warnings; does not require attachments to exist locally.
+	 *
+	 * @param array $page Options page payload.
+	 */
+	private function options_page_payload_may_reference_media( array $page ): bool {
+		if ( ! empty( $page['_mksddn_media'] ) && is_array( $page['_mksddn_media'] ) ) {
+			return true;
+		}
+
+		$fields = array();
+		if ( isset( $page['acf_fields'] ) && is_array( $page['acf_fields'] ) ) {
+			$fields = $page['acf_fields'];
+		} elseif ( isset( $page['data'] ) && is_array( $page['data'] ) ) {
+			$fields = $page['data'];
+		}
+
+		$schema = ( isset( $page['acf_field_schema'] ) && is_array( $page['acf_field_schema'] ) ) ? $page['acf_field_schema'] : array();
+		if ( array() !== $schema ) {
+			return $this->schema_fields_reference_media( $fields, $schema );
+		}
+
+		return $this->acf_values_may_reference_media( $fields );
+	}
+
+	/**
+	 * Whether typed ACF fields reference media (image/file/gallery or embedded HTML).
+	 *
+	 * Bare numbers are media only when the field type is image, file, or gallery.
+	 *
+	 * @param array $values Name => value.
+	 * @param array $schema Name => schema node.
+	 */
+	private function schema_fields_reference_media( array $values, array $schema ): bool {
+		foreach ( $values as $name => $child ) {
+			if ( 'acf_fc_layout' === (string) $name ) {
+				continue;
+			}
+			$field_schema = ( isset( $schema[ $name ] ) && is_array( $schema[ $name ] ) ) ? $schema[ $name ] : array();
+			if ( $this->schema_value_references_media( $child, $field_schema ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether one typed field value references media.
+	 *
+	 * @param mixed $value  Field value.
+	 * @param array $schema Field schema node.
+	 */
+	private function schema_value_references_media( $value, array $schema ): bool {
+		$type = (string) ( $schema['type'] ?? '' );
+
+		if ( in_array( $type, array( 'image', 'file' ), true ) ) {
+			return $this->attachment_leaf_is_set( $value );
+		}
+
+		if ( 'gallery' === $type ) {
+			if ( is_string( $value ) && preg_match( '/^\d+(?:\s*,\s*\d+)*$/', $value ) ) {
+				return true;
+			}
+			if ( ! is_array( $value ) ) {
+				return $this->attachment_leaf_is_set( $value );
+			}
+			foreach ( $value as $item ) {
+				if ( $this->attachment_leaf_is_set( $item ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		if ( in_array( $type, array( 'wysiwyg', 'textarea' ), true ) ) {
+			return is_string( $value ) && $this->string_references_embedded_media( $value );
+		}
+
+		if ( in_array( $type, array( 'group', 'clone' ), true ) && is_array( $value ) ) {
+			$sub = ( isset( $schema['sub_fields'] ) && is_array( $schema['sub_fields'] ) ) ? $schema['sub_fields'] : array();
+			return $this->schema_fields_reference_media( $value, $sub );
+		}
+
+		if ( 'repeater' === $type && is_array( $value ) ) {
+			$sub = ( isset( $schema['sub_fields'] ) && is_array( $schema['sub_fields'] ) ) ? $schema['sub_fields'] : array();
+			foreach ( $value as $row ) {
+				if ( is_array( $row ) && $this->schema_fields_reference_media( $row, $sub ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		if ( 'flexible_content' === $type && is_array( $value ) ) {
+			$layouts = ( isset( $schema['layouts'] ) && is_array( $schema['layouts'] ) ) ? $schema['layouts'] : array();
+			foreach ( $value as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$layout_name = isset( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+				$sub         = ( isset( $layouts[ $layout_name ]['sub_fields'] ) && is_array( $layouts[ $layout_name ]['sub_fields'] ) )
+					? $layouts[ $layout_name ]['sub_fields']
+					: array();
+				if ( $this->schema_fields_reference_media( $row, $sub ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		return $this->acf_values_may_reference_media( $value );
+	}
+
+	/**
+	 * Whether an image/file leaf has an ID, uploads URL, or attachment array.
+	 *
+	 * @param mixed $value Leaf value.
+	 */
+	private function attachment_leaf_is_set( $value ): bool {
+		if ( is_numeric( $value ) ) {
+			return (int) $value > 0;
+		}
+
+		if ( is_string( $value ) ) {
+			return $this->string_references_embedded_media( $value );
+		}
+
+		if ( ! is_array( $value ) ) {
+			return false;
+		}
+
+		$has_id = ( isset( $value['ID'] ) && is_numeric( $value['ID'] ) && (int) $value['ID'] > 0 )
+			|| ( isset( $value['id'] ) && is_numeric( $value['id'] ) && (int) $value['id'] > 0 );
+		if ( $has_id && ( isset( $value['url'] ) || isset( $value['filename'] ) || isset( $value['mime_type'] ) || isset( $value['sizes'] ) || isset( $value['type'] ) ) ) {
+			return true;
+		}
+
+		return isset( $value['url'] ) && is_string( $value['url'] ) && $this->string_references_embedded_media( $value['url'] );
+	}
+
+	/**
+	 * Heuristic for payloads without field schema.
+	 *
+	 * Bare integers are not treated as media. Uploads URLs, wp-image markup,
+	 * gallery shortcodes, and attachment arrays are.
+	 *
+	 * @param mixed $value Value node.
+	 */
+	private function acf_values_may_reference_media( $value ): bool {
+		if ( is_string( $value ) ) {
+			return $this->string_references_embedded_media( $value );
+		}
+
+		if ( ! is_array( $value ) ) {
+			return false;
+		}
+
+		$has_id = ( isset( $value['ID'] ) && is_numeric( $value['ID'] ) )
+			|| ( isset( $value['id'] ) && is_numeric( $value['id'] ) );
+		if ( $has_id && ( isset( $value['url'] ) || isset( $value['filename'] ) || isset( $value['mime_type'] ) || isset( $value['sizes'] ) || isset( $value['type'] ) ) ) {
+			return true;
+		}
+
+		foreach ( $value as $child ) {
+			if ( $this->acf_values_may_reference_media( $child ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether a string contains an uploads URL, wp-image class, or gallery shortcode.
+	 *
+	 * @param string $value Candidate string.
+	 */
+	private function string_references_embedded_media( string $value ): bool {
+		if ( '' === $value ) {
+			return false;
+		}
+
+		if ( false !== strpos( $value, '/wp-content/uploads/' ) ) {
+			return true;
+		}
+
+		return 1 === preg_match( '/wp-image-\d+/', $value ) || false !== strpos( $value, '[gallery' );
+	}
+
+	/**
+	 * Build one inventory row for an ACF Options Page preflight entry.
+	 *
+	 * @param array $page Options page payload.
+	 * @return array{title:string,menu_slug:string,post_id:string,archive_post_id:string,local_post_id:string,action:string,post_id_mismatch:bool}|array{}
+	 */
+	private function build_options_page_row( array $page ): array {
+		$menu_slug = sanitize_key( (string) ( $page['menu_slug'] ?? '' ) );
+		if ( '' === $menu_slug ) {
+			return array();
+		}
+
+		$title = isset( $page['page_title'] ) ? sanitize_text_field( (string) $page['page_title'] ) : '';
+		if ( '' === $title && isset( $page['menu_title'] ) ) {
+			$title = sanitize_text_field( (string) $page['menu_title'] );
+		}
+		if ( '' === $title ) {
+			$title = $menu_slug;
+		}
+
+		$archive_post_id = sanitize_text_field( (string) ( $page['post_id'] ?? '' ) );
+		$local           = $this->options_helper->find_options_page_by_slug( $menu_slug );
+		$local_post_id   = '';
+		$action          = 'missing';
+
+		if ( is_array( $local ) && isset( $local['post_id'] ) && '' !== (string) $local['post_id'] ) {
+			$local_post_id = sanitize_text_field( (string) $local['post_id'] );
+			$action        = 'update';
+		}
+
+		$post_id_mismatch = (
+			'update' === $action
+			&& '' !== $archive_post_id
+			&& '' !== $local_post_id
+			&& $archive_post_id !== $local_post_id
+		);
+
+		return array(
+			'title'            => $title,
+			'menu_slug'        => $menu_slug,
+			'post_id'          => '' !== $local_post_id ? $local_post_id : $archive_post_id,
+			'archive_post_id'  => $archive_post_id,
+			'local_post_id'    => $local_post_id,
+			'action'           => $action,
+			'post_id_mismatch' => $post_id_mismatch,
+		);
+	}
+
+	/**
+	 * Build preflight warnings for post ACF/SCF fields that lack local definitions.
+	 *
+	 * Import remains allowed: posts can restore scoped ACF meta from the archive
+	 * when field groups are missing, but repeaters/groups bind more reliably when
+	 * matching groups are registered and attached first.
+	 *
+	 * @param array  $payload Prepared selected-content payload.
+	 * @param string $type    Payload type (bundle|page|post|…).
+	 * @return array<int, string>
+	 */
+	private function collect_selected_acf_field_warnings( array $payload, string $type ): array {
+		$fields_by_type = $this->collect_payload_acf_field_names_by_post_type( $payload, $type );
+		if ( array() === $fields_by_type ) {
+			return array();
+		}
+
+		$warnings = array();
+
+		if ( ! function_exists( 'update_field' ) ) {
+			$warnings[] = __( 'This archive includes ACF/SCF field values on posts, but Advanced Custom Fields (or a compatible plugin) is not available. Import may still restore raw field meta when present in the archive.', 'mksddn-migrate-content' );
+			return $warnings;
+		}
+
+		$unresolved = array();
+		foreach ( $fields_by_type as $post_type => $field_names ) {
+			$local_names = $this->get_local_acf_field_names_for_post_type( $post_type );
+			foreach ( $field_names as $field_name ) {
+				// Match location rules for this post type. A same-named field on another
+				// type still leaves import on the raw-meta path.
+				if ( isset( $local_names[ $field_name ] ) ) {
+					continue;
+				}
+				$unresolved[ $field_name ] = true;
+			}
+		}
+
+		if ( array() === $unresolved ) {
+			return $warnings;
+		}
+
+		$sample = array_slice( array_keys( $unresolved ), 0, 8 );
+		$extra  = count( $unresolved ) - count( $sample );
+		$list   = implode( ', ', $sample );
+		if ( $extra > 0 ) {
+			$list .= sprintf(
+				/* translators: %d: number of additional unresolved field names */
+				__( ' (+%d more)', 'mksddn-migrate-content' ),
+				$extra
+			);
+		}
+
+		$warnings[] = sprintf(
+			/* translators: %s: comma-separated ACF/SCF field names */
+			__( 'Some ACF/SCF fields from the archive are not registered for the target post type(s) on this site (%s). Attach matching field groups before import for reliable repeaters/groups; import may still restore raw field meta when present.', 'mksddn-migrate-content' ),
+			$list
+		);
+
+		return $warnings;
+	}
+
+	/**
+	 * Collect top-level ACF field names from selected-content payload items, grouped by post type.
+	 *
+	 * @param array  $payload Prepared selected-content payload.
+	 * @param string $type    Payload type.
+	 * @return array<string, array<int, string>> Post type => list of field names.
+	 */
+	private function collect_payload_acf_field_names_by_post_type( array $payload, string $type ): array {
+		$items = array();
+		if ( 'bundle' === $type ) {
+			$raw_items = isset( $payload['items'] ) && is_array( $payload['items'] ) ? $payload['items'] : array();
+			foreach ( $raw_items as $item ) {
+				if ( is_array( $item ) ) {
+					$items[] = $item;
+				}
+			}
+		} else {
+			$items[] = $payload;
+		}
+
+		$by_type = array();
+		foreach ( $items as $item ) {
+			if ( empty( $item['acf_fields'] ) || ! is_array( $item['acf_fields'] ) ) {
+				continue;
+			}
+			$post_type = sanitize_key( $item['type'] ?? ( 'bundle' === $type ? 'page' : $type ) );
+			if ( '' === $post_type ) {
+				$post_type = 'page';
+			}
+			if ( ! isset( $by_type[ $post_type ] ) ) {
+				$by_type[ $post_type ] = array();
+			}
+			foreach ( array_keys( $item['acf_fields'] ) as $field_name ) {
+				$name = sanitize_text_field( (string) $field_name );
+				if ( '' === $name ) {
+					continue;
+				}
+				$by_type[ $post_type ][ $name ] = $name;
+			}
+		}
+
+		foreach ( $by_type as $post_type => $names ) {
+			$by_type[ $post_type ] = array_values( $names );
+		}
+
+		return $by_type;
+	}
+
+	/**
+	 * Local top-level ACF/SCF field names available for a post type.
+	 *
+	 * @param string $post_type Post type.
+	 * @return array<string, true> Field name => true.
+	 */
+	private function get_local_acf_field_names_for_post_type( string $post_type ): array {
+		$names = array();
+		if ( '' === $post_type || ! function_exists( 'acf_get_field_groups' ) || ! function_exists( 'acf_get_fields' ) ) {
+			return $names;
+		}
+
+		$groups = acf_get_field_groups(
+			array(
+				'post_type' => $post_type,
+			)
+		);
+		if ( ! is_array( $groups ) ) {
+			return $names;
+		}
+
+		foreach ( $groups as $group ) {
+			$parent = null;
+			if ( is_array( $group ) ) {
+				if ( ! empty( $group['key'] ) ) {
+					$parent = $group['key'];
+				} elseif ( ! empty( $group['ID'] ) ) {
+					$parent = (int) $group['ID'];
+				}
+			}
+			if ( null === $parent ) {
+				continue;
+			}
+			$fields = acf_get_fields( $parent );
+			if ( ! is_array( $fields ) ) {
+				continue;
+			}
+			foreach ( $fields as $field ) {
+				if ( ! is_array( $field ) || empty( $field['name'] ) ) {
+					continue;
+				}
+				$names[ (string) $field['name'] ] = true;
+			}
+		}
+
+		return $names;
 	}
 
 	/**
@@ -301,9 +873,14 @@ class ImportPreflightService {
 			);
 		}
 
-		$warnings = array();
-		$incoming = isset( $diff['counts']['incoming'] ) ? (int) $diff['counts']['incoming'] : 0;
-		$conflicts = isset( $diff['counts']['conflicts'] ) ? (int) $diff['counts']['conflicts'] : 0;
+		$warnings   = array();
+		$incoming   = isset( $diff['counts']['incoming'] ) ? (int) $diff['counts']['incoming'] : 0;
+		$conflicts  = isset( $diff['counts']['conflicts'] ) ? (int) $diff['counts']['conflicts'] : 0;
+		$manifest   = isset( $diff['manifest'] ) && is_array( $diff['manifest'] ) ? $diff['manifest'] : array();
+		$comparator = new EnvironmentVersionComparator();
+		$env        = $comparator->summarize( $manifest );
+
+		$warnings = array_merge( $warnings, $comparator->build_warnings( $manifest ) );
 
 		if ( $incoming > 0 ) {
 			$warnings[] = __( 'Archive contains WordPress users; you may see a merge step during real import.', 'mksddn-migrate-content' );
@@ -320,11 +897,14 @@ class ImportPreflightService {
 			'status'            => $status,
 			'import_type'       => 'full',
 			'source'            => $this->normalize_source( $file_info['source'] ?? 'upload' ),
-			'summary'           => array(
-				'file_name'       => $file_info['name'] ?? basename( $path ),
-				'file_size'       => $this->file_size( $path ),
-				'users_in_archive'=> $incoming,
-				'user_conflicts'  => $conflicts,
+			'summary'           => array_merge(
+				array(
+					'file_name'        => $file_info['name'] ?? basename( $path ),
+					'file_size'        => $this->file_size( $path ),
+					'users_in_archive' => $incoming,
+					'user_conflicts'   => $conflicts,
+				),
+				$env
 			),
 			'warnings'          => $warnings,
 			'errors'            => array(),
@@ -344,7 +924,7 @@ class ImportPreflightService {
 	 */
 	private function analyze_themes( array $file_info ): array {
 		$path = $file_info['path'];
-		$diff = $this->build_theme_file_diff( $path );
+		$diff = ( new ThemeFileDiffBuilder() )->build( $path );
 
 		if ( is_wp_error( $diff ) ) {
 			return $this->failure_report(
@@ -354,21 +934,28 @@ class ImportPreflightService {
 			);
 		}
 
-		$slugs    = $diff['slugs'];
-		$themes   = $diff['themes'];
-		$existing = array();
+		$slugs      = $diff['slugs'];
+		$themes     = $diff['themes'];
+		$manifest   = isset( $diff['manifest'] ) && is_array( $diff['manifest'] ) ? $diff['manifest'] : array();
+		$comparator = new EnvironmentVersionComparator();
+		$env        = $comparator->summarize( $manifest );
+		$existing   = array();
 		foreach ( $themes as $theme_row ) {
 			if ( ! empty( $theme_row['exists'] ) ) {
 				$existing[] = $theme_row['slug'];
 			}
 		}
 
-		$warnings = array();
+		$warnings = $comparator->build_warnings( $manifest );
 		if ( ! empty( $existing ) ) {
 			$warnings[] = __( 'Some themes already exist on this site. Merge overwrites matching files; Replace removes the whole theme directory first.', 'mksddn-migrate-content' );
 		}
-		if ( $diff['files_overwrite'] > 0 ) {
+		$files_unverified = (int) ( $diff['files_unverified'] ?? 0 );
+		if ( $diff['files_overwrite'] > 0 || $files_unverified > 0 ) {
 			$warnings[] = __( 'File counts below assume Merge mode (add new files, overwrite existing paths). Replace would wipe existing theme folders before writing.', 'mksddn-migrate-content' );
+		}
+		if ( $files_unverified > 0 ) {
+			$warnings[] = __( 'Some same-size theme files were not byte-compared (over 256 KiB and/or hash budget). They are listed as unverified, not as changed content.', 'mksddn-migrate-content' );
 		}
 
 		$status = ! empty( $warnings ) ? 'warning' : 'ok';
@@ -377,15 +964,20 @@ class ImportPreflightService {
 			'status'            => $status,
 			'import_type'       => 'themes',
 			'source'            => $this->normalize_source( $file_info['source'] ?? 'upload' ),
-			'summary'           => array(
-				'file_name'       => $file_info['name'] ?? basename( $path ),
-				'file_size'       => $this->file_size( $path ),
-				'theme_count'     => count( $slugs ),
-				'themes'          => $slugs,
-				'existing_slugs'  => $existing,
-				'files_total'     => $diff['files_total'],
-				'files_added'     => $diff['files_added'],
-				'files_overwrite' => $diff['files_overwrite'],
+			'summary'           => array_merge(
+				array(
+					'file_name'        => $file_info['name'] ?? basename( $path ),
+					'file_size'        => $this->file_size( $path ),
+					'theme_count'      => count( $slugs ),
+					'themes'           => $slugs,
+					'existing_slugs'   => $existing,
+					'files_total'      => $diff['files_total'],
+					'files_added'      => $diff['files_added'],
+					'files_overwrite'  => $diff['files_overwrite'],
+					'files_identical'  => $diff['files_identical'] ?? 0,
+					'files_unverified' => $files_unverified,
+				),
+				$env
 			),
 			'warnings'          => $warnings,
 			'errors'            => array(),
@@ -395,186 +987,6 @@ class ImportPreflightService {
 			),
 			'next_step'         => __( 'Use “Start import” below; theme import will show its confirmation step.', 'mksddn-migrate-content' ),
 		);
-	}
-
-	/**
-	 * Build per-theme file inventory: added vs overwrite (merge semantics).
-	 *
-	 * @param string $path Archive path.
-	 * @return array{slugs:string[],themes:array<int,array>,files_total:int,files_added:int,files_overwrite:int}|WP_Error
-	 */
-	private function build_theme_file_diff( string $path ) {
-		$zip = new ZipArchive();
-		if ( true !== $zip->open( $path ) ) {
-			return new WP_Error( 'mksddn_mc_zip_open', __( 'Unable to open archive.', 'mksddn-migrate-content' ) );
-		}
-
-		$from_manifest = $this->read_theme_slugs_from_manifest( $zip );
-		$theme_root    = trailingslashit( get_theme_root() );
-		$prefix        = ThemeArchivePathHelper::ARCHIVE_PREFIX;
-		$cap           = self::THEME_FILE_SAMPLE_CAP;
-
-		/** @var array<string, array{added:int,overwrite:int,sample_added:string[],sample_overwrite:string[],truncated_added:bool,truncated_overwrite:bool}> $buckets */
-		$buckets = array();
-
-		/** @var array<string, bool> $theme_dir_exists */
-		$theme_dir_exists = array();
-
-		foreach ( $from_manifest as $manifest_slug ) {
-			if ( ! isset( $buckets[ $manifest_slug ] ) ) {
-				$buckets[ $manifest_slug ] = array(
-					'added'               => 0,
-					'overwrite'           => 0,
-					'sample_added'        => array(),
-					'sample_overwrite'    => array(),
-					'truncated_added'     => false,
-					'truncated_overwrite' => false,
-				);
-			}
-		}
-
-		for ( $i = 0; $i < $zip->numFiles; $i++ ) {
-			$stat = $zip->statIndex( $i );
-			if ( ! $stat || empty( $stat['name'] ) ) {
-				continue;
-			}
-
-			$normalized = ThemeArchivePathHelper::normalize( (string) $stat['name'] );
-			if ( null === $normalized ) {
-				continue;
-			}
-
-			if ( 0 !== strpos( $normalized, $prefix ) ) {
-				continue;
-			}
-
-			$relative = substr( $normalized, strlen( $prefix ) );
-			if ( '' === $relative ) {
-				continue;
-			}
-
-			$parts = explode( '/', $relative, 2 );
-			$slug  = $parts[0] ?? '';
-			if ( '' === $slug || false !== strpos( $slug, '..' ) ) {
-				continue;
-			}
-
-			$slug = sanitize_file_name( $slug );
-			if ( '' === $slug ) {
-				continue;
-			}
-
-			if ( ! isset( $buckets[ $slug ] ) ) {
-				$buckets[ $slug ] = array(
-					'added'               => 0,
-					'overwrite'           => 0,
-					'sample_added'        => array(),
-					'sample_overwrite'    => array(),
-					'truncated_added'     => false,
-					'truncated_overwrite' => false,
-				);
-			}
-
-			$is_directory = '/' === substr( $normalized, -1 );
-			if ( $is_directory ) {
-				continue;
-			}
-
-			$rel_in_theme = isset( $parts[1] ) ? $parts[1] : '';
-			if ( '' === $rel_in_theme ) {
-				continue;
-			}
-
-			if ( ! isset( $theme_dir_exists[ $slug ] ) ) {
-				$theme_dir_exists[ $slug ] = is_dir( $theme_root . $slug );
-			}
-
-			// New theme folder: all archive files are adds (skip per-file is_file).
-			if ( ! $theme_dir_exists[ $slug ] ) {
-				$action = 'added';
-			} else {
-				$dest   = $theme_root . $slug . '/' . $rel_in_theme;
-				$action = is_file( $dest ) ? 'overwrite' : 'added';
-			}
-
-			++$buckets[ $slug ][ $action ];
-
-			$sample_key    = 'overwrite' === $action ? 'sample_overwrite' : 'sample_added';
-			$truncated_key = 'overwrite' === $action ? 'truncated_overwrite' : 'truncated_added';
-			if ( count( $buckets[ $slug ][ $sample_key ] ) < $cap ) {
-				$buckets[ $slug ][ $sample_key ][] = $rel_in_theme;
-			} else {
-				$buckets[ $slug ][ $truncated_key ] = true;
-			}
-		}
-		$zip->close();
-
-		if ( empty( $buckets ) ) {
-			return new WP_Error( 'mksddn_mc_no_themes_in_archive', __( 'No themes found in archive.', 'mksddn-migrate-content' ) );
-		}
-
-		$themes          = array();
-		$files_total     = 0;
-		$files_added     = 0;
-		$files_overwrite = 0;
-
-		ksort( $buckets, SORT_STRING );
-		foreach ( $buckets as $slug => $bucket ) {
-			$theme_exists = is_dir( $theme_root . $slug ) || wp_get_theme( $slug )->exists();
-			$file_count   = (int) $bucket['added'] + (int) $bucket['overwrite'];
-			$files_total += $file_count;
-			$files_added += (int) $bucket['added'];
-			$files_overwrite += (int) $bucket['overwrite'];
-
-			$themes[] = array(
-				'slug'                  => $slug,
-				'exists'                => $theme_exists,
-				'file_count'            => $file_count,
-				'added_count'           => (int) $bucket['added'],
-				'overwrite_count'       => (int) $bucket['overwrite'],
-				'sample_added'          => $bucket['sample_added'],
-				'sample_overwrite'      => $bucket['sample_overwrite'],
-				'samples_truncated_added'=> (bool) $bucket['truncated_added'],
-				'samples_truncated_overwrite' => (bool) $bucket['truncated_overwrite'],
-			);
-		}
-
-		return array(
-			'slugs'           => array_keys( $buckets ),
-			'themes'          => $themes,
-			'files_total'     => $files_total,
-			'files_added'     => $files_added,
-			'files_overwrite' => $files_overwrite,
-		);
-	}
-
-	/**
-	 * Read theme slugs from archive manifest.json when present.
-	 *
-	 * @param ZipArchive $zip Open archive.
-	 * @return string[]
-	 */
-	private function read_theme_slugs_from_manifest( ZipArchive $zip ): array {
-		$from_manifest = array();
-		$raw_manifest  = $zip->getFromName( 'manifest.json' );
-		if ( false === $raw_manifest || '' === $raw_manifest ) {
-			return $from_manifest;
-		}
-
-		$manifest = json_decode( $raw_manifest, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $manifest ) || ! isset( $manifest['themes'] ) || ! is_array( $manifest['themes'] ) ) {
-			return $from_manifest;
-		}
-
-		foreach ( $manifest['themes'] as $t ) {
-			if ( is_string( $t ) && '' !== $t ) {
-				$from_manifest[] = sanitize_file_name( $t );
-			} elseif ( is_array( $t ) && isset( $t['slug'] ) ) {
-				$from_manifest[] = sanitize_file_name( (string) $t['slug'] );
-			}
-		}
-
-		return array_values( array_filter( $from_manifest ) );
 	}
 
 	/**

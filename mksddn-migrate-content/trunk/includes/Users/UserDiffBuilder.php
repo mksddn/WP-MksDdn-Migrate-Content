@@ -29,15 +29,17 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 	 * Build diff data based on archive payload and current site users.
 	 *
 	 * @param string $archive_path Absolute archive path.
-	 * @return array<string, mixed>|WP_Error Diff data with incoming users, counts, and table info, or WP_Error on failure.
+	 * @return array<string, mixed>|WP_Error Diff data with incoming users, counts, manifest, and table info, or WP_Error on failure.
 	 * @since 1.0.0
 	 */
 	public function build( string $archive_path ) {
-		$payload = FullArchivePayload::read( $archive_path );
-		if ( is_wp_error( $payload ) ) {
-			return $payload;
+		$bundle = FullArchivePayload::read_with_manifest( $archive_path );
+		if ( is_wp_error( $bundle ) ) {
+			return $bundle;
 		}
 
+		$payload  = $bundle['payload'];
+		$manifest = isset( $bundle['manifest'] ) && is_array( $bundle['manifest'] ) ? $bundle['manifest'] : array();
 		$database = isset( $payload['database'] ) && is_array( $payload['database'] ) ? $payload['database'] : array();
 		$remote   = $this->extract_remote_users( $database );
 		$local    = $this->collect_local_users();
@@ -52,6 +54,7 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 		return array(
 			'incoming' => $incoming,
 			'counts'   => $counts,
+			'manifest' => $manifest,
 			'tables'   => array(
 				'users'    => $remote['users_table'],
 				'usermeta' => $remote['usermeta_table'],

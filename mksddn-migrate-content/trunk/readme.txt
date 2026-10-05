@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.7.2
+Stable tag: 2.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,12 +16,12 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 
 = Why MksDdn Migrate Content? =
 
-* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (multi-select posts/pages/CPTs with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
+* **Three export modes** – Full Site (database + uploads/plugins/mu-plugins/themes), Selected Content (grid of multi-selects for posts/pages/CPTs with title search, scroll lazy load, and Load more, plus ACF Options Pages, with or without referenced media), or Theme Export (individual themes as `.wpbkp`).
 * **Chunked pipeline** – large archives stream through REST API endpoints with resume tokens, so multi‑GB transfers survive flaky networks.
 * **User merge control** – compare archive vs current users and decide how to merge conflicts.
 * **Theme import mode** – when a theme archive is detected, choose replace vs merge before applying changes.
 * **Integrity & safety** – `.wpbkp` archives ship with manifests and checksums; imports verify capabilities, nonces, and disk space before touching data.
-* **Import preflight** – unified import is a two-step flow: run preflight (read-only report), then start the real import from the report without uploading the file again (browser uploads are staged server-side between steps).
+* **Import preflight** – unified import is a two-step flow: run preflight (read-only report with field/media/theme path details), then start the real import from the report without uploading the file again (browser uploads are staged server-side between steps). Full-site and theme preflight warn when archive PHP/WordPress major.minor versions differ from the target site.
 
 = Feature Highlights =
 
@@ -29,7 +29,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
 - File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/mu-plugins`, `wp-content/themes` with filters to skip VCS/system files.
 - Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
-- Server file import — select backup files from `wp-content/uploads/mksddn-mc/imports/` without browser uploads; delete unused server backups from the import UI.
+- Server file import — select backup files from `wp-content/uploads/mksddn-mc/imports/` without browser uploads; delete unused server backups (including bulk delete) from the import UI.
 - Theme export and import with replace vs merge preview before applying changes.
 - Export preflight — disk space and memory checks before full-site export starts.
 - Drag-and-drop `.wpbkp` / `.json` uploader with MIME validation and checksum guardrails (`file-dropzone.js`).
@@ -44,19 +44,19 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 == Frequently Asked Questions ==
 
 = What is inside a `.wpbkp` archive? =
-Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads for selected entities, optional filesystem slices (uploads/plugins/themes), media binaries, and user-merge selections. Imports verify the manifest before processing.
+Each archive stores a manifest (checksums, metadata, timestamps), JSON payloads for selected entities, optional filesystem slices (uploads/plugins/themes), media binaries, and user-merge selections. Full-site and theme manifests also record the source site `php_version` and `wp_version`. Imports verify the manifest before processing.
 
 = How is `.wpbkp` different from `.json` exports? =
 `.json` exports are lightweight (content only) and convenient for quick edits. `.wpbkp` adds media, filesystem slices, and checksums. Use `.wpbkp` for full fidelity.
 
 = Does it support ACF and custom post types? =
-Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported. Taxonomies, menus, widgets, and serialized options are also covered.
+Yes. Any public post type plus Advanced Custom Fields metadata is exported/imported (including Secure Custom Fields / other ACF-compatible APIs that provide `get_field` / `update_field`). Selected Content can also export/import ACF Options Pages (matched by `menu_slug`, written via the ACF API). For best results with repeaters and nested groups, register and attach matching field groups on the destination before import (same field keys as the source, e.g. via ACF/SCF JSON sync). Preflight warns when archive field names are not found locally; for posts the importer still falls back to scoped raw ACF meta from the archive when `update_field()` cannot expand nested fields. Taxonomies, menus, widgets, and serialized options are also covered in full-site flows.
 
 = How do chunked uploads resume? =
 The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via REST API endpoints (`mksddn/v1/chunk/*`). If the browser reloads, the resume token restarts from the last confirmed chunk.
 
 = How do I import a backup file from the server? =
-You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. You can also delete unused backup files from the server via the **Delete** button next to the file selector. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
+You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Click a file to choose it for import (nothing is selected until you click). Use checkboxes plus **Select all** / **Deselect all** / **Delete selected** to remove unused backups (up to 100 files per delete request). This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = What is cleaned up when the plugin is deactivated? =
 Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, preflight staging under `wp-content/uploads/mksddn-mc/preflight/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
@@ -74,13 +74,13 @@ Yes. The user merge dialog shows archive/current rows with conflict indicators. 
 Filesystem operations run through `WP_Filesystem`, honor capability checks, and avoid `.git`, `.svn`, and OS temp files. Full-site imports back up theme directories before replace and restore them if extraction fails.
 
 = How does unified import preflight work? =
-Step 1 runs file detection and read-only analysis (payload parsing, user diff scan for full-site archives, theme list scan) and stores a short-lived report on the Import page. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked jobs stay in `jobs/` until success, then are renamed into `imports/` for reuse). Browser uploads are moved to `preflight/` between steps and renamed into `imports/` after success. Files you place in `imports/` yourself are not deleted. Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
+Step 1 runs file detection and read-only analysis and stores a short-lived report on the Import page. Selected Content preflight compares archive items to the local site by slug and shows truncated field-name + status inventories for core fields, ACF, meta, and taxonomies (not full before/after values), plus a media file sample. Domain-only string differences are labeled as URL rewrite. Theme preflight lists paths to add, with changed content, identical (ACF JSON files ignore the volatile `modified` timestamp), or same-size unverified (byte-check skipped for large files / hash budget), and estimates local-only files that Replace would delete. For full-site and theme archives, preflight also compares source vs target PHP and WordPress versions (major.minor) and warns when they differ; older archives without those manifest fields skip the check. Step 2 starts the real import using the same file (no second upload for browser uploads; chunked jobs stay in `jobs/` until success, then are renamed into `imports/` for reuse). Browser uploads are moved to `preflight/` between steps and renamed into `imports/` after success. Dismissing the preflight report, or cancelling the user-merge / theme-preview step, also promotes the staged or chunked archive into `imports/` so it remains available under Select from server. Files you place in `imports/` yourself are not deleted. Preflight does not acquire the import lock or apply database changes. It is a best-effort preview (v1): validate on a staging site when possible.
 
 == Screenshots ==
 
 1. Export page with Full Site, Selected Content, and Theme Export tabs.
-2. Selected Content picker with multi-select lists and media toggles.
-3. Unified import form with drag-and-drop upload and server file selector.
+2. Selected Content picker with a shared multi-select grid for post types and ACF Options Pages, plus media toggles.
+3. Unified import form with drag-and-drop upload and server file list (click to import, checkboxes for bulk delete).
 4. Import preflight report before the real import starts.
 5. User merge dialog showing archive/current comparison.
 
@@ -105,18 +105,20 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 = Admin UI =
 * Top-level **Migrate Content** menu with **Export** and **Import** subpages
 * Export tabs: Full Site, Selected Content, Theme Export (`AdminPageView`, `views/admin/*`)
+* Selected Content picker: shared multi-select grid for post types and ACF Options Pages (`content-picker.js`) with title-only search, scroll lazy load, and a Load more button on post-type columns; selected options stay pinned in each list
 * Unified import form with preflight report, user preview, and theme preview screens
-* Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `admin-scripts.js`, `admin-styles.css`
+* Admin assets: `file-dropzone.js`, `server-file-selector.js` (server file list with bulk delete), `chunk-transfer.js`, `content-picker.js`, `admin-scripts.js`, `admin-styles.css`
 
 = Export & Import Core =
-* `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF)
-* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF)
-* `SelectionBuilder`, `ContentSelection` — build export selections from admin input
+* `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF, ACF Options Pages)
+* `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF, ACF Options Pages). For post ACF/SCF fields: `update_field()` when a local field object exists; scoped `meta` fallback when the field group is missing or nested structural meta is incomplete; cleanup of non-scalar root “blob” meta left by a failed expand so leaf repeater/group keys remain authoritative
+* `SelectionBuilder`, `ContentSelection` — build export selections from admin input (posts/CPTs and Options Page `menu_slug`s)
 * `FullContentExporter`, `FullContentImporter` — full-site archive assembly and restore
 * `FullDatabaseExporter`, `FullDatabaseImporter`, `SwapTableNames` — streaming database export/import; schema recreate uses a swap table then atomic RENAME
 * `ThemeExporter`, `ThemeImporter` — theme archive export and filesystem apply
-* `OptionsExporter`, `OptionsImporter`, `OptionsHelper` — WordPress options slices
-* `AttachmentCollector`, `AttachmentRestorer`, `AttachmentCollection` — media pipeline
+* `OptionsExporter`, `OptionsImporter` — raw WordPress options / widget slices
+* `OptionsHelper` — discovers ACF Options Pages and exports only field groups located on the selected `menu_slug` (avoids shared `post_id` leakage), plus a field-type schema so image/file/gallery IDs are not confused with number fields
+* `AttachmentCollector`, `AttachmentRestorer`, `AttachmentCollection` — media pipeline (posts and ACF Options Page image/file/gallery values)
 * `ExportPreflight`, `ExportMemoryHelper` — pre-export disk/memory checks and memory budgeting
 * `FilenameBuilder` — deterministic archive filenames
 
@@ -125,32 +127,36 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `FullSiteImportService` — manages full site imports
 * `ThemeImportService` — handles theme archive imports
 * `UnifiedImportOrchestrator` — orchestrates unified import with automatic type detection; step 1 is always preflight, step 2 runs the real import using a stored file reference
-* `ImportPreflightService` — read-only analysis for unified import preflight
-* `PreflightReportStore` — short-lived transient storage for preflight reports and follow-up import handles (staged browser uploads under `wp-content/uploads/mksddn-mc/preflight/`, or chunk/server identifiers)
+* `ImportPreflightService` — read-only analysis for unified import preflight (including PHP/WordPress version mismatch warnings for full-site and theme archives, Selected Content field/media diffs via `SelectedContentDiffBuilder`, theme path diffs via `ThemeFileDiffBuilder`, and warnings when Selected Content ACF/SCF field names are not registered locally)
+* `SelectedContentDiffBuilder` (`Import\SelectedContentDiffBuilder`) — field-name + status inventory for selected-content preflight (core/ACF/meta/taxonomies/media; URL-rewrite awareness; ACF image/file/gallery compared by attachment filename fingerprints to avoid cross-site ID false positives; skips Polylang `post_translations` and empty archive term lists that the importer would not clear; no before→after value previews)
+* `ThemeFileDiffBuilder` (`Filesystem\ThemeFileDiffBuilder`) — theme archive path inventory (add/changed/identical/unverified buckets, ACF JSON without `modified`, Replace delete samples with a per-theme filesystem walk cap, hash budget); `slim_for_preview_store()` drops path samples before the theme-preview transient (theme preview keeps a link back to the preflight report for samples)
+* `PreflightReportStore` — short-lived preflight session index in a transient (900s); report body stored as JSON under `wp-content/uploads/mksddn-mc/preflight/` (avoids oversized transient/object-cache failures for Selected Content field diffs; report JSON purged on the same TTL), plus follow-up import handles (staged browser uploads, or chunk/server identifiers)
 * `ImportTypeDetector` — detects import type (full site, selected content, or theme) from archive file
 * `ImportFileValidator` — validates uploaded files
 * `ImportPayloadPreparer` — prepares import payloads
-* `ServerBackupScanner` — scans, validates, and deletes backup files on the server
+* `ContentPickerQueryService` — WP_Query helper for the Selected Content picker (exportable post-type allowlist, title-only search scoped to that query, paginated published posts)
+* `ServerBackupScanner` — scans, validates, and deletes backup files on the server (single and bulk delete)
 * `ResponseHandler` — manages redirects and status messages
 * `NotificationService` — handles user notifications
 * `ProgressService` — tracks operation progress
 * `ErrorHandler`, `PluginLogger` — centralized error handling and file logging
 * `UserDiffBuilder`, `UserMergeApplier`, `UserPreviewStore` — user merge workflow
-* `ThemePreviewStore` (`Themes\ThemePreviewStore`) — stores pending theme import previews
+* `ThemePreviewStore` (`Themes\ThemePreviewStore`) — stores pending theme import previews (counts-only theme file inventory to avoid oversized transients; fails loudly if the session cannot be stored)
 
 = Support & Maintenance =
-* `ImportArtifactCleanup` — stages browser uploads into `preflight/`; after success renames ephemeral archives into `imports/` (no second multi-GB copy) and clears chunk job metadata; purges expired preflight files
+* `ImportArtifactCleanup` — stages browser uploads into `preflight/`; after success or abort (dismiss preflight / cancel user or theme preview) renames ephemeral archives into `imports/` (no second multi-GB copy) and clears chunk job metadata; purges expired preflight files (report `report-*.json` bodies use the 900s session TTL; staged archives keep the longer default)
 * `DeactivationCleanup` — clears temporary upload state and service directories when the plugin is deactivated
 * `PostImportMaintenance` — cache/rewrite cleanup after full import and emergency purge if the database was partially updated; global flush plus targeted `wp_cache_flush_group()` when supported; filter `mksddn_mc_post_import_object_cache_flush_groups`. WooCommerce maintenance is not called in the import request that replaced `wp-content/plugins` (that process may still have WooCommerce 10.9 classes in memory while 11.x files are on disk). The import request only deletes `wc_products_onsale`, `wc_featured_products`, `wc_outofstock_count`, and `wc_low_stock_count`, and calls `WC_Cache_Helper::get_transient_version( 'product', true )` when that method is already loaded. `run_woocommerce_maintenance()` runs on the next fresh request via a single WP-Cron event, or an admin-post loopback when cron cannot start. Core `.maintenance` is removed just before that request is spawned; the plugin runtime lock stays until import shutdown. The one-time token is saved with `update_option()` so the next process can read it after `object-cache.php` changes. `wc_delete_product_transients()` runs only if the loaded `Automattic\WooCommerce\Internal\Utilities\ProductUtil` has `delete_product_transients_for_products`. Maintenance failures are logged and do not fail the import.
 * `FullImportMaintenance` — file-based runtime lock and early 503 gate while a full-site import is running (admin, CLI, cron exempt; REST blocked unless explicitly allowed)
 * `ImportLock` — prevents concurrent import operations
 * `PreflightStagingPath` — validates staged preflight file paths
 * `ThemeArchivePathHelper` — normalizes theme archive entry paths
+* `EnvironmentVersionComparator` — compares archive vs target PHP/WordPress major.minor versions for import preflight warnings
 * `DomainReplacer`, `SiteUrlGuard`, `FilesystemHelper`, `MimeTypeHelper`
 
 = Archive Layer =
 * `Packer`, `Extractor` — `.wpbkp` archive pack/unpack
-* `FullArchivePayload` — memory-efficient JSON payload handling
+* `FullArchivePayload` — memory-efficient JSON payload handling; `read_with_manifest()` loads payload and `manifest.json` in one archive open
 * `ContentCollector` — filesystem content collection for exports
 * `ArchiveValidator`, `ValidationResult` — manifest and checksum validation
 
@@ -192,7 +198,16 @@ All key components implement interfaces:
 
 == Changelog ==
 
+= 2.8.0 =
+* Added: ACF Options Pages in Selected Content export and import.
+* Added: Selected Content picker with title search, lazy load, and Load more.
+* Added: Preflight diffs for fields, media, and theme files, plus PHP/WordPress version warnings on full-site and theme imports.
+* Added: ACF/SCF fields without a local definition are warned in preflight and imported as scoped meta.
+* Added: Bulk delete and click-to-select for server backup files on the import screen.
+* Improved: Dismissing a preflight report also clears the related user and theme preview sessions.
+
 = 2.7.2 =
+* Fixed: Dismissing the preflight report or cancelling user/theme preview promotes the staged or chunked archive into `imports/` so it remains available under Select from server.
 * Fixed: Full-site import no longer calls WooCommerce APIs in the request that replaced `wp-content/plugins`. Product transients are cleared there; `wc_delete_product_transients()`, `WC_Install`, and lookup tables run on the next request so `ProductUtil` is loaded from disk.
 * Fixed: Post-import maintenance errors are logged and no longer turn a successful full import into a fatal.
 
