@@ -29,7 +29,7 @@ MksDdn Migrate Content is a clean-room migration suite that packages your site i
 - Media scanner that collects featured images, galleries, attachments referenced inside blocks or shortcodes.
 - File-system coverage for `wp-content/uploads`, `wp-content/plugins`, `wp-content/mu-plugins`, `wp-content/themes` with filters to skip VCS/system files.
 - Chunked upload/download JS client with live progress, auto-resume, and graceful fallback to direct transfer.
-- Server file import — select backup files from `wp-content/uploads/mksddn-mc/imports/` without browser uploads; delete unused server backups from the import UI.
+- Server file import — select backup files from `wp-content/uploads/mksddn-mc/imports/` without browser uploads; delete unused server backups (including bulk delete) from the import UI.
 - Theme export and import with replace vs merge preview before applying changes.
 - Export preflight — disk space and memory checks before full-site export starts.
 - Drag-and-drop `.wpbkp` / `.json` uploader with MIME validation and checksum guardrails (`file-dropzone.js`).
@@ -56,7 +56,7 @@ Yes. Any public post type plus Advanced Custom Fields metadata is exported/impor
 The JS client splits files into 5–10 MB chunks (auto-tuned by server limits). Each chunk is hashed and acknowledged via REST API endpoints (`mksddn/v1/chunk/*`). If the browser reloads, the resume token restarts from the last confirmed chunk.
 
 = How do I import a backup file from the server? =
-You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Select the desired file and proceed with the import. You can also delete unused backup files from the server via the **Delete** button next to the file selector. This method is especially useful for large files or when you have direct server access via FTP/SFTP.
+You can import backup files directly from the server without uploading them through the browser. Place your `.wpbkp` or `.json` archive files in the `wp-content/uploads/mksddn-mc/imports/` directory (the plugin will create this directory automatically if it doesn't exist). Then, in the import form, toggle the "Select from server" option instead of "Upload file". The plugin will scan the imports directory and display available files with their size and modification date. Click a file to choose it for import (nothing is selected until you click). Use checkboxes plus **Select all** / **Deselect all** / **Delete selected** to remove unused backups (up to 100 files per delete request). This method is especially useful for large files or when you have direct server access via FTP/SFTP.
 
 = What is cleaned up when the plugin is deactivated? =
 Chunk upload state under `wp-content/uploads/mksddn-mc/jobs/`, preflight staging under `wp-content/uploads/mksddn-mc/preflight/`, theme replace backups under `wp-content/mksddn-mc/theme-backups/`, the import lock transient, the full-site import maintenance lock file, server-backup list cache, user/theme preview transients, optional `mksddn_mc_storage_path`, and theme preview index data. Files in `wp-content/uploads/mksddn-mc/imports/` are not removed by default; set the `mksddn_mc_deactivation_clear_imports` filter to true if you want that directory emptied on deactivation.
@@ -80,7 +80,7 @@ Step 1 runs file detection and read-only analysis and stores a short-lived repor
 
 1. Export page with Full Site, Selected Content, and Theme Export tabs.
 2. Selected Content picker with a shared multi-select grid for post types and ACF Options Pages, plus media toggles.
-3. Unified import form with drag-and-drop upload and server file selector.
+3. Unified import form with drag-and-drop upload and server file list (click to import, checkboxes for bulk delete).
 4. Import preflight report before the real import starts.
 5. User merge dialog showing archive/current comparison.
 
@@ -107,7 +107,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * Export tabs: Full Site, Selected Content, Theme Export (`AdminPageView`, `views/admin/*`)
 * Selected Content picker: shared multi-select grid for post types and ACF Options Pages (`content-picker.js`) with title-only search, scroll lazy load, and a Load more button on post-type columns; selected options stay pinned in each list
 * Unified import form with preflight report, user preview, and theme preview screens
-* Admin assets: `file-dropzone.js`, `server-file-selector.js`, `chunk-transfer.js`, `content-picker.js`, `admin-scripts.js`, `admin-styles.css`
+* Admin assets: `file-dropzone.js`, `server-file-selector.js` (server file list with bulk delete), `chunk-transfer.js`, `content-picker.js`, `admin-scripts.js`, `admin-styles.css`
 
 = Export & Import Core =
 * `ExportHandler` — selected content export (slug-based identifiers, media, taxonomies, ACF, ACF Options Pages)
@@ -135,7 +135,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ImportFileValidator` — validates uploaded files
 * `ImportPayloadPreparer` — prepares import payloads
 * `ContentPickerQueryService` — WP_Query helper for the Selected Content picker (exportable post-type allowlist, title-only search scoped to that query, paginated published posts)
-* `ServerBackupScanner` — scans, validates, and deletes backup files on the server
+* `ServerBackupScanner` — scans, validates, and deletes backup files on the server (single and bulk delete)
 * `ResponseHandler` — manages redirects and status messages
 * `NotificationService` — handles user notifications
 * `ProgressService` — tracks operation progress

@@ -159,6 +159,7 @@ class ImportRequestHandler implements ImportRequestHandlerInterface {
 			'chunk_job_id'        => isset( $_POST['chunk_job_id'] ) ? sanitize_text_field( wp_unslash( $_POST['chunk_job_id'] ) ) : '',
 			'chunk_original_name' => isset( $_POST['chunk_original_name'] ) ? sanitize_file_name( wp_unslash( (string) $_POST['chunk_original_name'] ) ) : '',
 			'server_file'         => isset( $_POST['server_file'] ) ? sanitize_text_field( wp_unslash( $_POST['server_file'] ) ) : '',
+			'import_source'       => isset( $_POST['import_source'] ) ? sanitize_text_field( wp_unslash( $_POST['import_source'] ) ) : '',
 		);
 
 		// Process unified import through orchestrator.

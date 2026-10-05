@@ -153,6 +153,7 @@ class AdminPageController {
 		add_action( 'admin_post_mksddn_mc_release_import_lock', array( $this, 'handle_release_import_lock' ) );
 		add_action( 'wp_ajax_mksddn_mc_get_server_backups', array( $this, 'handle_ajax_get_server_backups' ) );
 		add_action( 'wp_ajax_mksddn_mc_delete_server_backup', array( $this, 'handle_ajax_delete_server_backup' ) );
+		add_action( 'wp_ajax_mksddn_mc_delete_server_backups', array( $this, 'handle_ajax_delete_server_backups' ) );
 		add_action( 'wp_ajax_mksddn_mc_search_posts', array( $this, 'handle_ajax_search_posts' ) );
 	}
 
@@ -358,21 +359,29 @@ class AdminPageController {
 			'mksddn-server-file-selector',
 			'mksddnServerFileSelector',
 			array(
-				'ajaxAction'       => 'mksddn_mc_get_server_backups',
-				'deleteAjaxAction' => 'mksddn_mc_delete_server_backup',
-				'nonce'            => wp_create_nonce( 'mksddn_mc_admin' ),
-				'i18n'             => array(
-					'loading'         => __( 'Loading...', 'mksddn-migrate-content' ),
-					'selectFile'      => __( 'Select a file...', 'mksddn-migrate-content' ),
-					'noFiles'         => __( 'No backup files found', 'mksddn-migrate-content' ),
-					'loadError'       => __( 'Error loading files', 'mksddn-migrate-content' ),
-					'pleaseSelect'    => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
-					'deleteConfirm'   => __( 'Delete this backup file from the server? This cannot be undone.', 'mksddn-migrate-content' ),
-					'deleteSuccess'   => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
-					'deleteError'     => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
-					'deleteSelect'    => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
-					'deleting'        => __( 'Deleting...', 'mksddn-migrate-content' ),
-					'deleteButton'    => __( 'Delete', 'mksddn-migrate-content' ),
+				'ajaxAction'           => 'mksddn_mc_get_server_backups',
+				'deleteBulkAjaxAction' => 'mksddn_mc_delete_server_backups',
+				'maxBulkDelete'        => ServerBackupScanner::MAX_BULK_DELETE,
+				'nonce'                => wp_create_nonce( 'mksddn_mc_admin' ),
+				'i18n'                 => array(
+					'loading'              => __( 'Loading...', 'mksddn-migrate-content' ),
+					'noFiles'              => __( 'No backup files found', 'mksddn-migrate-content' ),
+					'loadError'            => __( 'Error loading files', 'mksddn-migrate-content' ),
+					'pleaseSelect'         => __( 'Please select a file from the server.', 'mksddn-migrate-content' ),
+					'chooseFile'           => __( 'Use for import', 'mksddn-migrate-content' ),
+					/* translators: %d: number of backup files to delete */
+					'deleteBulkConfirm'    => __( 'Delete %d selected backup file(s) from the server? This cannot be undone.', 'mksddn-migrate-content' ),
+					/* translators: %d: number of deleted backup files */
+					'deleteBulkSuccess'    => __( 'Deleted %d backup file(s).', 'mksddn-migrate-content' ),
+					/* translators: %d: maximum number of files allowed in one delete request */
+					'deleteBulkLimit'      => __( 'You can delete at most %d files at once.', 'mksddn-migrate-content' ),
+					'deleteError'          => __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
+					'deleteSelect'         => __( 'Please select a file to delete.', 'mksddn-migrate-content' ),
+					'deleteCheckboxLabel'  => __( 'Select for deletion', 'mksddn-migrate-content' ),
+					'deleting'             => __( 'Deleting...', 'mksddn-migrate-content' ),
+					'selectAll'            => __( 'Select all', 'mksddn-migrate-content' ),
+					'deselectAll'          => __( 'Deselect all', 'mksddn-migrate-content' ),
+					'deleteSelected'       => __( 'Delete selected', 'mksddn-migrate-content' ),
 				),
 			)
 		);
@@ -667,6 +676,102 @@ class AdminPageController {
 		wp_send_json_success(
 			array(
 				'message' => __( 'Backup file deleted.', 'mksddn-migrate-content' ),
+			)
+		);
+	}
+
+	/**
+	 * Handle AJAX request to delete multiple server backup files.
+	 *
+	 * @return void
+	 * @since 2.6.0
+	 */
+	public function handle_ajax_delete_server_backups(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified below.
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'mksddn_mc_admin' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid security token.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'mksddn-migrate-content' ) ) );
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized per item below.
+		$raw_filenames = isset( $_POST['filenames'] ) ? wp_unslash( $_POST['filenames'] ) : array();
+		if ( ! is_array( $raw_filenames ) ) {
+			$raw_filenames = array();
+		}
+
+		$filenames = array();
+		foreach ( $raw_filenames as $raw_filename ) {
+			if ( ! is_string( $raw_filename ) && ! is_numeric( $raw_filename ) ) {
+				continue;
+			}
+			$filename = basename( sanitize_text_field( (string) $raw_filename ) );
+			if ( '' !== $filename ) {
+				$filenames[] = $filename;
+			}
+		}
+		$filenames = array_values( array_unique( $filenames ) );
+
+		if ( empty( $filenames ) ) {
+			wp_send_json_error( array( 'message' => __( 'No backup file specified.', 'mksddn-migrate-content' ) ) );
+		}
+
+		if ( count( $filenames ) > ServerBackupScanner::MAX_BULK_DELETE ) {
+			wp_send_json_error(
+				array(
+					'message' => sprintf(
+						/* translators: %d: maximum number of files allowed in one delete request */
+						__( 'You can delete at most %d files at once.', 'mksddn-migrate-content' ),
+						ServerBackupScanner::MAX_BULK_DELETE
+					),
+				)
+			);
+		}
+
+		$result       = $this->server_scanner->delete_files( $filenames );
+		$deleted      = isset( $result['deleted'] ) && is_array( $result['deleted'] ) ? $result['deleted'] : array();
+		$errors       = isset( $result['errors'] ) && is_array( $result['errors'] ) ? $result['errors'] : array();
+		$deleted_count = count( $deleted );
+		$error_count   = count( $errors );
+
+		if ( 0 === $deleted_count ) {
+			$first_error = ! empty( $errors ) ? (string) reset( $errors ) : '';
+			wp_send_json_error(
+				array(
+					'message' => '' !== $first_error
+						? $first_error
+						: __( 'Failed to delete backup file.', 'mksddn-migrate-content' ),
+					'errors'  => $errors,
+				)
+			);
+		}
+
+		if ( $error_count > 0 ) {
+			$message = sprintf(
+				/* translators: 1: number deleted, 2: number failed */
+				__( 'Deleted %1$d backup file(s). %2$d could not be deleted.', 'mksddn-migrate-content' ),
+				$deleted_count,
+				$error_count
+			);
+		} else {
+			$message = sprintf(
+				/* translators: %d: number of deleted backup files */
+				__( 'Deleted %d backup file(s).', 'mksddn-migrate-content' ),
+				$deleted_count
+			);
+		}
+
+		wp_send_json_success(
+			array(
+				'message'       => $message,
+				'deleted'       => $deleted,
+				'deleted_count' => $deleted_count,
+				'errors'        => $errors,
+				'error_count'   => $error_count,
 			)
 		);
 	}

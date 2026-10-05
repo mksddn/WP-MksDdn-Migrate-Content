@@ -95,13 +95,15 @@ $mksddn_mc_imports_dir = wp_upload_dir();
 					</div>
 				<?php else : ?>
 					<div class="mksddn-mc-import-source-server">
-						<div class="mksddn-mc-server-file-row">
-							<select name="server_file" id="mksddn-mc-unified-server-file" required>
-								<option value=""><?php esc_html_e( 'Select a file...', 'mksddn-migrate-content' ); ?></option>
-							</select>
-							<button type="button" class="button button-secondary mksddn-mc-delete-server-file" disabled><?php esc_html_e( 'Delete', 'mksddn-migrate-content' ); ?></button>
+						<input type="hidden" name="server_file" id="mksddn-mc-unified-server-file" value="" />
+						<div class="mksddn-mc-server-file-toolbar">
+							<button type="button" class="button button-secondary mksddn-mc-select-all-server-files" disabled><?php esc_html_e( 'Select all', 'mksddn-migrate-content' ); ?></button>
+							<button type="button" class="button button-secondary mksddn-mc-delete-selected-server-files" disabled><?php esc_html_e( 'Delete selected', 'mksddn-migrate-content' ); ?></button>
 						</div>
-						<p class="description"><?php esc_html_e( 'Select an import file from the server directory. You can delete unused backups from the server.', 'mksddn-migrate-content' ); ?></p>
+						<div class="mksddn-mc-server-file-list" id="mksddn-mc-unified-server-file-list" aria-label="<?php esc_attr_e( 'Server backup files', 'mksddn-migrate-content' ); ?>">
+							<p class="mksddn-mc-server-file-list__empty"><?php esc_html_e( 'Loading...', 'mksddn-migrate-content' ); ?></p>
+						</div>
+						<p class="description"><?php esc_html_e( 'Click a file to use it for import (required before Run preflight). Use checkboxes with Select all / Deselect all / Delete selected to remove unused backups.', 'mksddn-migrate-content' ); ?></p>
 						<div class="mksddn-mc-server-file-notice notice notice-error" style="display: none; margin-top: 0.5rem;"></div>
 					</div>
 				<?php endif; ?>

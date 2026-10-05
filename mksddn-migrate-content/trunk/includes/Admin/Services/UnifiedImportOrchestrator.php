@@ -241,6 +241,25 @@ class UnifiedImportOrchestrator {
 	 * @since 2.0.0
 	 */
 	private function resolve_file_source( array $request_data ) {
+		$import_source = isset( $request_data['import_source'] )
+			? sanitize_text_field( (string) $request_data['import_source'] )
+			: '';
+
+		// Server tab must provide an explicit backup basename (do not fall through to upload).
+		if ( 'server' === $import_source ) {
+			$server_file = isset( $request_data['server_file'] )
+				? sanitize_text_field( (string) $request_data['server_file'] )
+				: '';
+			if ( '' === $server_file ) {
+				return new WP_Error(
+					'mksddn_mc_server_file_missing',
+					__( 'Please select a file from the server.', 'mksddn-migrate-content' )
+				);
+			}
+
+			return $this->resolve_server_file( $server_file );
+		}
+
 		// Check for chunked upload.
 		if ( ! empty( $request_data['chunk_job_id'] ) ) {
 			$original_name = isset( $request_data['chunk_original_name'] )
@@ -250,7 +269,7 @@ class UnifiedImportOrchestrator {
 			return $this->resolve_chunked_file( (string) $request_data['chunk_job_id'], $original_name );
 		}
 
-		// Check for server file.
+		// Check for server file (legacy / non-tab submissions).
 		if ( ! empty( $request_data['server_file'] ) ) {
 			return $this->resolve_server_file( $request_data['server_file'] );
 		}
