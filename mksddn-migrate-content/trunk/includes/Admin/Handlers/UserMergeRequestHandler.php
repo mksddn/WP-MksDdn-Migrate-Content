@@ -76,6 +76,13 @@ class UserMergeRequestHandler implements UserMergeRequestHandlerInterface {
 			);
 		}
 
+		if ( (int) ( $preview['created_by'] ?? 0 ) !== get_current_user_id() ) {
+			$this->notifications->redirect_with_notice(
+				'error',
+				__( 'You are not allowed to cancel this preview.', 'mksddn-migrate-content' )
+			);
+		}
+
 		$kept = $this->cleanup_preview_resources( $preview );
 		$this->preview_store->delete( $preview_id );
 

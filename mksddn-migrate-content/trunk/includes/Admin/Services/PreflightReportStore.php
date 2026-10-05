@@ -146,7 +146,19 @@ class PreflightReportStore {
 		}
 
 		$data['phase'] = 'importing';
-		set_transient( $key, $data, self::TTL_SECONDS );
+		$saved         = set_transient( $key, $data, self::TTL_SECONDS );
+		if ( ! $saved ) {
+			return new WP_Error(
+				'mksddn_mc_preflight_claim_failed',
+				__( 'Could not update preflight session status. Try again.', 'mksddn-migrate-content' )
+			);
+		}
+
+		// Touch report JSON file so its retention aligns with refreshed transient TTL.
+		$report_path = $this->report_path_from_meta( $data, $id );
+		if ( null !== $report_path && is_file( $report_path ) ) {
+			FilesystemHelper::instance()->touch( $report_path );
+		}
 
 		return array(
 			'report'        => $report,
@@ -160,7 +172,7 @@ class PreflightReportStore {
 	 *
 	 * @param string $id      Report id.
 	 * @param int    $user_id Current user id.
-	 * @return array|null Keys: report, import_handle, phase; or null.
+	 * @return array|null Keys: report, import_handle, phase, claimed_at; or null.
 	 */
 	public function get_bucket_for_user( string $id, int $user_id ): ?array {
 		$id = preg_replace( '/[^a-zA-Z0-9_-]/', '', $id );
@@ -220,6 +232,12 @@ class PreflightReportStore {
 
 		$data['phase'] = 'ready';
 		set_transient( $key, $data, self::TTL_SECONDS );
+
+		// Touch report JSON file so its retention aligns with refreshed transient TTL.
+		$report_path = $this->report_path_from_meta( $data, $id );
+		if ( null !== $report_path && is_file( $report_path ) ) {
+			FilesystemHelper::instance()->touch( $report_path );
+		}
 
 		return true;
 	}

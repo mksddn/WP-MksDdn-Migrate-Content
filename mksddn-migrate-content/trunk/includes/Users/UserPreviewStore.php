@@ -26,22 +26,29 @@ class UserPreviewStore implements UserPreviewStoreInterface {
 	 * Save preview payload and return generated ID.
 	 *
 	 * @param array $payload Preview data.
-	 * @return string
+	 * @return string|\WP_Error
 	 */
-	public function create( array $payload ): string {
+	public function create( array $payload ) {
 		$this->cleanup_expired();
 
 		$id   = wp_generate_uuid4();
 		$data = array_merge(
 			array(
-				'id'         => $id,
 				'created_at' => time(),
-				'created_by' => get_current_user_id(),
 			),
 			$payload
 		);
+		$data['id']         = $id;
+		$data['created_by'] = get_current_user_id();
 
-		set_transient( $this->build_key( $id ), $data, self::TTL );
+		$saved = set_transient( $this->build_key( $id ), $data, self::TTL );
+		if ( ! $saved ) {
+			return new \WP_Error(
+				'mksddn_mc_user_preview_save',
+				__( 'Could not store the user preview session. Check object cache / database limits and try again.', 'mksddn-migrate-content' )
+			);
+		}
+
 		$this->store_index_entry( $id, $data );
 
 		return $id;

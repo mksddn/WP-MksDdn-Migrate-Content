@@ -111,6 +111,13 @@ class UnifiedImportOrchestrator {
 	private ?string $fatal_memory_redirect_url = null;
 
 	/**
+	 * Active preflight report ID during import execution (for claim release on fatal abort).
+	 *
+	 * @var string
+	 */
+	private string $active_preflight_report_id = '';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param SelectedContentImportService|null $selected_import_service Selected content import service.
@@ -177,6 +184,7 @@ class UnifiedImportOrchestrator {
 		$preflight_report_id = isset( $request_data['preflight_report_id'] )
 			? sanitize_text_field( (string) $request_data['preflight_report_id'] )
 			: '';
+		$this->active_preflight_report_id = $preflight_report_id;
 
 		$this->log(
 			sprintf(
@@ -820,6 +828,13 @@ class UnifiedImportOrchestrator {
 				$url = $this->fatal_memory_redirect_url;
 				if ( ! is_string( $url ) || '' === $url ) {
 					return;
+				}
+
+				if ( '' !== $this->active_preflight_report_id ) {
+					$current_user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+					if ( $current_user > 0 ) {
+						( new PreflightReportStore() )->release_import_claim( $this->active_preflight_report_id, $current_user );
+					}
 				}
 
 				while ( ob_get_level() > 0 ) {

@@ -293,11 +293,11 @@ class ThemeFileDiffBuilder {
 				'sample_identical'              => array(),
 				'sample_unverified'             => array(),
 				'sample_will_delete_on_replace' => array(),
-				'samples_truncated_added'       => false,
-				'samples_truncated_overwrite'   => false,
-				'samples_truncated_identical'   => false,
-				'samples_truncated_unverified'  => false,
-				'samples_truncated_will_delete' => false,
+				'samples_truncated_added'       => ! empty( $row['samples_truncated_added'] ),
+				'samples_truncated_overwrite'   => ! empty( $row['samples_truncated_overwrite'] ),
+				'samples_truncated_identical'   => ! empty( $row['samples_truncated_identical'] ),
+				'samples_truncated_unverified'  => ! empty( $row['samples_truncated_unverified'] ),
+				'samples_truncated_will_delete' => ! empty( $row['samples_truncated_will_delete'] ),
 				'counts_only'                   => true,
 			);
 		}

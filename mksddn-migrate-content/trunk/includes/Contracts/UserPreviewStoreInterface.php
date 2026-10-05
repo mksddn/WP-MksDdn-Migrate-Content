@@ -23,10 +23,10 @@ interface UserPreviewStoreInterface {
 	 * Save preview payload and return generated ID.
 	 *
 	 * @param array $payload Preview data.
-	 * @return string Preview ID.
+	 * @return string|\WP_Error Preview ID or error.
 	 * @since 1.0.0
 	 */
-	public function create( array $payload ): string;
+	public function create( array $payload );
 
 	/**
 	 * Fetch preview by ID.

@@ -358,10 +358,11 @@ class SelectedContentImportService {
 	 * @return void
 	 */
 	private function release_preflight_claim_if_any(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified in import().
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce verified in import().
 		$report_id = isset( $_POST['preflight_report_id'] )
 			? sanitize_text_field( wp_unslash( (string) $_POST['preflight_report_id'] ) )
 			: '';
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
 		if ( '' === $report_id ) {
 			return;
 		}

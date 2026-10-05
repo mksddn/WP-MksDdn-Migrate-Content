@@ -38,12 +38,12 @@ class ThemePreviewStore implements ThemePreviewStoreInterface {
 		$id   = wp_generate_uuid4();
 		$data = array_merge(
 			array(
-				'id'         => $id,
 				'created_at' => time(),
-				'created_by' => get_current_user_id(),
 			),
 			$payload
 		);
+		$data['id']         = $id;
+		$data['created_by'] = get_current_user_id();
 
 		$saved = set_transient( $this->build_key( $id ), $data, self::TTL );
 		if ( ! $saved ) {

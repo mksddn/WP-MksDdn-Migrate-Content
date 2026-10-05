@@ -330,7 +330,7 @@ class ExportHandler implements ExporterInterface {
 				);
 			}
 
-			if ( ! empty( $empty_options_pages ) ) {
+			if ( ! empty( $empty_options_pages ) && empty( $bundle['items'] ) && empty( $bundle['options_pages'] ) ) {
 				\wp_die(
 					\esc_html(
 						sprintf(
