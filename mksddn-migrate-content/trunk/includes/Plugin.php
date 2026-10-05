@@ -51,8 +51,26 @@ class Plugin {
 		PostImportMaintenance::register_hooks();
 		add_action( 'plugins_loaded', array( $this, 'boot_rest' ), 5 );
 		add_action( 'plugins_loaded', array( $this, 'ensure_storage_protection' ), 6 );
+		add_action( 'init', array( $this, 'load_textdomain' ), 0 );
 		add_action( 'init', array( FullImportMaintenance::class, 'maybe_block_public_requests' ), 0 );
 		add_action( 'init', array( $this, 'boot_admin' ) );
+	}
+
+	/**
+	 * Load bundled translations from the plugin languages directory.
+	 *
+	 * WordPress.org / GlotPress files under WP_LANG_DIR still auto-load since WP 4.6;
+	 * this call is required for Domain Path translations shipped with the plugin.
+	 *
+	 * @return void
+	 * @since 2.7.2
+	 */
+	public function load_textdomain(): void {
+		load_plugin_textdomain(
+			'mksddn-migrate-content',
+			false,
+			dirname( MKSDDN_MC_BASENAME ) . '/languages'
+		);
 	}
 
 	/**

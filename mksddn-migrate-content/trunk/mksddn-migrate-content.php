@@ -32,7 +32,8 @@ define( 'MKSDDN_MC_URL', plugin_dir_url( __FILE__ ) );
 define( 'MKSDDN_MC_TEXT_DOMAIN', 'mksddn-migrate-content' );
 define( 'MKSDDN_MC_BASENAME', plugin_basename( __FILE__ ) );
 
-// I18n: For plugins hosted on WordPress.org, translations are auto-loaded since WP 4.6.
+// I18n: GlotPress / WP_LANG_DIR auto-loads since WP 4.6; bundled Domain Path
+// translations are loaded via Plugin::load_textdomain() on init.
 
 // Requirements check.
 /**
