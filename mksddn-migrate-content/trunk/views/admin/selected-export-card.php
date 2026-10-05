@@ -11,8 +11,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$options_pages    = isset( $options_pages ) && is_array( $options_pages ) ? $options_pages : array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
+$options_pages = isset( $options_pages ) && is_array( $options_pages ) ? $options_pages : array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $exportable_types = isset( $exportable_types ) && is_array( $exportable_types ) ? $exportable_types : array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $has_picker_items = ! empty( $exportable_types ) || ! empty( $options_pages );
 ?>
 <div class="mksddn-mc-card">
@@ -30,10 +33,10 @@ $has_picker_items = ! empty( $exportable_types ) || ! empty( $options_pages );
 
 			<?php if ( $has_picker_items ) : ?>
 				<div class="mksddn-mc-selection-grid" data-mksddn-mc-content-picker>
-					<?php foreach ( $exportable_types as $type => $label ) : ?>
+					<?php foreach ( $exportable_types as $type => $label ) : // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variables. ?>
 						<?php
-						$name      = 'selected_' . $type . '_ids[]';
-						$select_id = 'selected_' . $type . '_ids';
+						$name      = 'selected_' . $type . '_ids[]'; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
+						$select_id = 'selected_' . $type . '_ids'; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 						?>
 						<div class="mksddn-mc-basic-selection">
 							<label for="<?php echo esc_attr( $select_id ); ?>">
@@ -79,18 +82,18 @@ $has_picker_items = ! empty( $exportable_types ) || ! empty( $options_pages );
 								<?php esc_html_e( 'Options Pages', 'mksddn-migrate-content' ); ?>
 							</label>
 							<select id="selected_options_page_slugs" name="selected_options_page_slugs[]" multiple size="12">
-								<?php foreach ( $options_pages as $options_page ) : ?>
+								<?php foreach ( $options_pages as $options_page ) : // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template loop variable. ?>
 									<?php
 									if ( ! is_array( $options_page ) ) {
 										continue;
 									}
-									$menu_slug  = sanitize_key( (string) ( $options_page['menu_slug'] ?? '' ) );
-									$page_title = sanitize_text_field( (string) ( $options_page['page_title'] ?? '' ) );
-									$menu_title = sanitize_text_field( (string) ( $options_page['menu_title'] ?? '' ) );
+									$menu_slug  = sanitize_key( (string) ( $options_page['menu_slug'] ?? '' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
+									$page_title = sanitize_text_field( (string) ( $options_page['page_title'] ?? '' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
+									$menu_title = sanitize_text_field( (string) ( $options_page['menu_title'] ?? '' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 									if ( '' === $menu_slug ) {
 										continue;
 									}
-									$label = '' !== $page_title ? $page_title : ( '' !== $menu_title ? $menu_title : $menu_slug );
+									$label = '' !== $page_title ? $page_title : ( '' !== $menu_title ? $menu_title : $menu_slug ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 									?>
 									<option value="<?php echo esc_attr( $menu_slug ); ?>">
 										<?php echo esc_html( $label ); ?>

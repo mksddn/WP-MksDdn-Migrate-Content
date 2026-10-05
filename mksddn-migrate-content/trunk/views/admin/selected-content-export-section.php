@@ -11,6 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 $options_pages = isset( $options_pages ) && is_array( $options_pages ) ? $options_pages : array();
 ?>
 <section class="mksddn-mc-section">
