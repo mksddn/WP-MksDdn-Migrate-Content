@@ -1,0 +1,39 @@
+{
+	"name": "mksddn/wp-mksddn-migrate-content",
+	"description": "Dev/test harness for MksDdn Migrate Content (plugin lives under mksddn-migrate-content/trunk).",
+	"type": "project",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=8.1"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9.6",
+		"yoast/phpunit-polyfills": "^2.0",
+		"doiftrue/unitest-wp-copy": "7.1.*",
+		"10up/wp_mock": "^1.1"
+	},
+	"autoload": {
+		"psr-4": {
+			"MksDdn\\MigrateContent\\": "mksddn-migrate-content/trunk/includes/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"MksDdn\\MigrateContent\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"test:unit": "phpunit -c phpunit.unit.xml.dist",
+		"test:integration": "phpunit -c phpunit.integration.xml.dist",
+		"test": [
+			"@test:unit",
+			"@test:integration"
+		]
+	},
+	"config": {
+		"sort-packages": true,
+		"allow-plugins": {
+			"php-http/discovery": true
+		}
+	}
+}
