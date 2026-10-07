@@ -18,11 +18,11 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Admin/Services/ImportPreflightService.php` | `ImportPreflightService` | integration:MissingPipelineTest |
 | `Admin/Services/ImportTypeDetector.php` | `ImportTypeDetector` | unit:ImportTypeDetectorTest |
 | `Admin/Services/NotificationService.php` | `NotificationService` | integration:MissingPipelineTest (service container resolves NotificationService) |
-| `Admin/Services/PreflightReportStore.php` | `PreflightReportStore` | integration:AdminPreflightTest |
+| `Admin/Services/PreflightReportStore.php` | `PreflightReportStore` | integration:AdminPreflightTest, PreflightArtifactsTest |
 | `Admin/Services/ProgressService.php` | `ProgressService` | integration:MissingPipelineTest (service container resolves ProgressService) |
 | `Admin/Services/ResponseHandler.php` | `ResponseHandler` | integration:MissingPipelineTest (service container resolves ResponseHandler) |
 | `Admin/Services/SelectedContentImportService.php` | `SelectedContentImportService` | integration:MissingPipelineTest (service container resolves SelectedContentImportService) |
-| `Admin/Services/ServerBackupScanner.php` | `ServerBackupScanner` | integration:MissingPipelineTest (service container resolves ServerBackupScanner) |
+| `Admin/Services/ServerBackupScanner.php` | `ServerBackupScanner` | integration:PreflightArtifactsTest |
 | `Admin/Services/ThemeImportService.php` | `ThemeImportService` | integration:MissingPipelineTest (service container resolves ThemeImportService) |
 | `Admin/Services/UnifiedImportOrchestrator.php` | `UnifiedImportOrchestrator` | integration:MissingPipelineTest |
 | `Admin/Views/AdminPageView.php` | `AdminPageView` | integration:MissingPipelineTest (service container resolves AdminPageView) |
@@ -30,7 +30,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Archive/Packer.php` | `Packer` | unit:PackerExtractorTest |
 | `Chunking/ChunkJob.php` | `ChunkJob` | unit:ChunkJobTest |
 | `Chunking/ChunkJobRepository.php` | `ChunkJobRepository` | integration:ChunkRestResumeTest |
-| `Chunking/ChunkRestController.php` | `ChunkRestController` | integration:ChunkRestResumeTest |
+| `Chunking/ChunkRestController.php` | `ChunkRestController` | integration:ChunkRestResumeTest, RuntimeGuardsTest |
 | `Chunking/ChunkServiceProvider.php` | `ChunkServiceProvider` | integration:MissingPipelineTest |
 | `Chunking/FullExportBuilder.php` | `FullExportBuilder` | integration:MissingPipelineTest |
 | `Config/PluginConfig.php` | `PluginConfig` | integration:AdminPreflightTest |
@@ -70,8 +70,8 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `DataTransferObjects/ExportResult.php` | `ExportResult` | unit:ExportResultTest |
 | `DataTransferObjects/FileUpload.php` | `FileUpload` | unit:FileUploadTest |
 | `DataTransferObjects/ImportRequest.php` | `ImportRequest` | unit:ImportRequestTest |
-| `Database/FullDatabaseExporter.php` | `FullDatabaseExporter` | integration:FullSiteSubsetTest |
-| `Database/FullDatabaseImporter.php` | `FullDatabaseImporter` | integration:MissingPipelineTest |
+| `Database/FullDatabaseExporter.php` | `FullDatabaseExporter` | integration:FullSiteSubsetTest, FullDatabaseRoundtripTest |
+| `Database/FullDatabaseImporter.php` | `FullDatabaseImporter` | integration:MissingPipelineTest, FullDatabaseRoundtripTest |
 | `Database/SwapTableNames.php` | `SwapTableNames` | unit:SwapTableNamesTest |
 | `Exceptions/DatabaseOperationException.php` | `DatabaseOperationException` | unit:ExceptionsTest |
 | `Exceptions/ExportException.php` | `ExportException` | unit:ExceptionsTest |
@@ -79,46 +79,46 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Exceptions/ImportException.php` | `ImportException` | unit:ExceptionsTest |
 | `Exceptions/ValidationException.php` | `ValidationException` | unit:ExceptionsTest |
 | `Export/ExportHandler.php` | `ExportHandler` | integration:MissingPipelineTest |
-| `Filesystem/ContentCollector.php` | `ContentCollector` | integration:MissingPipelineTest |
+| `Filesystem/ContentCollector.php` | `ContentCollector` | integration:FullFilesystemRoundtripTest |
 | `Filesystem/FullArchivePayload.php` | `FullArchivePayload` | integration:MissingPipelineTest |
 | `Filesystem/FullContentExporter.php` | `FullContentExporter` | integration:MissingPipelineTest |
-| `Filesystem/FullContentImporter.php` | `FullContentImporter` | integration:MissingPipelineTest |
+| `Filesystem/FullContentImporter.php` | `FullContentImporter` | integration:MissingPipelineTest, FullFilesystemRoundtripTest |
 | `Filesystem/ThemeExporter.php` | `ThemeExporter` | integration:ThemeArchiveRoundtripTest |
-| `Filesystem/ThemeFileDiffBuilder.php` | `ThemeFileDiffBuilder` | unit:ThemeFileDiffBuilderTest |
+| `Filesystem/ThemeFileDiffBuilder.php` | `ThemeFileDiffBuilder` | unit:ThemeFileDiffBuilderTest, integration:ThemeArchiveRoundtripTest |
 | `Filesystem/ThemeImporter.php` | `ThemeImporter` | integration:ThemeArchiveRoundtripTest |
-| `Import/ImportHandler.php` | `ImportHandler` | integration:SelectedContentRoundtripTest |
+| `Import/ImportHandler.php` | `ImportHandler` | integration:SelectedContentRoundtripTest, SelectedContentMediaTest |
 | `Import/SelectedContentDiffBuilder.php` | `SelectedContentDiffBuilder` | integration:MissingPipelineTest |
 | `Media/AttachmentCollection.php` | `AttachmentCollection` | unit:AttachmentCollectionTest |
 | `Media/AttachmentCollector.php` | `AttachmentCollector` | integration:MissingPipelineTest (service container resolves AttachmentCollector) |
-| `Media/AttachmentRestorer.php` | `AttachmentRestorer` | integration:MissingPipelineTest |
+| `Media/AttachmentRestorer.php` | `AttachmentRestorer` | integration:SelectedContentMediaTest |
 | `Options/OptionsExporter.php` | `OptionsExporter` | integration:MissingPipelineTest (service container resolves OptionsExporter) |
 | `Options/OptionsHelper.php` | `OptionsHelper` | integration:MissingPipelineTest (service container resolves OptionsHelper) |
-| `Options/OptionsImporter.php` | `OptionsImporter` | integration:MissingPipelineTest |
+| `Options/OptionsImporter.php` | `OptionsImporter` | integration:SelectedContentMediaTest |
 | `Plugin.php` | `Plugin` | unit:SmokeTest |
 | `Selection/ContentSelection.php` | `ContentSelection` | unit:ContentSelectionTest |
 | `Selection/SelectionBuilder.php` | `SelectionBuilder` | unit:SelectionBuilderTest |
 | `Services/ErrorHandler.php` | `ErrorHandler` | integration:MissingPipelineTest (service container resolves ErrorHandler) |
 | `Services/PluginLogger.php` | `PluginLogger` | integration:MissingPipelineTest |
-| `Support/DeactivationCleanup.php` | `DeactivationCleanup` | integration:AdminPreflightTest |
+| `Support/DeactivationCleanup.php` | `DeactivationCleanup` | integration:AdminPreflightTest, PreflightArtifactsTest |
 | `Support/DomainReplacer.php` | `DomainReplacer` | unit:DomainReplacerTest |
 | `Support/EnvironmentVersionComparator.php` | `EnvironmentVersionComparator` | unit:EnvironmentVersionComparatorTest |
 | `Support/ExportMemoryHelper.php` | `ExportMemoryHelper` | integration:MissingPipelineTest |
-| `Support/ExportPreflight.php` | `ExportPreflight` | integration:FullSiteSubsetTest |
+| `Support/ExportPreflight.php` | `ExportPreflight` | integration:FullSiteSubsetTest, RuntimeGuardsTest |
 | `Support/FilenameBuilder.php` | `FilenameBuilder` | unit:FilenameBuilderTest |
 | `Support/FilesystemHelper.php` | `FilesystemHelper` | unit:ChunkJobTest |
-| `Support/FullImportMaintenance.php` | `FullImportMaintenance` | integration:MissingPipelineTest |
-| `Support/ImportArtifactCleanup.php` | `ImportArtifactCleanup` | integration:MissingPipelineTest |
-| `Support/ImportLock.php` | `ImportLock` | integration:FullSiteSubsetTest |
+| `Support/FullImportMaintenance.php` | `FullImportMaintenance` | integration:RuntimeGuardsTest, MissingPipelineTest |
+| `Support/ImportArtifactCleanup.php` | `ImportArtifactCleanup` | integration:PreflightArtifactsTest, MissingPipelineTest |
+| `Support/ImportLock.php` | `ImportLock` | integration:FullSiteSubsetTest, RuntimeGuardsTest |
 | `Support/MimeTypeHelper.php` | `MimeTypeHelper` | unit:MimeTypeHelperTest |
 | `Support/PostImportMaintenance.php` | `PostImportMaintenance` | integration:MissingPipelineTest |
 | `Support/PreflightStagingPath.php` | `PreflightStagingPath` | unit:PreflightStagingPathTest |
-| `Support/SiteUrlGuard.php` | `SiteUrlGuard` | integration:MissingPipelineTest |
+| `Support/SiteUrlGuard.php` | `SiteUrlGuard` | integration:RuntimeGuardsTest |
 | `Support/ThemeArchivePathHelper.php` | `ThemeArchivePathHelper` | unit:ThemeArchivePathHelperTest |
 | `Support/WpContentRuntimeStorage.php` | `WpContentRuntimeStorage` | integration:MissingPipelineTest |
 | `Themes/ThemePreviewStore.php` | `ThemePreviewStore` | integration:MissingPipelineTest |
-| `Users/UserDiffBuilder.php` | `UserDiffBuilder` | integration:MissingPipelineTest |
-| `Users/UserMergeApplier.php` | `UserMergeApplier` | integration:MissingPipelineTest |
-| `Users/UserPreviewStore.php` | `UserPreviewStore` | integration:MissingPipelineTest |
+| `Users/UserDiffBuilder.php` | `UserDiffBuilder` | integration:UserMergeTest |
+| `Users/UserMergeApplier.php` | `UserMergeApplier` | integration:UserMergeTest |
+| `Users/UserPreviewStore.php` | `UserPreviewStore` | integration:UserMergeTest |
 | `Validation/ArchiveValidator.php` | `ArchiveValidator` | unit:ArchiveValidatorTest |
 | `Validation/ExportDataValidator.php` | `ExportDataValidator` | unit:ExportDataValidatorTest |
 | `Validation/FileValidator.php` | `FileValidator` | integration:MissingPipelineTest |
@@ -140,3 +140,22 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | Preflight path allowlist | PreflightStagingPathTest |
 | Preflight analyze and claim | MissingPipelineTest |
 | Capability and nonce rejection | MissingPipelineTest |
+| Custom-table prefix rewrite | FullDatabaseRoundtripTest |
+| Schema recreate replaces rows | FullDatabaseRoundtripTest |
+| Leftover `_mkn` drop / `_mko` recover | FullDatabaseRoundtripTest |
+| Insert failure after schema | FullDatabaseRoundtripTest |
+| Full-site FS-only uploads probe | FullFilesystemRoundtripTest |
+| ContentCollector skips runtime paths | FullFilesystemRoundtripTest |
+| Selected media checksum + featured | SelectedContentMediaTest |
+| Options overwrite=false | SelectedContentMediaTest |
+| Theme replace vs merge | ThemeArchiveRoundtripTest |
+| ThemeFileDiffBuilder will_delete | ThemeArchiveRoundtripTest |
+| User merge create/replace/keep | UserMergeTest |
+| UserDiff conflict vs new | UserMergeTest |
+| Preflight claim busy/blocked/release | PreflightArtifactsTest |
+| Artifact stage/persist/discard | PreflightArtifactsTest |
+| ServerBackupScanner path guard | PreflightArtifactsTest |
+| Deactivation keeps imports | PreflightArtifactsTest |
+| Chunk cancel pending vs ready | RuntimeGuardsTest |
+| Stale import lock | RuntimeGuardsTest |
+| FullImportMaintenance activate | RuntimeGuardsTest |

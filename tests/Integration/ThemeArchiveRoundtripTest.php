@@ -11,6 +11,7 @@ namespace MksDdn\MigrateContent\Tests\Integration;
 
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Filesystem\ThemeExporter;
+use MksDdn\MigrateContent\Filesystem\ThemeFileDiffBuilder;
 use MksDdn\MigrateContent\Filesystem\ThemeImporter;
 use MksDdn\MigrateContent\Tests\Support\ArchiveFixtureBuilder;
 use WP_UnitTestCase;
@@ -98,5 +99,110 @@ final class ThemeArchiveRoundtripTest extends WP_UnitTestCase {
 		self::assertTrue( true === $result, is_wp_error( $result ) ? $result->get_error_message() : 'import failed' );
 		self::assertFileExists( $marker );
 		self::assertSame( 'marker-ok', (string) file_get_contents( $marker ) );
+	}
+
+	public function test__theme_importer__replace_deletes_local_only_file(): void {
+		$archive = $this->tmpdir . '/theme-replace.wpbkp';
+		ArchiveFixtureBuilder::create_wpbkp(
+			$archive,
+			array(
+				'type'    => 'themes',
+				'version' => '1.0',
+				'themes'  => array(
+					array(
+						'slug' => $this->theme_slug,
+						'name' => 'MksDdn Fixture Theme',
+					),
+				),
+			),
+			array(
+				'payload/content.json' => wp_json_encode( array( 'type' => 'themes' ) ),
+				'wp-content/themes/' . $this->theme_slug . '/style.css' => "/*\nTheme Name: MksDdn Fixture Theme\n*/\n",
+				'wp-content/themes/' . $this->theme_slug . '/index.php' => "<?php\n",
+				'wp-content/themes/' . $this->theme_slug . '/from-archive.txt' => 'archive-body',
+			)
+		);
+
+		$local_only = $this->theme_dir . '/local-only.txt';
+		file_put_contents( $local_only, 'stay-or-go' );
+
+		$result = ( new ThemeImporter( 'replace' ) )->import_themes( $archive );
+		self::assertTrue( true === $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		self::assertFileDoesNotExist( $local_only );
+		self::assertFileExists( $this->theme_dir . '/from-archive.txt' );
+	}
+
+	public function test__theme_importer__merge_keeps_local_only_file(): void {
+		$local_only = $this->theme_dir . '/local-only-merge.txt';
+		file_put_contents( $local_only, 'keep-me' );
+
+		$archive = $this->tmpdir . '/theme-merge-mode.wpbkp';
+		ArchiveFixtureBuilder::create_wpbkp(
+			$archive,
+			array(
+				'type'    => 'themes',
+				'version' => '1.0',
+				'themes'  => array(
+					array(
+						'slug' => $this->theme_slug,
+						'name' => 'MksDdn Fixture Theme',
+					),
+				),
+			),
+			array(
+				'payload/content.json' => wp_json_encode( array( 'type' => 'themes' ) ),
+				'wp-content/themes/' . $this->theme_slug . '/style.css' => "/*\nTheme Name: MksDdn Fixture Theme\n*/\n",
+				'wp-content/themes/' . $this->theme_slug . '/index.php' => "<?php\n",
+				'wp-content/themes/' . $this->theme_slug . '/from-merge.txt' => 'merged',
+			)
+		);
+
+		$result = ( new ThemeImporter( 'merge' ) )->import_themes( $archive );
+		self::assertTrue( true === $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		self::assertFileExists( $local_only );
+		self::assertSame( 'keep-me', (string) file_get_contents( $local_only ) );
+		self::assertFileExists( $this->theme_dir . '/from-merge.txt' );
+	}
+
+	public function test__theme_file_diff_builder__flags_added_and_will_delete(): void {
+		file_put_contents( $this->theme_dir . '/will-delete.txt', 'local' );
+
+		$archive = $this->tmpdir . '/theme-diff.wpbkp';
+		ArchiveFixtureBuilder::create_wpbkp(
+			$archive,
+			array(
+				'type'    => 'themes',
+				'version' => '1.0',
+				'themes'  => array(
+					array(
+						'slug' => $this->theme_slug,
+						'name' => 'MksDdn Fixture Theme',
+					),
+				),
+			),
+			array(
+				'payload/content.json' => wp_json_encode( array( 'type' => 'themes' ) ),
+				'wp-content/themes/' . $this->theme_slug . '/style.css' => (string) file_get_contents( $this->theme_dir . '/style.css' ),
+				'wp-content/themes/' . $this->theme_slug . '/index.php' => (string) file_get_contents( $this->theme_dir . '/index.php' ),
+				'wp-content/themes/' . $this->theme_slug . '/only-in-archive.txt' => 'new',
+			)
+		);
+
+		$diff = ( new ThemeFileDiffBuilder() )->build( $archive );
+		self::assertIsArray( $diff, is_wp_error( $diff ) ? $diff->get_error_message() : '' );
+		self::assertSame( 1, (int) $diff['files_added'] );
+
+		$theme_row = null;
+		foreach ( $diff['themes'] as $row ) {
+			if ( $this->theme_slug === ( $row['slug'] ?? '' ) ) {
+				$theme_row = $row;
+				break;
+			}
+		}
+		self::assertIsArray( $theme_row );
+		self::assertSame( 1, (int) $theme_row['added_count'] );
+		self::assertContains( 'only-in-archive.txt', $theme_row['sample_added'] );
+		self::assertSame( 1, (int) $theme_row['will_delete_on_replace_count'] );
+		self::assertContains( 'will-delete.txt', $theme_row['sample_will_delete_on_replace'] );
 	}
 }
