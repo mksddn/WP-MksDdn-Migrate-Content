@@ -10,8 +10,7 @@
 		"phpunit/phpunit": "^9.6",
 		"yoast/phpunit-polyfills": "^2.0",
 		"doiftrue/unitest-wp-copy": "7.1.*",
-		"10up/wp_mock": "^1.1",
-		"infection/infection": "^0.29"
+		"10up/wp_mock": "^1.1"
 	},
 	"autoload": {
 		"psr-4": {

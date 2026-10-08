@@ -24,13 +24,15 @@ composer test:integration
 composer test
 composer test:coverage:unit          # needs pcov; clover in tmp/coverage/
 composer test:coverage:integration
-composer infection:unit              # unit-only mutation testing (see infection.json5)
+# Optional mutation testing (PHP >= 8.3; not in default composer.lock / CI):
+composer require --dev infection/infection:^0.29
+composer infection:unit
 ```
 
 ### Coverage and infection notes
 
 - PHPUnit configs include a `<coverage>` filter limited to `mksddn-migrate-content/trunk/includes`.
 - `phpunit.xml.dist` is a symlink to `phpunit.unit.xml.dist` so Infection discovers the unit suite.
-- Infection must run via `bin/infection-unit.php` (or `composer infection:unit`): plugin sources call `exit` when `ABSPATH` is undefined, and Infection’s ReflectionVisitor autoloads those classes.
-- Infection is **unit-only** and whitelist-scoped in `infection.json5` (not run in CI in this pass). Thresholds: `minMsi` / `minCoveredMsi` = 68.
+- Infection is **optional** and not part of default `composer install` (keeps the lock installable on PHP 8.1). Install it locally on PHP ≥8.3 with `composer require --dev infection/infection:^0.29`, then run via `bin/infection-unit.php` (or `composer infection:unit`): plugin sources call `exit` when `ABSPATH` is undefined, and Infection’s ReflectionVisitor autoloads those classes.
+- Infection is **unit-only** and whitelist-scoped in `infection.json5` (not run in CI). Thresholds: `minMsi` / `minCoveredMsi` = 68.
 - Line-% from clover supplements the behavioral/wired labels in `tests/COVERAGE.md`; it does not replace them.
