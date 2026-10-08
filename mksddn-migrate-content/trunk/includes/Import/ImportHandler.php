@@ -324,6 +324,9 @@ class ImportHandler implements ImporterInterface {
 
 		$this->import_acf_fields( $data, $post_id, $media_id_map, $url_map, $url_to_new_id );
 
+		// Restore exported post meta (attachment IDs/URLs remapped via media maps).
+		$this->import_meta_data( $data, $post_id, $media_id_map, $url_map, $url_to_new_id );
+
 		if ( null !== $post_id_map && isset( $data['ID'] ) ) {
 			$post_id_map[ (int) $data['ID'] ] = $post_id;
 		}
@@ -1672,18 +1675,43 @@ class ImportHandler implements ImporterInterface {
 			$meta_key = sanitize_text_field( $key );
 			delete_post_meta( $post_id, $meta_key );
 
-			if ( is_array( $values ) ) {
+			// BatchLoader / prepare_post_data export a single mixed value per key (already
+			// unserialized). WordPress multi-row meta is a numeric list of row values.
+			// Associative arrays must stay one meta row — do not iterate their keys.
+			if ( is_array( $values ) && $this->is_meta_multi_value_list( $values ) ) {
 				foreach ( $values as $value ) {
 					$value = maybe_unserialize( $value );
 					$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
 					add_post_meta( $post_id, $meta_key, $value );
 				}
-			} else {
-				$value = maybe_unserialize( $values );
-				$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
-				update_post_meta( $post_id, $meta_key, $value );
+				continue;
 			}
+
+			$value = maybe_unserialize( $values );
+			$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
+			update_post_meta( $post_id, $meta_key, $value );
 		}
+	}
+
+	/**
+	 * Whether a meta payload value is a list of WordPress multi-row values.
+	 *
+	 * @param array $values Candidate meta value.
+	 */
+	private function is_meta_multi_value_list( array $values ): bool {
+		if ( array() === $values ) {
+			return true;
+		}
+
+		$i = 0;
+		foreach ( $values as $key => $_unused ) {
+			if ( $key !== $i ) {
+				return false;
+			}
+			++$i;
+		}
+
+		return true;
 	}
 
 	/**
