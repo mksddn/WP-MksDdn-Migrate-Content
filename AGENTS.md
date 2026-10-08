@@ -22,4 +22,15 @@ composer test:unit
 make install-wp-tests   # once, needs MySQL
 composer test:integration
 composer test
+composer test:coverage:unit          # needs pcov; clover in tmp/coverage/
+composer test:coverage:integration
+composer infection:unit              # unit-only mutation testing (see infection.json5)
 ```
+
+### Coverage and infection notes
+
+- PHPUnit configs include a `<coverage>` filter limited to `mksddn-migrate-content/trunk/includes`.
+- `phpunit.xml.dist` is a symlink to `phpunit.unit.xml.dist` so Infection discovers the unit suite.
+- Infection must run via `bin/infection-unit.php` (or `composer infection:unit`): plugin sources call `exit` when `ABSPATH` is undefined, and Infection’s ReflectionVisitor autoloads those classes.
+- Infection is **unit-only** and whitelist-scoped in `infection.json5` (not run in CI in this pass). Thresholds: `minMsi` / `minCoveredMsi` = 68.
+- Line-% from clover supplements the behavioral/wired labels in `tests/COVERAGE.md`; it does not replace them.

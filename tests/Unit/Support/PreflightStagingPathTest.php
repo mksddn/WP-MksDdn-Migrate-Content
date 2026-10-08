@@ -71,4 +71,11 @@ final class PreflightStagingPathTest extends TestCase {
 		self::assertFalse( PreflightStagingPath::is_allowed_path( $this->uploads . '/mksddn-mc/imports/missing.wpbkp' ) );
 		self::assertFalse( PreflightStagingPath::is_allowed_path( '' ) );
 	}
+
+	public function test__is_allowed_path__rejects_directory_even_under_imports(): void {
+		$dir = $this->uploads . '/mksddn-mc/imports/subdir';
+		mkdir( $dir, 0777, true );
+		self::assertFalse( PreflightStagingPath::is_allowed_path( $dir ) );
+		self::assertFalse( PreflightStagingPath::is_ephemeral_path( $dir ) );
+	}
 }

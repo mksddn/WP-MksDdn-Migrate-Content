@@ -45,6 +45,14 @@ final class ImportDataValidatorTest extends TestCase {
 		self::assertFalse( $result->is_valid() );
 	}
 
+	public function test__validate_import_data__rejects_non_array_bundle_items(): void {
+		$result = ( new ImportDataValidator() )->validate_import_data(
+			array( 'items' => 'not-an-array' ),
+			'bundle'
+		);
+		self::assertFalse( $result->is_valid() );
+	}
+
 	public function test__validate_import_data__requires_title_or_slug_for_item(): void {
 		$result = ( new ImportDataValidator() )->validate_import_data(
 			array( 'post_type' => 'page' ),

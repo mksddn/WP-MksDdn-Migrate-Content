@@ -27,6 +27,14 @@ final class ArchiveValidatorTest extends TestCase {
 				)
 			)->is_valid()
 		);
+		self::assertFalse(
+			$validator->validate_archive(
+				array(
+					'payload' => array( 'x' => 1 ),
+					'type'    => '',
+				)
+			)->is_valid()
+		);
 		self::assertTrue(
 			$validator->validate_archive(
 				array(

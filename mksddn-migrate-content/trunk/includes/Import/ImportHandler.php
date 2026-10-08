@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Media\AttachmentRestorer;
 use MksDdn\MigrateContent\Options\OptionsHelper;
 use MksDdn\MigrateContent\Options\OptionsImporter;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 use WP_Post;
 
@@ -1035,8 +1036,39 @@ class ImportHandler implements ImporterInterface {
 						$parent_id = (int) $parent->term_id;
 					}
 
+					$slug     = isset( $term_data['slug'] ) ? (string) $term_data['slug'] : '';
+					if ( '' === $slug ) {
+						PluginLogger::log( sprintf( 'Skipped term without slug in taxonomy "%s".', $taxonomy ), 'import' );
+						continue;
+					}
+
+					$existing = get_term_by( 'slug', $slug, $taxonomy );
+
+					// Prefer slug identity: hierarchical taxonomies may accept a duplicate
+					// name under a new parent and invent a suffix slug instead of term_exists.
+					if ( $existing instanceof \WP_Term ) {
+						$update = array();
+						if ( isset( $term_data['description'] ) ) {
+							$update['description'] = (string) $term_data['description'];
+						}
+						if ( $parent_id > 0 && (int) $existing->parent !== $parent_id ) {
+							$update['parent'] = $parent_id;
+						}
+						if ( array() !== $update ) {
+							$updated = wp_update_term( (int) $existing->term_id, $taxonomy, $update );
+							if ( is_wp_error( $updated ) ) {
+								PluginLogger::log(
+									sprintf( 'Failed to update term "%s" (%s): %s', $slug, $taxonomy, $updated->get_error_message() ),
+									'import'
+								);
+							}
+						}
+						$term_ids[] = (int) $existing->term_id;
+						continue;
+					}
+
 					$args = array(
-						'slug'        => $term_data['slug'] ?? '',
+						'slug'        => $slug,
 						'description' => $term_data['description'] ?? '',
 					);
 					if ( $parent_id > 0 ) {
@@ -1050,18 +1082,18 @@ class ImportHandler implements ImporterInterface {
 					);
 
 					if ( is_wp_error( $term ) ) {
-						$existing = get_term_by( 'slug', $term_data['slug'] ?? '', $taxonomy );
-						if ( $existing instanceof \WP_Term ) {
-							if ( $parent_id > 0 && (int) $existing->parent !== $parent_id ) {
+						$fallback = get_term_by( 'slug', $slug, $taxonomy );
+						if ( $fallback instanceof \WP_Term ) {
+							if ( $parent_id > 0 && (int) $fallback->parent !== $parent_id ) {
 								wp_update_term(
-									(int) $existing->term_id,
+									(int) $fallback->term_id,
 									$taxonomy,
 									array(
 										'parent' => $parent_id,
 									)
 								);
 							}
-							$term_ids[] = (int) $existing->term_id;
+							$term_ids[] = (int) $fallback->term_id;
 						}
 					} else {
 						$term_ids[] = (int) $term['term_id'];

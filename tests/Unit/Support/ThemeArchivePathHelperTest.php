@@ -44,4 +44,28 @@ final class ThemeArchivePathHelperTest extends TestCase {
 	public function test__normalize__rejects_null_byte(): void {
 		self::assertNull( ThemeArchivePathHelper::normalize( "wp-content/themes/x\0evil.css" ) );
 	}
+
+	public function test__normalize__converts_backslashes_and_strips_leading_slash(): void {
+		self::assertSame(
+			'wp-content/themes/my-theme/style.css',
+			ThemeArchivePathHelper::normalize( 'wp-content\\themes\\my-theme\\style.css' )
+		);
+		self::assertSame(
+			'wp-content/themes/my-theme/style.css',
+			ThemeArchivePathHelper::normalize( '/wp-content/themes/my-theme/style.css' )
+		);
+	}
+
+	public function test__normalize__rejects_traversal_after_dot_segment(): void {
+		// continue (not break) on "." must still evaluate later ".." segments.
+		self::assertNull( ThemeArchivePathHelper::normalize( 'wp-content/themes/./../../evil.txt' ) );
+	}
+
+	public function test__normalize__files_prefix_only_strips_six_chars(): void {
+		self::assertSame(
+			'wp-content/themes/a/b.css',
+			ThemeArchivePathHelper::normalize( 'files/wp-content/themes/a/b.css' )
+		);
+		self::assertNull( ThemeArchivePathHelper::normalize( 'files/' ) );
+	}
 }

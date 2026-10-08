@@ -10,7 +10,8 @@
 		"phpunit/phpunit": "^9.6",
 		"yoast/phpunit-polyfills": "^2.0",
 		"doiftrue/unitest-wp-copy": "7.1.*",
-		"10up/wp_mock": "^1.1"
+		"10up/wp_mock": "^1.1",
+		"infection/infection": "^0.29"
 	},
 	"autoload": {
 		"psr-4": {
@@ -28,12 +29,16 @@
 		"test": [
 			"@test:unit",
 			"@test:integration"
-		]
+		],
+		"test:coverage:unit": "php -d pcov.enabled=1 vendor/bin/phpunit -c phpunit.unit.xml.dist --coverage-text --coverage-clover tmp/coverage/unit-clover.xml",
+		"test:coverage:integration": "php -d pcov.enabled=1 vendor/bin/phpunit -c phpunit.integration.xml.dist --coverage-text --coverage-clover tmp/coverage/integration-clover.xml",
+		"infection:unit": "php bin/infection-unit.php --configuration=infection.json5 --threads=max --ignore-msi-with-no-mutations"
 	},
 	"config": {
 		"sort-packages": true,
 		"allow-plugins": {
-			"php-http/discovery": true
+			"php-http/discovery": true,
+			"infection/extension-installer": true
 		}
 	}
 }

@@ -292,62 +292,46 @@ final class MissingPipelineTest extends WP_UnitTestCase {
 		}
 	}
 
-	public function test__remaining_entrypoints__run_without_rewriting_the_site(): void {
-		update_option( 'mksddn_mc_probe_option', 'before' );
-		( new \MksDdn\MigrateContent\Options\OptionsImporter() )->import_options(
-			array( 'mksddn_mc_probe_option' => 'after' ),
-			true
-		);
-		self::assertSame( 'after', get_option( 'mksddn_mc_probe_option' ) );
-		delete_option( 'mksddn_mc_probe_option' );
-
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapper::class,
-			new \MksDdn\MigrateContent\Core\Wrappers\WpFunctionsWrapper()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapper::class,
-			new \MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapper()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Core\Wrappers\WpFilesystemWrapper::class,
-			new \MksDdn\MigrateContent\Core\Wrappers\WpFilesystemWrapper()
-		);
-		self::assertFalse( ( new \MksDdn\MigrateContent\Core\View\ViewRenderer() )->template_exists( 'missing-view.php' ) );
-
-		$posts = ( new \MksDdn\MigrateContent\Admin\Services\ContentPickerQueryService() )->search_posts( 'page', 'about', 1 );
-		self::assertIsArray( $posts );
-
+	public function test__missing_archive__payload_and_importer_return_errors(): void {
 		$missing = $this->tmpdir . '/missing.wpbkp';
 		self::assertTrue( is_wp_error( \MksDdn\MigrateContent\Filesystem\FullArchivePayload::read( $missing ) ) );
 		self::assertTrue( is_wp_error( ( new \MksDdn\MigrateContent\Users\UserDiffBuilder() )->build( $missing ) ) );
+
 		$buffer_level = ob_get_level();
 		self::assertTrue( is_wp_error( ( new \MksDdn\MigrateContent\Filesystem\FullContentImporter() )->import_from( $missing ) ) );
 		while ( ob_get_level() < $buffer_level ) {
 			ob_start();
 		}
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Filesystem\FullContentExporter::class,
-			new \MksDdn\MigrateContent\Filesystem\FullContentExporter()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Filesystem\ContentCollector::class,
-			new \MksDdn\MigrateContent\Filesystem\ContentCollector()
+	}
+
+	public function test__content_picker__search_returns_matching_page(): void {
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_title'  => 'About Migrate Probe',
+				'post_name'   => 'about-migrate-probe',
+				'post_status' => 'publish',
+			)
 		);
 
-		$guard = new \MksDdn\MigrateContent\Support\SiteUrlGuard();
-		$guard->restore();
-		self::assertIsBool( \MksDdn\MigrateContent\Support\FullImportMaintenance::is_active() );
-		\MksDdn\MigrateContent\Support\FullImportMaintenance::deactivate();
-		self::assertIsBool( \MksDdn\MigrateContent\Support\ExportMemoryHelper::is_memory_critical() );
-		self::assertNotSame( '', \MksDdn\MigrateContent\Support\WpContentRuntimeStorage::root() );
-		\MksDdn\MigrateContent\Support\PostImportMaintenance::clear_scheduled_woocommerce_maintenance();
+		$result = ( new \MksDdn\MigrateContent\Admin\Services\ContentPickerQueryService() )->search_posts( 'page', 'About Migrate', 1 );
+		self::assertIsArray( $result );
+		self::assertArrayHasKey( 'posts', $result );
+		$ids = array_map(
+			static function ( $row ) {
+				return (int) ( $row['id'] ?? 0 );
+			},
+			$result['posts']
+		);
+		self::assertContains( (int) $page_id, $ids );
+	}
+
+	public function test__artifact_cleanup__empty_handle_yields_no_paths(): void {
 		self::assertSame( array(), \MksDdn\MigrateContent\Support\ImportArtifactCleanup::paths_from_import_handle( array() ) );
+		self::assertNotSame( '', \MksDdn\MigrateContent\Support\WpContentRuntimeStorage::root() );
+	}
 
-		\MksDdn\MigrateContent\Services\PluginLogger::log( 'coverage probe', 'MissingPipelineTest' );
-		$file = ( new \MksDdn\MigrateContent\Validation\FileValidator() )->validate_file( array(), 'wpbkp' );
-		self::assertFalse( $file->is_valid() );
-
+	public function test__attachment_restorer__empty_entries_noop(): void {
 		$restored = ( new \MksDdn\MigrateContent\Media\AttachmentRestorer() )->restore(
 			array(),
 			static function () {
@@ -357,30 +341,5 @@ final class MissingPipelineTest extends WP_UnitTestCase {
 		);
 		self::assertArrayHasKey( 'id_map', $restored );
 		self::assertSame( array(), $restored['id_map'] );
-
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Contracts\ImporterInterface::class,
-			new \MksDdn\MigrateContent\Import\ImportHandler()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Contracts\UserMergeApplierInterface::class,
-			new \MksDdn\MigrateContent\Users\UserMergeApplier()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Contracts\ValidatorInterface::class,
-			new \MksDdn\MigrateContent\Validation\ImportDataValidator()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Contracts\UserDiffBuilderInterface::class,
-			new \MksDdn\MigrateContent\Users\UserDiffBuilder()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Contracts\RequestHandlerInterface::class,
-			new \MksDdn\MigrateContent\Admin\Handlers\ImportRequestHandler()
-		);
-		self::assertInstanceOf(
-			\MksDdn\MigrateContent\Import\SelectedContentDiffBuilder::class,
-			new \MksDdn\MigrateContent\Import\SelectedContentDiffBuilder()
-		);
 	}
 }

@@ -20,6 +20,16 @@ final class ExportDataValidatorTest extends TestCase {
 	public function test__validate_export_request__requires_selection_for_selected(): void {
 		$result = ( new ExportDataValidator() )->validate_export_request( array(), 'selected' );
 		self::assertFalse( $result->is_valid() );
+
+		// Empty selected_* arrays and unrelated keys must not count as a selection.
+		$empty = ( new ExportDataValidator() )->validate_export_request(
+			array(
+				'selected_page_ids' => array(),
+				'other_ids'         => array( 1, 2 ),
+			),
+			'selected'
+		);
+		self::assertFalse( $empty->is_valid() );
 	}
 
 	public function test__validate_export_request__accepts_selected_ids(): void {

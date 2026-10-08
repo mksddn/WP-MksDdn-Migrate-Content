@@ -45,7 +45,6 @@ messages.mo
 /.phpunit.cache/
 .phpunit.result.cache
 /tmp/
-
 # WordPress специфичные
 wp-config.php
 wp-content/uploads/

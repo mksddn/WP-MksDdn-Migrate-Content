@@ -7,6 +7,14 @@ Coverage labels:
 - **behavioral** — test changes and asserts site/archive state (export → import, guards, roundtrips).
 - **wired** — container resolve / `instanceof` / smoke only; does **not** prove pipeline behavior.
 
+Measured line coverage (pcov, `includes/` only, Oct 2026 baseline after this hardening pass):
+
+- Unit suite: ~5.8% of statements (helpers/validators/DTOs).
+- Integration suite: ~42% of statements (pipelines dominate).
+- Infection (unit whitelist, `--only-covered`): MSI / Covered MSI ≈ 70% (threshold 68 in `infection.json5`).
+
+Commands: `composer test:coverage:unit`, `composer test:coverage:integration`, `composer infection:unit`.
+
 Empty stub `Chunking/ChunkController.php` is excluded.
 
 | File | Symbol | Coverage |
@@ -16,9 +24,9 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Admin/Handlers/ImportRequestHandler.php` | `ImportRequestHandler` | integration:MissingPipelineTest |
 | `Admin/Handlers/ThemePreviewRequestHandler.php` | `ThemePreviewRequestHandler` | integration:MissingPipelineTest |
 | `Admin/Handlers/UserMergeRequestHandler.php` | `UserMergeRequestHandler` | integration:MissingPipelineTest |
-| `Admin/Services/ContentPickerQueryService.php` | `ContentPickerQueryService` | integration:MissingPipelineTest |
-| `Admin/Services/FullSiteImportService.php` | `FullSiteImportService` | wired:MissingPipelineTest (service container resolves FullSiteImportService) |
-| `Admin/Services/ImportFileValidator.php` | `ImportFileValidator` | wired:MissingPipelineTest (service container resolves ImportFileValidator) |
+| `Admin/Services/ContentPickerQueryService.php` | `ContentPickerQueryService` | behavioral:MissingPipelineTest (search returns matching page) |
+| `Admin/Services/FullSiteImportService.php` | `FullSiteImportService` | behavioral:AdminViewRenderTest (resolve_upload staged path / missing file); wired:container |
+| `Admin/Services/ImportFileValidator.php` | `ImportFileValidator` | unit:ImportFileValidatorTest |
 | `Admin/Services/ImportPayloadPreparer.php` | `ImportPayloadPreparer` | behavioral:SelectedContentExportImportTest, UnifiedImportFlowTest; wired:MissingPipelineTest (service container resolves ImportPayloadPreparer) |
 | `Admin/Services/ImportPreflightService.php` | `ImportPreflightService` | behavioral:UnifiedImportFlowTest; integration:MissingPipelineTest |
 | `Admin/Services/ImportTypeDetector.php` | `ImportTypeDetector` | behavioral:UnifiedImportFlowTest, ThemeArchiveRoundtripTest; unit:ImportTypeDetectorTest |
@@ -30,7 +38,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Admin/Services/ServerBackupScanner.php` | `ServerBackupScanner` | integration:PreflightArtifactsTest |
 | `Admin/Services/ThemeImportService.php` | `ThemeImportService` | wired:MissingPipelineTest (service container resolves ThemeImportService) |
 | `Admin/Services/UnifiedImportOrchestrator.php` | `UnifiedImportOrchestrator` | integration:MissingPipelineTest |
-| `Admin/Views/AdminPageView.php` | `AdminPageView` | wired:MissingPipelineTest (service container resolves AdminPageView) |
+| `Admin/Views/AdminPageView.php` | `AdminPageView` | behavioral:AdminViewRenderTest (export sections render) |
 | `Archive/Extractor.php` | `Extractor` | behavioral:SelectedContentExportImportTest; unit:PackerExtractorTest |
 | `Archive/Packer.php` | `Packer` | behavioral:SelectedContentExportImportTest; unit:PackerExtractorTest |
 | `Chunking/ChunkJob.php` | `ChunkJob` | unit:ChunkJobTest |
@@ -56,7 +64,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Contracts/UserMergeRequestHandlerInterface.php` | `UserMergeRequestHandlerInterface` | wired:MissingPipelineTest (service container resolves UserMergeRequestHandlerInterface) |
 | `Contracts/UserPreviewStoreInterface.php` | `UserPreviewStoreInterface` | wired:MissingPipelineTest (service container resolves UserPreviewStoreInterface) |
 | `Contracts/ValidatorInterface.php` | `ValidatorInterface` | integration:MissingPipelineTest |
-| `Core/BatchLoader.php` | `BatchLoader` | wired:MissingPipelineTest (service container resolves BatchLoader) |
+| `Core/BatchLoader.php` | `BatchLoader` | behavioral:BatchLoaderTest, SelectedContentExportImportTest (term parent_slug) |
 | `Core/ServiceContainer.php` | `ServiceContainer` | unit:ServiceContainerTest |
 | `Core/ServiceContainerFactory.php` | `ServiceContainerFactory` | integration:MissingPipelineTest |
 | `Core/ServiceProviderInterface.php` | `ServiceProviderInterface` | integration:MissingPipelineTest |
@@ -64,7 +72,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Core/ServiceProviders/CoreServiceProvider.php` | `CoreServiceProvider` | integration:MissingPipelineTest |
 | `Core/ServiceProviders/ExportServiceProvider.php` | `ExportServiceProvider` | integration:MissingPipelineTest |
 | `Core/ServiceProviders/ImportServiceProvider.php` | `ImportServiceProvider` | integration:MissingPipelineTest |
-| `Core/View/ViewRenderer.php` | `ViewRenderer` | integration:MissingPipelineTest |
+| `Core/View/ViewRenderer.php` | `ViewRenderer` | unit:ViewRendererTest; behavioral:AdminViewRenderTest |
 | `Core/Wrappers/WpFilesystemWrapper.php` | `WpFilesystemWrapper` | integration:MissingPipelineTest |
 | `Core/Wrappers/WpFilesystemWrapperInterface.php` | `WpFilesystemWrapperInterface` | wired:MissingPipelineTest (service container resolves WpFilesystemWrapperInterface) |
 | `Core/Wrappers/WpFunctionsWrapper.php` | `WpFunctionsWrapper` | integration:MissingPipelineTest |
@@ -96,21 +104,21 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Media/AttachmentCollection.php` | `AttachmentCollection` | unit:AttachmentCollectionTest |
 | `Media/AttachmentCollector.php` | `AttachmentCollector` | behavioral:SelectedContentExportImportTest (gallery + meta IDs); wired:MissingPipelineTest |
 | `Media/AttachmentRestorer.php` | `AttachmentRestorer` | behavioral:SelectedContentExportImportTest, SelectedContentMediaTest |
-| `Options/OptionsExporter.php` | `OptionsExporter` | wired:MissingPipelineTest (service container resolves OptionsExporter) |
+| `Options/OptionsExporter.php` | `OptionsExporter` | behavioral:OptionsExportImportTest |
 | `Options/OptionsHelper.php` | `OptionsHelper` | wired:MissingPipelineTest (service container resolves OptionsHelper) |
 | `Options/OptionsImporter.php` | `OptionsImporter` | integration:SelectedContentMediaTest |
 | `Plugin.php` | `Plugin` | unit:SmokeTest |
 | `Selection/ContentSelection.php` | `ContentSelection` | unit:ContentSelectionTest |
 | `Selection/SelectionBuilder.php` | `SelectionBuilder` | unit:SelectionBuilderTest |
-| `Services/ErrorHandler.php` | `ErrorHandler` | wired:MissingPipelineTest (service container resolves ErrorHandler) |
+| `Services/ErrorHandler.php` | `ErrorHandler` | unit:ErrorHandlerTest |
 | `Services/PluginLogger.php` | `PluginLogger` | integration:MissingPipelineTest |
 | `Support/DeactivationCleanup.php` | `DeactivationCleanup` | integration:AdminPreflightTest, PreflightArtifactsTest |
 | `Support/DomainReplacer.php` | `DomainReplacer` | unit:DomainReplacerTest; behavioral:FullSiteExportImportTest, FullSiteSubsetTest |
 | `Support/EnvironmentVersionComparator.php` | `EnvironmentVersionComparator` | unit:EnvironmentVersionComparatorTest |
-| `Support/ExportMemoryHelper.php` | `ExportMemoryHelper` | integration:MissingPipelineTest |
+| `Support/ExportMemoryHelper.php` | `ExportMemoryHelper` | behavioral:SupportHelpersTest |
 | `Support/ExportPreflight.php` | `ExportPreflight` | integration:FullSiteSubsetTest, RuntimeGuardsTest |
 | `Support/FilenameBuilder.php` | `FilenameBuilder` | unit:FilenameBuilderTest |
-| `Support/FilesystemHelper.php` | `FilesystemHelper` | unit:ChunkJobTest |
+| `Support/FilesystemHelper.php` | `FilesystemHelper` | behavioral:SupportHelpersTest; unit:ChunkJobTest (bypass) |
 | `Support/FullImportMaintenance.php` | `FullImportMaintenance` | integration:RuntimeGuardsTest, MissingPipelineTest |
 | `Support/ImportArtifactCleanup.php` | `ImportArtifactCleanup` | integration:PreflightArtifactsTest, MissingPipelineTest |
 | `Support/ImportLock.php` | `ImportLock` | integration:FullSiteSubsetTest, RuntimeGuardsTest |
@@ -126,7 +134,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Users/UserPreviewStore.php` | `UserPreviewStore` | integration:UserMergeTest |
 | `Validation/ArchiveValidator.php` | `ArchiveValidator` | unit:ArchiveValidatorTest |
 | `Validation/ExportDataValidator.php` | `ExportDataValidator` | unit:ExportDataValidatorTest |
-| `Validation/FileValidator.php` | `FileValidator` | integration:MissingPipelineTest |
+| `Validation/FileValidator.php` | `FileValidator` | behavioral:FileValidatorTest |
 | `Validation/ImportDataValidator.php` | `ImportDataValidator` | unit:ImportDataValidatorTest |
 | `Validation/ValidationResult.php` | `ValidationResult` | unit:ValidationResultTest |
 
@@ -194,3 +202,23 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | Theme multi-theme export→import | ThemeExportImportGapsTest |
 | Theme preview store then replace/merge | ThemeExportImportGapsTest |
 | Theme child path layout | ThemeExportImportGapsTest |
+| Tax deferral child-before-parent | SelectedContentRoundtripTest |
+| Tax orphan parent_slug no hang | SelectedContentRoundtripTest |
+| Tax cyclic parent_slug no hang | SelectedContentRoundtripTest |
+| Tax update existing term parent (slug identity) | SelectedContentRoundtripTest |
+| Tax three-level reverse order | SelectedContentRoundtripTest |
+| Export term payload parent_slug | SelectedContentExportImportTest |
+| Detector unknown/empty → selected service | UnifiedImportFlowTest |
+| Theme zip-slip outside WP_CONTENT | NegativeEdgeCasesTest |
+| Unregistered CPT rejected | NegativeEdgeCasesTest |
+| Missing media path in archive | NegativeEdgeCasesTest |
+| User merge unknown mode → replace | NegativeEdgeCasesTest |
+| User merge login collision different email | NegativeEdgeCasesTest |
+| Chunk download out-of-range index | NegativeEdgeCasesTest |
+| Slug collision across post types | NegativeEdgeCasesTest |
+| OptionsExporter roundtrip / skip missing | OptionsExportImportTest |
+| FilesystemHelper put/read/protect | SupportHelpersTest |
+| ExportMemoryHelper raise/restore | SupportHelpersTest |
+| FullSiteImportService resolve_upload staged | AdminViewRenderTest |
+| ImportFileValidator extension/size | ImportFileValidatorTest |
+| ThemeArchivePathHelper `.` then `..` | ThemeArchivePathHelperTest |

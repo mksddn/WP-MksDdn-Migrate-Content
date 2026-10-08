@@ -212,6 +212,10 @@ final class UnifiedImportFlowTest extends WP_UnitTestCase {
 		self::assertSame( 'selected', $orchestrator->service_for_detected_type( 'selected' ) );
 		self::assertSame( 'themes', $orchestrator->service_for_detected_type( 'themes' ) );
 		self::assertNotSame( 'selected', $orchestrator->service_for_detected_type( (string) $full_type ) );
+		// Unknown / empty detector values must fall through to selected content service.
+		self::assertSame( 'selected', $orchestrator->service_for_detected_type( '' ) );
+		self::assertSame( 'selected', $orchestrator->service_for_detected_type( 'unknown-type' ) );
+		self::assertSame( 'selected', $orchestrator->service_for_detected_type( 'Full' ) );
 		$probe->cleanup_dirs();
 	}
 

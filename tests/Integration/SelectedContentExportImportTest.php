@@ -314,6 +314,55 @@ final class SelectedContentExportImportTest extends WP_UnitTestCase {
 		self::assertNotContains( 'local-extra-cat', $after );
 	}
 
+	public function test__export__term_payload_includes_parent_slug(): void {
+		$parent_term = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Export Parent Cat',
+				'slug'     => 'export-parent-cat-slug',
+			)
+		);
+		$child_term = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Export Child Cat',
+				'slug'     => 'export-child-cat-slug',
+				'parent'   => (int) $parent_term,
+			)
+		);
+		$id = self::factory()->post->create(
+			array(
+				'post_type'   => 'post',
+				'post_title'  => 'Export Parent Slug Post',
+				'post_name'   => 'export-parent-slug-post',
+				'post_status' => 'publish',
+			)
+		);
+		wp_set_object_terms( $id, array( (int) $parent_term, (int) $child_term ), 'category' );
+
+		$selection = new ContentSelection();
+		$selection->add_item( 'post', $id );
+		$file = $this->harness->export_file( $selection, 'archive', false );
+		self::assertIsString( $file, is_wp_error( $file ) ? $file->get_error_message() : '' );
+
+		$prepared = $this->harness->prepare_only( $file );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+
+		$payload = $prepared['payload'];
+		$item    = isset( $payload['items'][0] ) ? $payload['items'][0] : $payload;
+		self::assertArrayHasKey( 'taxonomies', $item );
+		self::assertArrayHasKey( 'category', $item['taxonomies'] );
+
+		$by_slug = array();
+		foreach ( $item['taxonomies']['category'] as $term_row ) {
+			$by_slug[ (string) $term_row['slug'] ] = $term_row;
+		}
+		self::assertArrayHasKey( 'export-child-cat-slug', $by_slug );
+		self::assertSame( 'export-parent-cat-slug', $by_slug['export-child-cat-slug']['parent_slug'] );
+		self::assertArrayHasKey( 'export-parent-cat-slug', $by_slug );
+		self::assertSame( '', (string) $by_slug['export-parent-cat-slug']['parent_slug'] );
+	}
+
 	public function test__export_import__serialized_post_meta(): void {
 		$id = self::factory()->post->create(
 			array(

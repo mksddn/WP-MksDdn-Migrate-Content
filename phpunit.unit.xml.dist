@@ -11,4 +11,9 @@
 			<directory suffix="Test.php">tests/Unit</directory>
 		</testsuite>
 	</testsuites>
+	<coverage>
+		<include>
+			<directory suffix=".php">mksddn-migrate-content/trunk/includes</directory>
+		</include>
+	</coverage>
 </phpunit>
