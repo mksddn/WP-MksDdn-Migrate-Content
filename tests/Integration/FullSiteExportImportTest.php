@@ -92,31 +92,41 @@ final class FullSiteExportImportTest extends WP_UnitTestCase {
 	}
 
 	public function test__full_content_importer__plugin_and_mu_plugin_bodies_roundtrip(): void {
-		// Exporter packs dirname(MKSDDN_MC_FILE) (repo path under this bootstrap); importer
-		// writes under WP_PLUGIN_DIR / WPMU_PLUGIN_DIR. Use a synthetic archive targeting
-		// the live WP paths so the assertion proves importer restore, not path coincidence.
-		$table       = $this->harness->create_probe_table( 'fsplugin', 'fs-plugin' );
-		$plugin_dir  = trailingslashit( WP_PLUGIN_DIR ) . 'mksddn-mc-import-probe-plugin';
-		$plugin_path = $plugin_dir . '/probe.txt';
-		$mu_path     = trailingslashit( $this->harness->mu_plugins_root() ) . 'mksddn-mc-import-probe-mu.php';
+		// Exporter reads dirname(MKSDDN_MC_FILE); importer writes under the WordPress
+		// content root. Export for real, drop the database payload so core tables stay
+		// untouched, wipe the importer destinations, then assert the exported bytes return.
+		$plugin_source = $this->harness->plant_plugin_probe( "plugin-body-v1\n" );
+		$mu_source     = $this->harness->plant_mu_plugin_probe( "<?php // mu-body-v1\n" );
 
-		if ( ! is_dir( $plugin_dir ) ) {
-			mkdir( $plugin_dir, 0777, true );
+		$archive  = $this->tmpdir . '/plugin-roundtrip.wpbkp';
+		$exported = ( new FullContentExporter() )->export_to( $archive );
+		self::assertIsString( $exported, is_wp_error( $exported ) ? $exported->get_error_message() : '' );
+
+		$zip = new ZipArchive();
+		self::assertTrue( true === $zip->open( $archive ) );
+		self::assertSame( "plugin-body-v1\n", (string) $zip->getFromName( 'files/wp-content/plugins/mksddn-mc-probe-plugin/probe.txt' ) );
+		self::assertSame( "<?php // mu-body-v1\n", (string) $zip->getFromName( 'files/wp-content/mu-plugins/mksddn-mc-probe-mu.php' ) );
+		$zip->addFromString( 'payload/content.json', (string) wp_json_encode( array( 'type' => 'full-site' ) ) );
+		$zip->close();
+
+		$home        = function_exists( 'get_home_path' ) ? get_home_path() : ABSPATH;
+		$plugin_dest = trailingslashit( $home ) . 'wp-content/plugins/mksddn-mc-probe-plugin/probe.txt';
+		$mu_dest     = trailingslashit( $home ) . 'wp-content/mu-plugins/mksddn-mc-probe-mu.php';
+		$this->harness->track_path( dirname( $plugin_dest ) );
+		$this->harness->track_path( $mu_dest );
+
+		if ( ! is_dir( dirname( $plugin_dest ) ) ) {
+			mkdir( dirname( $plugin_dest ), 0777, true );
 		}
-		file_put_contents( $plugin_path, "wiped-plugin\n" );
-		file_put_contents( $mu_path, "<?php // wiped-mu\n" );
-		$this->harness->track_path( $plugin_dir );
-		$this->harness->track_path( $mu_path );
-
-		$archive = $this->harness->build_minimal_full_site_archive(
-			$table,
-			'fs-plugin',
-			"upload-ok\n",
-			array(
-				'files/wp-content/plugins/mksddn-mc-import-probe-plugin/probe.txt' => "plugin-body-v1\n",
-				'files/wp-content/mu-plugins/mksddn-mc-import-probe-mu.php'       => "<?php // mu-body-v1\n",
-			)
-		);
+		file_put_contents( $plugin_dest, "wiped-plugin\n" );
+		if ( $mu_dest !== $mu_source ) {
+			if ( ! is_dir( dirname( $mu_dest ) ) ) {
+				mkdir( dirname( $mu_dest ), 0777, true );
+			}
+			file_put_contents( $mu_dest, "<?php // wiped-mu\n" );
+		} else {
+			file_put_contents( $mu_source, "<?php // wiped-mu\n" );
+		}
 
 		$buffer_level = ob_get_level();
 		$imported     = ( new FullContentImporter() )->import_from( $archive, new SiteUrlGuard() );
@@ -125,9 +135,10 @@ final class FullSiteExportImportTest extends WP_UnitTestCase {
 		}
 
 		self::assertTrue( true === $imported, is_wp_error( $imported ) ? $imported->get_error_message() : '' );
-		self::assertSame( "plugin-body-v1\n", (string) file_get_contents( $plugin_path ) );
-		self::assertSame( "<?php // mu-body-v1\n", (string) file_get_contents( $mu_path ) );
-		self::assertSame( 'fs-plugin', $this->harness->probe_label( $table ) );
+		self::assertSame( "plugin-body-v1\n", (string) file_get_contents( $plugin_dest ) );
+		self::assertSame( "<?php // mu-body-v1\n", (string) file_get_contents( $mu_dest ) );
+		self::assertFileExists( $plugin_source );
+		unlink( $archive );
 	}
 
 	public function test__full_content_importer__rewrites_urls_and_upload_paths(): void {

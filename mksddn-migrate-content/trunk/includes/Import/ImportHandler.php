@@ -1016,24 +1016,63 @@ class ImportHandler implements ImporterInterface {
 			}
 
 			$term_ids = array();
-			foreach ( $terms as $term_data ) {
-				$term = wp_insert_term(
-					$term_data['name'] ?? '',
-					$taxonomy,
-					array(
+			$pending  = array_values( $terms );
+			$guard    = 0;
+			while ( ! empty( $pending ) && $guard < 8 ) {
+				$deferred = array();
+				foreach ( $pending as $term_data ) {
+					if ( ! is_array( $term_data ) ) {
+						continue;
+					}
+					$parent_slug = isset( $term_data['parent_slug'] ) ? (string) $term_data['parent_slug'] : '';
+					$parent_id   = 0;
+					if ( '' !== $parent_slug ) {
+						$parent = get_term_by( 'slug', $parent_slug, $taxonomy );
+						if ( ! $parent instanceof \WP_Term ) {
+							$deferred[] = $term_data;
+							continue;
+						}
+						$parent_id = (int) $parent->term_id;
+					}
+
+					$args = array(
 						'slug'        => $term_data['slug'] ?? '',
 						'description' => $term_data['description'] ?? '',
-					)
-				);
-
-				if ( is_wp_error( $term ) ) {
-					$existing = get_term_by( 'slug', $term_data['slug'] ?? '', $taxonomy );
-					if ( $existing ) {
-						$term_ids[] = (int) $existing->term_id;
+					);
+					if ( $parent_id > 0 ) {
+						$args['parent'] = $parent_id;
 					}
-				} else {
-					$term_ids[] = (int) $term['term_id'];
+
+					$term = wp_insert_term(
+						$term_data['name'] ?? '',
+						$taxonomy,
+						$args
+					);
+
+					if ( is_wp_error( $term ) ) {
+						$existing = get_term_by( 'slug', $term_data['slug'] ?? '', $taxonomy );
+						if ( $existing instanceof \WP_Term ) {
+							if ( $parent_id > 0 && (int) $existing->parent !== $parent_id ) {
+								wp_update_term(
+									(int) $existing->term_id,
+									$taxonomy,
+									array(
+										'parent' => $parent_id,
+									)
+								);
+							}
+							$term_ids[] = (int) $existing->term_id;
+						}
+					} else {
+						$term_ids[] = (int) $term['term_id'];
+					}
 				}
+
+				if ( count( $deferred ) === count( $pending ) ) {
+					break;
+				}
+				$pending = $deferred;
+				++$guard;
 			}
 
 			if ( ! empty( $term_ids ) ) {

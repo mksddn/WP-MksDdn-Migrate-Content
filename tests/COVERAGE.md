@@ -143,7 +143,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | Plugin + mu-plugin body roundtrip | FullSiteExportImportTest |
 | Exact option_value after DomainReplacer | FullSiteSubsetTest |
 | Selected core fields (excerpt/author/status/menu_order) | SelectedContentExportImportTest |
-| Selected tax exact set + upsert replace | SelectedContentExportImportTest |
+| Selected tax exact set + hierarchical parent + upsert replace | SelectedContentExportImportTest |
 | Selected media on-disk hash_file | SelectedContentExportImportTest, SelectedContentMediaTest |
 | Selected gallery + meta-only attachment IDs | SelectedContentExportImportTest |
 | Gallery shortcode ID remap in AttachmentRestorer | SelectedContentExportImportTest |
@@ -151,7 +151,8 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | SelectedContentDiffBuilder title change / identical | SelectedContentDiffBuilderTest |
 | ImportLock wrong token keeps lock | RuntimeGuardsTest |
 | SiteUrlGuard restores saved siteurl/home | RuntimeGuardsTest |
-| Detector on real FullContentExporter archive | UnifiedImportFlowTest |
+| Detector on real FullContentExporter archive routes to full service | UnifiedImportFlowTest |
+| Export preflight disk and memory filters | FullSiteSubsetTest |
 | Theme merge overwrites overlapping style.css | ThemeArchiveRoundtripTest |
 | Slug parent import order | SelectedContentRoundtripTest |
 | Export payload slug and parent | MissingPipelineTest |

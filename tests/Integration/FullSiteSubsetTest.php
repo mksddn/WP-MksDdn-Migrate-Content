@@ -81,18 +81,56 @@ final class FullSiteSubsetTest extends WP_UnitTestCase {
 		delete_transient( 'mksddn_mc_import_lock' );
 	}
 
-	public function test__export_preflight__runs_without_fatal(): void {
-		$result = ( new ExportPreflight() )->validate_full_export();
-		// Disk/memory have no stub hooks; accept only true or a known export preflight error code.
-		if ( is_wp_error( $result ) ) {
-			$code = $result->get_error_code();
-			self::assertTrue(
-				is_string( $code ) && 0 === strpos( $code, 'mksddn_mc_export_' ),
-				'Unexpected preflight error: ' . $code
-			);
-			return;
+	public function test__export_preflight__passes_when_disk_and_memory_are_sufficient(): void {
+		add_filter( 'mksddn_mc_export_preflight_free_bytes', static function () {
+			return PHP_INT_MAX;
+		} );
+		add_filter( 'mksddn_mc_export_preflight_memory_limit', static function () {
+			return '-1';
+		} );
+
+		try {
+			$result = ( new ExportPreflight() )->validate_full_export();
+		} finally {
+			remove_all_filters( 'mksddn_mc_export_preflight_free_bytes' );
+			remove_all_filters( 'mksddn_mc_export_preflight_memory_limit' );
 		}
-		self::assertTrue( true === $result );
+
+		self::assertTrue( true === $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+	}
+
+	public function test__export_preflight__rejects_insufficient_disk(): void {
+		add_filter( 'mksddn_mc_export_preflight_free_bytes', static function () {
+			return 0;
+		} );
+
+		try {
+			$result = ( new ExportPreflight() )->validate_full_export();
+		} finally {
+			remove_all_filters( 'mksddn_mc_export_preflight_free_bytes' );
+		}
+
+		self::assertTrue( is_wp_error( $result ) );
+		self::assertSame( 'mksddn_mc_export_insufficient_disk', $result->get_error_code() );
+	}
+
+	public function test__export_preflight__rejects_low_memory(): void {
+		add_filter( 'mksddn_mc_export_preflight_free_bytes', static function () {
+			return PHP_INT_MAX;
+		} );
+		add_filter( 'mksddn_mc_export_preflight_memory_limit', static function () {
+			return '32M';
+		} );
+
+		try {
+			$result = ( new ExportPreflight() )->validate_full_export();
+		} finally {
+			remove_all_filters( 'mksddn_mc_export_preflight_free_bytes' );
+			remove_all_filters( 'mksddn_mc_export_preflight_memory_limit' );
+		}
+
+		self::assertTrue( is_wp_error( $result ) );
+		self::assertSame( 'mksddn_mc_export_low_memory', $result->get_error_code() );
 	}
 
 	/**

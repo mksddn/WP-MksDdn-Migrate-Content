@@ -12,6 +12,7 @@ namespace MksDdn\MigrateContent\Tests\Integration;
 use MksDdn\MigrateContent\Admin\Services\ImportPreflightService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\PreflightReportStore;
+use MksDdn\MigrateContent\Admin\Services\UnifiedImportOrchestrator;
 use MksDdn\MigrateContent\Config\PluginConfig;
 use MksDdn\MigrateContent\Filesystem\FullContentExporter;
 use MksDdn\MigrateContent\Filesystem\ThemeExporter;
@@ -203,7 +204,14 @@ final class UnifiedImportFlowTest extends WP_UnitTestCase {
 		$full_archive = $this->tmpdir . '/full-detect.wpbkp';
 		$full_export  = ( new FullContentExporter() )->export_to( $full_archive );
 		self::assertIsString( $full_export, is_wp_error( $full_export ) ? $full_export->get_error_message() : '' );
-		self::assertSame( 'full', $detector->detect( $full_archive, 'wpbkp' ) );
+		$full_type = $detector->detect( $full_archive, 'wpbkp' );
+		self::assertSame( 'full', $full_type );
+
+		$orchestrator = new UnifiedImportOrchestrator();
+		self::assertSame( 'full', $orchestrator->service_for_detected_type( (string) $full_type ) );
+		self::assertSame( 'selected', $orchestrator->service_for_detected_type( 'selected' ) );
+		self::assertSame( 'themes', $orchestrator->service_for_detected_type( 'themes' ) );
+		self::assertNotSame( 'selected', $orchestrator->service_for_detected_type( (string) $full_type ) );
 		$probe->cleanup_dirs();
 	}
 

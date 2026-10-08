@@ -229,10 +229,18 @@ class BatchLoader {
 			if ( ! isset( $this->terms_cache[ $cache_key ][ $post_id ] ) ) {
 				$this->terms_cache[ $cache_key ][ $post_id ] = array();
 			}
+			$parent_slug = '';
+			if ( ! empty( $term->parent ) ) {
+				$parent_term = get_term( (int) $term->parent, $taxonomy );
+				if ( $parent_term instanceof \WP_Term ) {
+					$parent_slug = (string) $parent_term->slug;
+				}
+			}
 			$this->terms_cache[ $cache_key ][ $post_id ][] = array(
 				'slug'        => $term->slug,
 				'name'        => $term->name,
 				'description' => $term->description,
+				'parent_slug' => $parent_slug,
 			);
 		}
 	}

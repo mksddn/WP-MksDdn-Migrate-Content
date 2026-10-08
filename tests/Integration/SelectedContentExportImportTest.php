@@ -285,8 +285,11 @@ final class SelectedContentExportImportTest extends WP_UnitTestCase {
 		self::assertSame( array( 'probe-cat-e2e', 'probe-parent-cat-e2e' ), array_values( $cat_slugs ) );
 
 		$cat_term = get_term_by( 'slug', 'probe-cat-e2e', 'category' );
+		$parent_after = get_term_by( 'slug', 'probe-parent-cat-e2e', 'category' );
 		self::assertInstanceOf( \WP_Term::class, $cat_term );
+		self::assertInstanceOf( \WP_Term::class, $parent_after );
 		self::assertSame( 'Probe Category', $cat_term->name );
+		self::assertSame( (int) $parent_after->term_id, (int) $cat_term->parent );
 
 		$tag_slugs = wp_get_object_terms( $post->ID, 'post_tag', array( 'fields' => 'slugs' ) );
 		self::assertSame( array( 'probe-tag-e2e' ), array_values( $tag_slugs ) );

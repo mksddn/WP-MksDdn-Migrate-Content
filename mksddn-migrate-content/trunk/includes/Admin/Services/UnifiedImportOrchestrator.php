@@ -234,10 +234,11 @@ class UnifiedImportOrchestrator {
 		}
 
 		// Second step: run the real import using the same file reference from preflight.
-		if ( 'full' === $import_type ) {
+		$route = $this->service_for_detected_type( $import_type );
+		if ( 'full' === $route ) {
 			$this->log( 'Routing to full site import service.' );
 			$this->route_to_full_import( $file_info, $preflight_report_id );
-		} elseif ( 'themes' === $import_type ) {
+		} elseif ( 'themes' === $route ) {
 			$this->route_to_theme_preview( $file_info, $preflight_report_id );
 		} else {
 			$this->route_to_selected_import( $file_info, $preflight_report_id );
@@ -569,6 +570,23 @@ class UnifiedImportOrchestrator {
 			$_POST['_wpnonce']              = $nonce;
 			$_REQUEST['_wpnonce']           = $nonce;
 		}
+	}
+
+	/**
+	 * Map a detected archive type to the import service that must handle it.
+	 *
+	 * @param string $import_type Value from ImportTypeDetector (full, themes, selected).
+	 * @return string full|themes|selected
+	 */
+	public function service_for_detected_type( string $import_type ): string {
+		if ( 'full' === $import_type ) {
+			return 'full';
+		}
+		if ( 'themes' === $import_type ) {
+			return 'themes';
+		}
+
+		return 'selected';
 	}
 
 	/**
