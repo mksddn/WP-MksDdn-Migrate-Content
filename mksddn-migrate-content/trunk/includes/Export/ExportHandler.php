@@ -739,11 +739,12 @@ class ExportHandler implements ExporterInterface {
 	private function download_json_file( string $file_path, string $filename ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file -- local temp export file.
 		$json = file_get_contents( $file_path );
-		FilesystemHelper::delete( $file_path );
-
 		if ( false === $json ) {
+			FilesystemHelper::delete( $file_path );
 			\wp_die( \esc_html__( 'Failed to open archive for download.', 'mksddn-migrate-content' ) );
 		}
+
+		FilesystemHelper::delete( $file_path );
 
 		while ( ob_get_level() ) {
 			ob_end_clean();

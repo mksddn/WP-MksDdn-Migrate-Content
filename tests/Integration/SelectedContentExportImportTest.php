@@ -398,6 +398,109 @@ final class SelectedContentExportImportTest extends WP_UnitTestCase {
 		self::assertSame( $payload, get_post_meta( $page->ID, '_mksddn_probe_blob', true ) );
 	}
 
+	public function test__export_import__list_shaped_meta_stays_one_row(): void {
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_title'   => 'List Meta Page',
+				'post_name'    => 'list-meta-e2e',
+				'post_content' => 'List body',
+				'post_status'  => 'publish',
+			)
+		);
+		update_post_meta( $id, '_mksddn_id_list', array( 10, 20, 30 ) );
+		update_post_meta( $id, '_mksddn_empty_list', array() );
+
+		$selection = new ContentSelection();
+		$selection->add_item( 'page', $id );
+
+		$file = $this->harness->export_file( $selection, 'archive', false );
+		self::assertIsString( $file, is_wp_error( $file ) ? $file->get_error_message() : '' );
+
+		wp_delete_post( $id, true );
+
+		$imported = $this->harness->import_file( $file );
+		self::assertTrue( true === $imported, is_wp_error( $imported ) ? $imported->get_error_message() : '' );
+
+		$page = get_page_by_path( 'list-meta-e2e', OBJECT, 'page' );
+		self::assertInstanceOf( \WP_Post::class, $page );
+		self::assertSame( array( 10, 20, 30 ), get_post_meta( $page->ID, '_mksddn_id_list', true ) );
+		self::assertSame( array(), get_post_meta( $page->ID, '_mksddn_empty_list', true ) );
+
+		global $wpdb;
+		$row_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$page->ID,
+				'_mksddn_id_list'
+			)
+		);
+		self::assertSame( 1, $row_count );
+	}
+
+	public function test__export_import__child_category_recreates_unassigned_ancestors(): void {
+		$root = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Leaf Root',
+				'slug'     => 'leaf-root-e2e',
+			)
+		);
+		$parent = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Leaf Parent',
+				'slug'     => 'leaf-parent-e2e',
+				'parent'   => (int) $root,
+			)
+		);
+		$child = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Leaf Child',
+				'slug'     => 'leaf-child-e2e',
+				'parent'   => (int) $parent,
+			)
+		);
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'post',
+				'post_title'   => 'Leaf Only',
+				'post_name'    => 'leaf-only-e2e',
+				'post_content' => 'Leaf body',
+				'post_status'  => 'publish',
+			)
+		);
+		wp_set_object_terms( $id, array( (int) $child ), 'category' );
+
+		$selection = new ContentSelection();
+		$selection->add_item( 'post', $id );
+		$file = $this->harness->export_file( $selection, 'archive', false );
+		self::assertIsString( $file, is_wp_error( $file ) ? $file->get_error_message() : '' );
+
+		wp_delete_post( $id, true );
+		wp_delete_term( (int) $child, 'category' );
+		wp_delete_term( (int) $parent, 'category' );
+		wp_delete_term( (int) $root, 'category' );
+
+		$imported = $this->harness->import_file( $file );
+		self::assertTrue( true === $imported, is_wp_error( $imported ) ? $imported->get_error_message() : '' );
+
+		$post = get_page_by_path( 'leaf-only-e2e', OBJECT, 'post' );
+		self::assertInstanceOf( \WP_Post::class, $post );
+		$assigned = wp_get_object_terms( $post->ID, 'category', array( 'fields' => 'slugs' ) );
+		self::assertSame( array( 'leaf-child-e2e' ), array_values( $assigned ) );
+
+		$child_term  = get_term_by( 'slug', 'leaf-child-e2e', 'category' );
+		$parent_term = get_term_by( 'slug', 'leaf-parent-e2e', 'category' );
+		$root_term   = get_term_by( 'slug', 'leaf-root-e2e', 'category' );
+		self::assertInstanceOf( \WP_Term::class, $child_term );
+		self::assertInstanceOf( \WP_Term::class, $parent_term );
+		self::assertInstanceOf( \WP_Term::class, $root_term );
+		self::assertSame( (int) $parent_term->term_id, (int) $child_term->parent );
+		self::assertSame( (int) $root_term->term_id, (int) $parent_term->parent );
+	}
+
 	public function test__export_import__media_from_packer_archive(): void {
 		$png_path = $this->tmpdir . '/featured.png';
 		file_put_contents(

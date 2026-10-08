@@ -1063,7 +1063,9 @@ class ImportHandler implements ImporterInterface {
 								);
 							}
 						}
-						$term_ids[] = (int) $existing->term_id;
+						if ( $this->term_is_assigned_to_post( $term_data ) ) {
+							$term_ids[] = (int) $existing->term_id;
+						}
 						continue;
 					}
 
@@ -1093,9 +1095,11 @@ class ImportHandler implements ImporterInterface {
 									)
 								);
 							}
-							$term_ids[] = (int) $fallback->term_id;
+							if ( $this->term_is_assigned_to_post( $term_data ) ) {
+								$term_ids[] = (int) $fallback->term_id;
+							}
 						}
-					} else {
+					} elseif ( $this->term_is_assigned_to_post( $term_data ) ) {
 						$term_ids[] = (int) $term['term_id'];
 					}
 				}
@@ -1731,7 +1735,29 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
+	 * Whether a taxonomy payload row should be assigned to the post.
+	 *
+	 * Ancestor terms are exported with assigned=false so the hierarchy can be
+	 * created without attaching the parent to the post. Rows without the key
+	 * stay assigned (older archives).
+	 *
+	 * @param array $term_data Term payload row.
+	 * @return bool
+	 */
+	private function term_is_assigned_to_post( array $term_data ): bool {
+		if ( ! array_key_exists( 'assigned', $term_data ) ) {
+			return true;
+		}
+
+		return (bool) $term_data['assigned'];
+	}
+
+	/**
 	 * Import meta for a post.
+	 *
+	 * BatchLoader stores one unserialized value per meta key. A numeric list
+	 * (gallery, checkbox, a plain array of IDs) is that single value, not one
+	 * postmeta row per element. ACF field meta is left to import_acf_fields().
 	 *
 	 * @param array $data    Payload containing 'meta'.
 	 * @param int   $post_id Target post ID.
@@ -1742,22 +1768,26 @@ class ImportHandler implements ImporterInterface {
 			return;
 		}
 
-		foreach ( $data['meta'] as $key => $values ) {
-			$meta_key = sanitize_text_field( $key );
-			delete_post_meta( $post_id, $meta_key );
-
-			// BatchLoader / prepare_post_data export a single mixed value per key (already
-			// unserialized). WordPress multi-row meta is a numeric list of row values.
-			// Associative arrays must stay one meta row — do not iterate their keys.
-			if ( is_array( $values ) && $this->is_meta_multi_value_list( $values ) ) {
-				foreach ( $values as $value ) {
-					$value = maybe_unserialize( $value );
-					$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
-					add_post_meta( $post_id, $meta_key, $value );
+		$acf_field_names = array();
+		if ( isset( $data['acf_fields'] ) && is_array( $data['acf_fields'] ) ) {
+			foreach ( array_keys( $data['acf_fields'] ) as $field_name ) {
+				$name = sanitize_text_field( (string) $field_name );
+				if ( '' !== $name ) {
+					$acf_field_names[] = $name;
 				}
+			}
+		}
+
+		foreach ( $data['meta'] as $key => $values ) {
+			$meta_key = sanitize_text_field( (string) $key );
+			if ( '' === $meta_key || $this->is_importer_owned_meta_key( $meta_key ) ) {
+				continue;
+			}
+			if ( $this->meta_key_owned_by_acf_fields( $meta_key, $acf_field_names ) ) {
 				continue;
 			}
 
+			delete_post_meta( $post_id, $meta_key );
 			$value = maybe_unserialize( $values );
 			$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
 			update_post_meta( $post_id, $meta_key, $value );
@@ -1765,24 +1795,34 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
-	 * Whether a meta payload value is a list of WordPress multi-row values.
+	 * Meta keys written by core or by AttachmentRestorer, not by this copy.
 	 *
-	 * @param array $values Candidate meta value.
+	 * @param string $meta_key Sanitized meta key.
+	 * @return bool
 	 */
-	private function is_meta_multi_value_list( array $values ): bool {
-		if ( array() === $values ) {
-			return true;
-		}
+	private function is_importer_owned_meta_key( string $meta_key ): bool {
+		return in_array(
+			$meta_key,
+			array( '_edit_lock', '_edit_last', '_thumbnail_id', '_mksddn_original_thumbnail' ),
+			true
+		);
+	}
 
-		$i = 0;
-		foreach ( $values as $key => $_unused ) {
-			if ( $key !== $i ) {
-				return false;
+	/**
+	 * Whether raw post meta belongs to an ACF field already imported from acf_fields.
+	 *
+	 * @param string   $meta_key    Sanitized meta key.
+	 * @param string[] $field_names ACF field names from the payload.
+	 * @return bool
+	 */
+	private function meta_key_owned_by_acf_fields( string $meta_key, array $field_names ): bool {
+		foreach ( $field_names as $field_name ) {
+			if ( $this->acf_meta_key_belongs_to_field( $meta_key, $field_name, $field_name . '_' ) ) {
+				return true;
 			}
-			++$i;
 		}
 
-		return true;
+		return false;
 	}
 
 	/**
@@ -1997,21 +2037,7 @@ class ImportHandler implements ImporterInterface {
 			return $value;
 		}
 
-		$remapped = preg_replace_callback(
-			'/\[gallery([^\]]*?)ids="([^"]+)"/i',
-			static function ( array $matches ) use ( $id_map ): string {
-				$parts = array_map( 'trim', explode( ',', $matches[2] ) );
-				foreach ( $parts as $index => $part ) {
-					if ( is_numeric( $part ) && isset( $id_map[ (int) $part ] ) ) {
-						$parts[ $index ] = (string) $id_map[ (int) $part ];
-					}
-				}
-				return '[gallery' . $matches[1] . 'ids="' . implode( ',', $parts ) . '"';
-			},
-			$value
-		);
-
-		return is_string( $remapped ) ? $remapped : $value;
+		return AttachmentRestorer::remap_gallery_shortcode_ids( $value, $id_map );
 	}
 
 	/**

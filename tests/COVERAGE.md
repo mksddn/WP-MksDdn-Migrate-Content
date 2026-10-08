@@ -154,7 +154,9 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | Selected tax exact set + hierarchical parent + upsert replace | SelectedContentExportImportTest |
 | Selected media on-disk hash_file | SelectedContentExportImportTest, SelectedContentMediaTest |
 | Selected gallery + meta-only attachment IDs | SelectedContentExportImportTest |
-| Gallery shortcode ID remap in AttachmentRestorer | SelectedContentExportImportTest |
+| Gallery shortcode ID remap (double and single quotes) | SelectedContentExportImportTest, GalleryShortcodeRemapTest |
+| Selected list-shaped meta stays one row | SelectedContentExportImportTest |
+| Selected child category recreates unassigned ancestors | SelectedContentExportImportTest |
 | Selected featured overwrite on upsert | SelectedContentExportImportTest |
 | SelectedContentDiffBuilder title change / identical | SelectedContentDiffBuilderTest |
 | ImportLock wrong token keeps lock | RuntimeGuardsTest |

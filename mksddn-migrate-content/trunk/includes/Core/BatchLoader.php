@@ -224,10 +224,14 @@ class BatchLoader {
 			$this->terms_cache[ $cache_key ][ $post_id ] = array();
 		}
 
+		$seen_slugs = array();
 		foreach ( $terms as $term ) {
 			$post_id = (int) $term->object_id;
 			if ( ! isset( $this->terms_cache[ $cache_key ][ $post_id ] ) ) {
 				$this->terms_cache[ $cache_key ][ $post_id ] = array();
+			}
+			if ( ! isset( $seen_slugs[ $post_id ] ) ) {
+				$seen_slugs[ $post_id ] = array();
 			}
 			$parent_slug = '';
 			if ( ! empty( $term->parent ) ) {
@@ -242,6 +246,67 @@ class BatchLoader {
 				'description' => $term->description,
 				'parent_slug' => $parent_slug,
 			);
+			$seen_slugs[ $post_id ][ (string) $term->slug ] = true;
+		}
+
+		foreach ( $terms as $term ) {
+			$post_id = (int) $term->object_id;
+			if ( empty( $term->parent ) || ! isset( $this->terms_cache[ $cache_key ][ $post_id ] ) ) {
+				continue;
+			}
+			$this->append_term_ancestors(
+				(int) $term->parent,
+				$taxonomy,
+				$this->terms_cache[ $cache_key ][ $post_id ],
+				$seen_slugs[ $post_id ]
+			);
+		}
+	}
+
+	/**
+	 * Add missing ancestor terms so import can recreate the hierarchy.
+	 *
+	 * Ancestors that are not assigned to the post are marked assigned=false.
+	 *
+	 * @param int                  $parent_id Starting parent term ID.
+	 * @param string               $taxonomy  Taxonomy name.
+	 * @param array<int, array>    $rows      Term rows for one post (by reference).
+	 * @param array<string, true>  $seen      Slugs already present in $rows.
+	 * @return void
+	 */
+	private function append_term_ancestors( int $parent_id, string $taxonomy, array &$rows, array &$seen ): void {
+		$current_id = $parent_id;
+		$guard      = 0;
+
+		while ( $current_id > 0 && $guard < 20 ) {
+			$parent = get_term( $current_id, $taxonomy );
+			if ( ! $parent instanceof \WP_Term ) {
+				break;
+			}
+
+			$slug = (string) $parent->slug;
+			if ( isset( $seen[ $slug ] ) ) {
+				break;
+			}
+
+			$grand_slug = '';
+			if ( ! empty( $parent->parent ) ) {
+				$grand = get_term( (int) $parent->parent, $taxonomy );
+				if ( $grand instanceof \WP_Term ) {
+					$grand_slug = (string) $grand->slug;
+				}
+			}
+
+			$rows[]        = array(
+				'slug'        => $slug,
+				'name'        => (string) $parent->name,
+				'description' => (string) $parent->description,
+				'parent_slug' => $grand_slug,
+				'assigned'    => false,
+			);
+			$seen[ $slug ] = true;
+			$current_id    = (int) $parent->parent;
+			++$guard;
 		}
 	}
 

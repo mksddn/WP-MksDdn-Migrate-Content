@@ -256,22 +256,7 @@ class AttachmentRestorer {
 			$content = preg_replace( '/wp-image-' . $old_id . '\b/', 'wp-image-' . $new_id, $content );
 		}
 
-		$remapped_gallery = preg_replace_callback(
-			'/\[gallery([^\]]*?)ids="([^"]+)"/i',
-			static function ( array $matches ) use ( $id_map ): string {
-				$parts = array_map( 'trim', explode( ',', $matches[2] ) );
-				foreach ( $parts as $index => $part ) {
-					if ( is_numeric( $part ) && isset( $id_map[ (int) $part ] ) ) {
-						$parts[ $index ] = (string) (int) $id_map[ (int) $part ];
-					}
-				}
-				return '[gallery' . $matches[1] . 'ids="' . implode( ',', $parts ) . '"';
-			},
-			$content
-		);
-		if ( is_string( $remapped_gallery ) ) {
-			$content = $remapped_gallery;
-		}
+		$content = self::remap_gallery_shortcode_ids( $content, $id_map );
 
 		if ( $content !== $post->post_content || $excerpt !== $post->post_excerpt ) {
 			wp_update_post(
@@ -282,6 +267,38 @@ class AttachmentRestorer {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Rewrite attachment IDs inside [gallery] shortcodes.
+	 *
+	 * Accepts double or single quotes and optional space around "=".
+	 *
+	 * @param string $content HTML or shortcode content.
+	 * @param array  $id_map  Original attachment ID => new ID.
+	 * @return string
+	 */
+	public static function remap_gallery_shortcode_ids( string $content, array $id_map ): string {
+		if ( '' === $content || array() === $id_map ) {
+			return $content;
+		}
+
+		$remapped = preg_replace_callback(
+			'/\[gallery\b([^\]]*?)ids\s*=\s*(["\'])([^"\']+)\2/i',
+			static function ( array $matches ) use ( $id_map ): string {
+				$parts = array_map( 'trim', explode( ',', $matches[3] ) );
+				foreach ( $parts as $index => $part ) {
+					if ( is_numeric( $part ) && isset( $id_map[ (int) $part ] ) ) {
+						$parts[ $index ] = (string) (int) $id_map[ (int) $part ];
+					}
+				}
+
+				return '[gallery' . $matches[1] . 'ids=' . $matches[2] . implode( ',', $parts ) . $matches[2];
+			},
+			$content
+		);
+
+		return is_string( $remapped ) ? $remapped : $content;
 	}
 
 	/**

@@ -884,9 +884,8 @@ class SelectedContentDiffBuilder {
 	/**
 	 * Featured media status by filename (not numeric ID).
 	 *
-	 * Matches AttachmentRestorer::maybe_update_thumbnail(): the importer only
-	 * sets a featured image when the local post has none. It never clears or
-	 * replaces an existing thumbnail.
+	 * Matches AttachmentRestorer::maybe_update_thumbnail(): when the archive
+	 * provides a featured image, import sets or replaces the local thumbnail.
 	 *
 	 * @param array $item    Archive item.
 	 * @param int   $post_id Local post ID (0 for create).
@@ -1162,6 +1161,10 @@ class SelectedContentDiffBuilder {
 				continue;
 			}
 			if ( is_array( $term ) && isset( $term['slug'] ) ) {
+				// Hierarchy-only ancestors are created on import but not assigned.
+				if ( array_key_exists( 'assigned', $term ) && ! $term['assigned'] ) {
+					continue;
+				}
 				$slug = sanitize_title( (string) $term['slug'] );
 				if ( '' !== $slug ) {
 					$slugs[] = $slug;
