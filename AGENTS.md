@@ -12,6 +12,7 @@ Before writing or changing tests:
 4. If a symbol is missing from the runtime and is not mockable, put the test in `tests/Integration/` (full WordPress + MySQL). Do not write a weak unit stub for it.
 5. Never mix `WP_Mock\Tools\TestCase` and `WP_UnitTestCase` in the same PHPUnit process. Use `phpunit.unit.xml.dist` or `phpunit.integration.xml.dist`.
 6. Keep the coverage matrix in `tests/COVERAGE.md` up to date when adding classes or tests.
+7. Pipeline tests must be **behavioral**: create live data, run real export to a file, mutate or wipe state, run real import, assert restored state. `instanceof`, DI resolve, and “class constructs” only count as **wired** coverage — they do not close export/import behavior.
 
 ### Commands
 
