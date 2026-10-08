@@ -125,13 +125,38 @@ final class RuntimeGuardsTest extends WP_UnitTestCase {
 		$lock->release( (string) $token );
 	}
 
+	public function test__import_lock__wrong_token_does_not_release(): void {
+		delete_transient( 'mksddn_mc_import_lock' );
+		$lock  = new ImportLock();
+		$token = $lock->acquire( 60 );
+		self::assertNotFalse( $token );
+		self::assertTrue( $lock->is_locked() );
+
+		$lock->release( 'not-the-token' );
+		self::assertTrue( $lock->is_locked(), 'Foreign token must not clear the lock' );
+
+		$lock->release( (string) $token );
+		self::assertFalse( $lock->is_locked() );
+	}
+
 	public function test__site_url_guard__restore_roundtrip(): void {
-		$guard = new SiteUrlGuard( $this->saved_siteurl, $this->saved_home );
-		update_option( 'siteurl', 'https://mutated.example' );
-		update_option( 'home', 'https://mutated.example' );
-		$guard->restore();
-		// tearDown restores originals; assert restore changed something back or applied request host.
-		self::assertNotSame( 'https://mutated.example', get_option( 'siteurl' ) );
+		$saved_host = $_SERVER['HTTP_HOST'] ?? null;
+		unset( $_SERVER['HTTP_HOST'] );
+
+		try {
+			$guard = new SiteUrlGuard( $this->saved_siteurl, $this->saved_home );
+			update_option( 'siteurl', 'https://mutated.example' );
+			update_option( 'home', 'https://mutated.example' );
+			$guard->restore();
+			self::assertSame( $this->saved_siteurl, (string) get_option( 'siteurl' ) );
+			self::assertSame( $this->saved_home, (string) get_option( 'home' ) );
+		} finally {
+			if ( null === $saved_host ) {
+				unset( $_SERVER['HTTP_HOST'] );
+			} else {
+				$_SERVER['HTTP_HOST'] = $saved_host;
+			}
+		}
 	}
 
 	public function test__full_import_maintenance__activate_deactivate(): void {

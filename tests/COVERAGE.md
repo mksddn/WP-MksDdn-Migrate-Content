@@ -86,16 +86,16 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Export/ExportHandler.php` | `ExportHandler` | behavioral:SelectedContentExportImportTest, UnifiedImportFlowTest; integration:MissingPipelineTest |
 | `Filesystem/ContentCollector.php` | `ContentCollector` | integration:FullFilesystemRoundtripTest |
 | `Filesystem/FullArchivePayload.php` | `FullArchivePayload` | integration:MissingPipelineTest |
-| `Filesystem/FullContentExporter.php` | `FullContentExporter` | behavioral:FullSiteExportImportTest; wired:MissingPipelineTest |
+| `Filesystem/FullContentExporter.php` | `FullContentExporter` | behavioral:FullSiteExportImportTest, UnifiedImportFlowTest; wired:MissingPipelineTest |
 | `Filesystem/FullContentImporter.php` | `FullContentImporter` | behavioral:FullSiteExportImportTest, FullFilesystemRoundtripTest |
 | `Filesystem/ThemeExporter.php` | `ThemeExporter` | behavioral:ThemeArchiveRoundtripTest, ThemeExportImportGapsTest, UnifiedImportFlowTest |
 | `Filesystem/ThemeFileDiffBuilder.php` | `ThemeFileDiffBuilder` | unit:ThemeFileDiffBuilderTest, integration:ThemeArchiveRoundtripTest |
 | `Filesystem/ThemeImporter.php` | `ThemeImporter` | behavioral:ThemeArchiveRoundtripTest, ThemeExportImportGapsTest |
 | `Import/ImportHandler.php` | `ImportHandler` | behavioral:SelectedContentExportImportTest, UnifiedImportFlowTest, SelectedContentRoundtripTest, SelectedContentMediaTest |
-| `Import/SelectedContentDiffBuilder.php` | `SelectedContentDiffBuilder` | integration:MissingPipelineTest |
+| `Import/SelectedContentDiffBuilder.php` | `SelectedContentDiffBuilder` | behavioral:SelectedContentDiffBuilderTest; integration:MissingPipelineTest |
 | `Media/AttachmentCollection.php` | `AttachmentCollection` | unit:AttachmentCollectionTest |
-| `Media/AttachmentCollector.php` | `AttachmentCollector` | wired:MissingPipelineTest (service container resolves AttachmentCollector) |
-| `Media/AttachmentRestorer.php` | `AttachmentRestorer` | integration:SelectedContentMediaTest |
+| `Media/AttachmentCollector.php` | `AttachmentCollector` | behavioral:SelectedContentExportImportTest (gallery + meta IDs); wired:MissingPipelineTest |
+| `Media/AttachmentRestorer.php` | `AttachmentRestorer` | behavioral:SelectedContentExportImportTest, SelectedContentMediaTest |
 | `Options/OptionsExporter.php` | `OptionsExporter` | wired:MissingPipelineTest (service container resolves OptionsExporter) |
 | `Options/OptionsHelper.php` | `OptionsHelper` | wired:MissingPipelineTest (service container resolves OptionsHelper) |
 | `Options/OptionsImporter.php` | `OptionsImporter` | integration:SelectedContentMediaTest |
@@ -105,7 +105,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `Services/ErrorHandler.php` | `ErrorHandler` | wired:MissingPipelineTest (service container resolves ErrorHandler) |
 | `Services/PluginLogger.php` | `PluginLogger` | integration:MissingPipelineTest |
 | `Support/DeactivationCleanup.php` | `DeactivationCleanup` | integration:AdminPreflightTest, PreflightArtifactsTest |
-| `Support/DomainReplacer.php` | `DomainReplacer` | unit:DomainReplacerTest |
+| `Support/DomainReplacer.php` | `DomainReplacer` | unit:DomainReplacerTest; behavioral:FullSiteExportImportTest, FullSiteSubsetTest |
 | `Support/EnvironmentVersionComparator.php` | `EnvironmentVersionComparator` | unit:EnvironmentVersionComparatorTest |
 | `Support/ExportMemoryHelper.php` | `ExportMemoryHelper` | integration:MissingPipelineTest |
 | `Support/ExportPreflight.php` | `ExportPreflight` | integration:FullSiteSubsetTest, RuntimeGuardsTest |
@@ -135,6 +135,24 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | Edge case | Test |
 |-----------|------|
 | Serialized URL/path replace | DomainReplacerTest |
+| Nested serialized + object + port/subdir URL replace | DomainReplacerTest |
+| Broken serialized str_replace characterization | DomainReplacerTest |
+| FullContentImporter URL + uploads path rewrite | FullSiteExportImportTest |
+| Full-site zip-slip path rejection | FullSiteExportImportTest |
+| Full-site theme backup restore on extract failure | FullSiteExportImportTest |
+| Plugin + mu-plugin body roundtrip | FullSiteExportImportTest |
+| Exact option_value after DomainReplacer | FullSiteSubsetTest |
+| Selected core fields (excerpt/author/status/menu_order) | SelectedContentExportImportTest |
+| Selected tax exact set + upsert replace | SelectedContentExportImportTest |
+| Selected media on-disk hash_file | SelectedContentExportImportTest, SelectedContentMediaTest |
+| Selected gallery + meta-only attachment IDs | SelectedContentExportImportTest |
+| Gallery shortcode ID remap in AttachmentRestorer | SelectedContentExportImportTest |
+| Selected featured overwrite on upsert | SelectedContentExportImportTest |
+| SelectedContentDiffBuilder title change / identical | SelectedContentDiffBuilderTest |
+| ImportLock wrong token keeps lock | RuntimeGuardsTest |
+| SiteUrlGuard restores saved siteurl/home | RuntimeGuardsTest |
+| Detector on real FullContentExporter archive | UnifiedImportFlowTest |
+| Theme merge overwrites overlapping style.css | ThemeArchiveRoundtripTest |
 | Slug parent import order | SelectedContentRoundtripTest |
 | Export payload slug and parent | MissingPipelineTest |
 | Archive checksum mismatch | PackerExtractorTest |

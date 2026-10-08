@@ -256,6 +256,23 @@ class AttachmentRestorer {
 			$content = preg_replace( '/wp-image-' . $old_id . '\b/', 'wp-image-' . $new_id, $content );
 		}
 
+		$remapped_gallery = preg_replace_callback(
+			'/\[gallery([^\]]*?)ids="([^"]+)"/i',
+			static function ( array $matches ) use ( $id_map ): string {
+				$parts = array_map( 'trim', explode( ',', $matches[2] ) );
+				foreach ( $parts as $index => $part ) {
+					if ( is_numeric( $part ) && isset( $id_map[ (int) $part ] ) ) {
+						$parts[ $index ] = (string) (int) $id_map[ (int) $part ];
+					}
+				}
+				return '[gallery' . $matches[1] . 'ids="' . implode( ',', $parts ) . '"';
+			},
+			$content
+		);
+		if ( is_string( $remapped_gallery ) ) {
+			$content = $remapped_gallery;
+		}
+
 		if ( $content !== $post->post_content || $excerpt !== $post->post_excerpt ) {
 			wp_update_post(
 				array(
@@ -274,11 +291,6 @@ class AttachmentRestorer {
 	 * @param array $id_map  Original => new attachment IDs.
 	 */
 	private function maybe_update_thumbnail( int $post_id, array $id_map ): void {
-		$current = get_post_thumbnail_id( $post_id );
-		if ( $current ) {
-			return;
-		}
-
 		$original_thumbnail = get_post_meta( $post_id, '_mksddn_original_thumbnail', true );
 		if ( ! $original_thumbnail ) {
 			return;
@@ -286,6 +298,7 @@ class AttachmentRestorer {
 
 		$original_thumbnail = (int) $original_thumbnail;
 		if ( isset( $id_map[ $original_thumbnail ] ) ) {
+			// Archive is the source of truth on upsert: replace an existing local thumbnail.
 			set_post_thumbnail( $post_id, $id_map[ $original_thumbnail ] );
 		}
 

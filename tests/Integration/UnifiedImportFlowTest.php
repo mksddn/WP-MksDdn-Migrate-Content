@@ -13,9 +13,11 @@ use MksDdn\MigrateContent\Admin\Services\ImportPreflightService;
 use MksDdn\MigrateContent\Admin\Services\ImportTypeDetector;
 use MksDdn\MigrateContent\Admin\Services\PreflightReportStore;
 use MksDdn\MigrateContent\Config\PluginConfig;
+use MksDdn\MigrateContent\Filesystem\FullContentExporter;
 use MksDdn\MigrateContent\Filesystem\ThemeExporter;
 use MksDdn\MigrateContent\Selection\ContentSelection;
 use MksDdn\MigrateContent\Tests\Support\ArchiveFixtureBuilder;
+use MksDdn\MigrateContent\Tests\Support\FullSiteProbeHarness;
 use MksDdn\MigrateContent\Tests\Support\SelectedExportImportHarness;
 use WP_UnitTestCase;
 
@@ -195,6 +197,14 @@ final class UnifiedImportFlowTest extends WP_UnitTestCase {
 		$result        = ( new ThemeExporter() )->export_themes( array( $this->theme_slug ), $theme_archive );
 		self::assertIsString( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
 		self::assertSame( 'themes', $detector->detect( $theme_archive, 'wpbkp' ) );
+
+		$probe = new FullSiteProbeHarness( $this->tmpdir );
+		$probe->plant_upload_probe( "detect-full\n" );
+		$full_archive = $this->tmpdir . '/full-detect.wpbkp';
+		$full_export  = ( new FullContentExporter() )->export_to( $full_archive );
+		self::assertIsString( $full_export, is_wp_error( $full_export ) ? $full_export->get_error_message() : '' );
+		self::assertSame( 'full', $detector->detect( $full_archive, 'wpbkp' ) );
+		$probe->cleanup_dirs();
 	}
 
 	public function test__preflight_analyze__corrupt_archive_returns_errors_without_import(): void {

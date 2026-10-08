@@ -181,6 +181,10 @@ final class SelectedContentMediaTest extends WP_UnitTestCase {
 		$thumb = (int) get_post_thumbnail_id( $post_id );
 		self::assertGreaterThan( 0, $thumb );
 		self::assertSame( $checksum, (string) get_post_meta( $thumb, '_mksddn_mc_checksum', true ) );
+		$attached = get_attached_file( $thumb );
+		self::assertIsString( $attached );
+		self::assertFileExists( $attached );
+		self::assertSame( $checksum, hash_file( 'sha256', $attached ) );
 		self::assertStringContainsString( 'wp-image-' . $thumb, $post->post_content );
 
 		$second = $handler->import_single_page(

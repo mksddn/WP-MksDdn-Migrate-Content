@@ -130,13 +130,16 @@ final class ThemeArchiveRoundtripTest extends WP_UnitTestCase {
 		self::assertTrue( true === $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
 		self::assertFileDoesNotExist( $local_only );
 		self::assertFileExists( $this->theme_dir . '/from-archive.txt' );
+		self::assertSame( 'archive-body', (string) file_get_contents( $this->theme_dir . '/from-archive.txt' ) );
 	}
 
 	public function test__theme_importer__merge_keeps_local_only_file(): void {
 		$local_only = $this->theme_dir . '/local-only-merge.txt';
 		file_put_contents( $local_only, 'keep-me' );
+		file_put_contents( $this->theme_dir . '/style.css', "/*\nTheme Name: Local Drift\n*/\nlocal-style\n" );
 
-		$archive = $this->tmpdir . '/theme-merge-mode.wpbkp';
+		$archive_style = "/*\nTheme Name: MksDdn Fixture Theme\n*/\narchive-style\n";
+		$archive       = $this->tmpdir . '/theme-merge-mode.wpbkp';
 		ArchiveFixtureBuilder::create_wpbkp(
 			$archive,
 			array(
@@ -151,7 +154,7 @@ final class ThemeArchiveRoundtripTest extends WP_UnitTestCase {
 			),
 			array(
 				'payload/content.json' => wp_json_encode( array( 'type' => 'themes' ) ),
-				'wp-content/themes/' . $this->theme_slug . '/style.css' => "/*\nTheme Name: MksDdn Fixture Theme\n*/\n",
+				'wp-content/themes/' . $this->theme_slug . '/style.css' => $archive_style,
 				'wp-content/themes/' . $this->theme_slug . '/index.php' => "<?php\n",
 				'wp-content/themes/' . $this->theme_slug . '/from-merge.txt' => 'merged',
 			)
@@ -162,6 +165,8 @@ final class ThemeArchiveRoundtripTest extends WP_UnitTestCase {
 		self::assertFileExists( $local_only );
 		self::assertSame( 'keep-me', (string) file_get_contents( $local_only ) );
 		self::assertFileExists( $this->theme_dir . '/from-merge.txt' );
+		self::assertSame( 'merged', (string) file_get_contents( $this->theme_dir . '/from-merge.txt' ) );
+		self::assertSame( $archive_style, (string) file_get_contents( $this->theme_dir . '/style.css' ) );
 	}
 
 	public function test__theme_file_diff_builder__flags_added_and_will_delete(): void {

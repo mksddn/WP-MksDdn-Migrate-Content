@@ -47,15 +47,18 @@ final class FullSiteSubsetTest extends WP_UnitTestCase {
 		}
 		self::assertTrue( $found, 'options table missing from dump' );
 
+		// Exporter stamps live siteurl/home; DomainReplacer only maps those signatures.
+		$dump['site_url'] = 'https://old.example';
+		$dump['home_url'] = 'https://old.example';
+
 		( new DomainReplacer() )->replace_dump_environment(
 			$dump,
 			'https://new.example',
 			array()
 		);
 
-		$encoded = wp_json_encode( $dump );
-		self::assertIsString( $encoded );
-		self::assertStringContainsString( 'new.example', $encoded );
+		$option_value = $this->find_option_value_in_dump( $dump, 'mksddn_mc_test_option' );
+		self::assertSame( 'https://new.example/path', $option_value );
 	}
 
 	public function test__swap_table_names__recognizes_live_leftovers(): void {
@@ -80,6 +83,41 @@ final class FullSiteSubsetTest extends WP_UnitTestCase {
 
 	public function test__export_preflight__runs_without_fatal(): void {
 		$result = ( new ExportPreflight() )->validate_full_export();
-		self::assertTrue( true === $result || is_wp_error( $result ) || is_array( $result ) );
+		// Disk/memory have no stub hooks; accept only true or a known export preflight error code.
+		if ( is_wp_error( $result ) ) {
+			$code = $result->get_error_code();
+			self::assertTrue(
+				is_string( $code ) && 0 === strpos( $code, 'mksddn_mc_export_' ),
+				'Unexpected preflight error: ' . $code
+			);
+			return;
+		}
+		self::assertTrue( true === $result );
+	}
+
+	/**
+	 * Locate an option_value for option_name inside a FullDatabaseExporter dump.
+	 *
+	 * @param array  $dump        Dump structure.
+	 * @param string $option_name Option name.
+	 * @return string|null
+	 */
+	private function find_option_value_in_dump( array $dump, string $option_name ): ?string {
+		foreach ( (array) ( $dump['tables'] ?? array() ) as $table_name => $table ) {
+			$name = is_string( $table_name ) ? $table_name : (string) ( $table['name'] ?? '' );
+			if ( false === strpos( $name, 'options' ) ) {
+				continue;
+			}
+			foreach ( (array) ( $table['rows'] ?? array() ) as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				if ( ( $row['option_name'] ?? '' ) === $option_name ) {
+					return isset( $row['option_value'] ) ? (string) $row['option_value'] : null;
+				}
+			}
+		}
+
+		return null;
 	}
 }

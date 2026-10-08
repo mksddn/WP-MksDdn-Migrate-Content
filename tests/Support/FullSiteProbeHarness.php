@@ -143,10 +143,47 @@ final class FullSiteProbeHarness {
 	}
 
 	/**
-	 * Remove planted directories.
+	 * Absolute mu-plugins root used by FullContentExporter.
+	 */
+	public function mu_plugins_root(): string {
+		return defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
+	}
+
+	/**
+	 * Plant probe mu-plugin file.
+	 *
+	 * @param string $contents File body.
+	 * @return string Absolute path.
+	 */
+	public function plant_mu_plugin_probe( string $contents = "mu-plugin-probe\n" ): string {
+		$dir = trailingslashit( $this->mu_plugins_root() );
+		if ( ! is_dir( $dir ) ) {
+			mkdir( $dir, 0777, true );
+		}
+		$path = $dir . 'mksddn-mc-probe-mu.php';
+		file_put_contents( $path, $contents );
+		$this->tracked_dirs[] = $path; // File path; cleanup_dirs handles files via rrmdir parent — track parent file delete.
+		return $path;
+	}
+
+	/**
+	 * Track an absolute path for cleanup (file or directory).
+	 *
+	 * @param string $path Absolute path.
+	 */
+	public function track_path( string $path ): void {
+		$this->tracked_dirs[] = $path;
+	}
+
+	/**
+	 * Remove planted directories and files.
 	 */
 	public function cleanup_dirs(): void {
 		foreach ( $this->tracked_dirs as $dir ) {
+			if ( is_file( $dir ) ) {
+				unlink( $dir );
+				continue;
+			}
 			if ( is_dir( $dir ) ) {
 				ArchiveFixtureBuilder::rrmdir( $dir );
 			}
@@ -157,12 +194,20 @@ final class FullSiteProbeHarness {
 	/**
 	 * Build a minimal full-site .wpbkp (exporter layout) with one probe table + upload file.
 	 *
-	 * @param string $table Absolute table name already created (or to recreate on import).
-	 * @param string $label Row label stored in dump.
-	 * @param string $upload_body Upload file body.
+	 * @param string               $table       Absolute table name already created (or to recreate on import).
+	 * @param string               $label       Row label stored in dump.
+	 * @param string               $upload_body Upload file body.
+	 * @param array<string,mixed>  $extra_files Optional zip path => body (under files/ or raw).
+	 * @param array<string,mixed>  $db_overrides Optional database metadata/row overrides.
 	 * @return string Absolute archive path.
 	 */
-	public function build_minimal_full_site_archive( string $table, string $label = 'restored', string $upload_body = "restored-ok\n" ): string {
+	public function build_minimal_full_site_archive(
+		string $table,
+		string $label = 'restored',
+		string $upload_body = "restored-ok\n",
+		array $extra_files = array(),
+		array $db_overrides = array()
+	): string {
 		global $wpdb;
 
 		$schema = 'CREATE TABLE `' . str_replace( '`', '``', $table ) . '` (
@@ -170,26 +215,41 @@ final class FullSiteProbeHarness {
 			label varchar(100) NOT NULL,
 			PRIMARY KEY (id)
 		) ENGINE=InnoDB';
+		if ( isset( $db_overrides['schema'] ) && is_string( $db_overrides['schema'] ) && '' !== $db_overrides['schema'] ) {
+			$schema = $db_overrides['schema'];
+		}
 
-		$payload = array(
-			'type'     => 'full-site',
-			'database' => array(
-				'table_prefix' => $wpdb->prefix,
-				'tables'       => array(
-					$table => array(
-						'schema' => $schema,
-						'rows'   => array(
-							array(
-								'id'    => 1,
-								'label' => $label,
-							),
-						),
-					),
+		$rows = array(
+			array(
+				'id'    => 1,
+				'label' => $label,
+			),
+		);
+		if ( isset( $db_overrides['rows'] ) && is_array( $db_overrides['rows'] ) ) {
+			$rows = $db_overrides['rows'];
+		}
+
+		$database = array(
+			'table_prefix' => $wpdb->prefix,
+			'tables'       => array(
+				$table => array(
+					'schema' => $schema,
+					'rows'   => $rows,
 				),
 			),
 		);
+		foreach ( array( 'site_url', 'home_url', 'paths' ) as $meta_key ) {
+			if ( array_key_exists( $meta_key, $db_overrides ) ) {
+				$database[ $meta_key ] = $db_overrides[ $meta_key ];
+			}
+		}
 
-		$archive = $this->tmpdir . '/minimal-full.wpbkp';
+		$payload = array(
+			'type'     => 'full-site',
+			'database' => $database,
+		);
+
+		$archive = $this->tmpdir . '/minimal-full-' . uniqid( '', true ) . '.wpbkp';
 		$zip     = new ZipArchive();
 		if ( true !== $zip->open( $archive, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
 			throw new \RuntimeException( 'Unable to create minimal full-site archive.' );
@@ -198,11 +258,15 @@ final class FullSiteProbeHarness {
 		$manifest = array(
 			'format_version' => 1,
 			'type'           => 'full-site',
+			'plugin_version' => defined( 'MKSDDN_MC_VERSION' ) ? MKSDDN_MC_VERSION : '0.0.0-test',
 			'created_at_gmt' => gmdate( 'c' ),
 		);
 		$zip->addFromString( 'manifest.json', (string) wp_json_encode( $manifest ) );
 		$zip->addFromString( 'payload/content.json', (string) wp_json_encode( $payload ) );
 		$zip->addFromString( 'files/wp-content/uploads/mksddn-mc-probe/hello.txt', $upload_body );
+		foreach ( $extra_files as $zip_path => $body ) {
+			$zip->addFromString( (string) $zip_path, (string) $body );
+		}
 		$zip->close();
 
 		return $archive;
