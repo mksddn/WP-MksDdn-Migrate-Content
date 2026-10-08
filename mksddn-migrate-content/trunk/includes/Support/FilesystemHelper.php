@@ -139,7 +139,8 @@ final class FilesystemHelper {
 	 * @param resource $stream Source stream.
 	 */
 	public static function put_stream( string $path, $stream, int $chunk_size = 131072 ): bool {
-		$handle = fopen( $path, 'wb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- direct streaming required
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- stream write; soft-fail when path is a directory or unwritable
+		$handle = @fopen( $path, 'wb' );
 		if ( ! $handle ) {
 			return false;
 		}

@@ -341,8 +341,8 @@ class SelectedContentDiffBuilder {
 			+ $this->count_actionable_rows( $meta )
 			+ count( $taxonomies );
 
-		// AttachmentRestorer only sets a thumbnail when the post has none; never clears/replaces.
-		if ( is_array( $featured ) && isset( $featured['status'] ) && 'will_set' === $featured['status'] ) {
+		// AttachmentRestorer sets or replaces the thumbnail from the archive on import.
+		if ( is_array( $featured ) && isset( $featured['status'] ) && in_array( $featured['status'], array( 'will_set', 'will_replace' ), true ) ) {
 			++$changed;
 		}
 
@@ -884,9 +884,8 @@ class SelectedContentDiffBuilder {
 	/**
 	 * Featured media status by filename (not numeric ID).
 	 *
-	 * Matches AttachmentRestorer::maybe_update_thumbnail(): the importer only
-	 * sets a featured image when the local post has none. It never clears or
-	 * replaces an existing thumbnail.
+	 * Matches AttachmentRestorer::maybe_update_thumbnail(): when the archive
+	 * provides a featured image, import sets or replaces the local thumbnail.
 	 *
 	 * @param array $item    Archive item.
 	 * @param int   $post_id Local post ID (0 for create).
@@ -930,7 +929,7 @@ class SelectedContentDiffBuilder {
 			);
 		}
 
-		// Local thumbnail present: importer keeps it (no clear, no replace).
+		// Local thumbnail present: archive overwrites when it provides a featured image.
 		if ( $local_thumb_id > 0 ) {
 			if ( $archive_id > 0 && '' !== $archive_filename && $archive_filename === $local_filename ) {
 				return array(
@@ -939,14 +938,21 @@ class SelectedContentDiffBuilder {
 					'local_filename'   => $local_filename,
 				);
 			}
+			if ( $archive_id > 0 ) {
+				return array(
+					'status'           => '' !== $status_hint ? $status_hint : 'will_replace',
+					'archive_filename' => $archive_filename,
+					'local_filename'   => $local_filename,
+				);
+			}
 			return array(
 				'status'           => 'local_kept',
-				'archive_filename' => $archive_filename,
+				'archive_filename' => '',
 				'local_filename'   => $local_filename,
 			);
 		}
 
-		// No local thumbnail: importer may set one when archive provides a mappable ID.
+		// No local thumbnail: importer sets one when archive provides a mappable ID.
 		if ( $archive_id > 0 ) {
 			return array(
 				'status'           => '' !== $status_hint ? $status_hint : 'will_set',
@@ -1155,6 +1161,10 @@ class SelectedContentDiffBuilder {
 				continue;
 			}
 			if ( is_array( $term ) && isset( $term['slug'] ) ) {
+				// Hierarchy-only ancestors are created on import but not assigned.
+				if ( array_key_exists( 'assigned', $term ) && ! $term['assigned'] ) {
+					continue;
+				}
 				$slug = sanitize_title( (string) $term['slug'] );
 				if ( '' !== $slug ) {
 					$slugs[] = $slug;

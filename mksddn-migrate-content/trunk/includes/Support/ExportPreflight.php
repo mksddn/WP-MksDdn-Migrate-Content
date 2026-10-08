@@ -33,6 +33,17 @@ class ExportPreflight {
 		$temp_dir = function_exists( 'get_temp_dir' ) ? get_temp_dir() : sys_get_temp_dir();
 		$free     = function_exists( 'disk_free_space' ) ? @disk_free_space( $temp_dir ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- best-effort preflight
 
+		/**
+		 * Filter free bytes reported for the export temp directory.
+		 *
+		 * Tests and hosts can override the live disk_free_space() reading.
+		 * Return false to skip the disk check.
+		 *
+		 * @param int|float|false $free     Free bytes, or false when unknown.
+		 * @param string          $temp_dir Temp directory path.
+		 */
+		$free = apply_filters( 'mksddn_mc_export_preflight_free_bytes', $free, $temp_dir );
+
 		$multiplier = PluginConfig::export_disk_safety_multiplier();
 		$headroom   = PluginConfig::export_disk_min_headroom();
 		$needed     = (int) ceil( ( $db_bytes * $multiplier ) + $headroom );
@@ -110,6 +121,13 @@ class ExportPreflight {
 	 */
 	private function validate_memory_floor() {
 		$limit_str = (string) ini_get( 'memory_limit' );
+
+		/**
+		 * Filter the memory_limit string used by the export preflight floor check.
+		 *
+		 * @param string $limit_str PHP memory_limit (for example "128M" or "-1").
+		 */
+		$limit_str = (string) apply_filters( 'mksddn_mc_export_preflight_memory_limit', $limit_str );
 		$trimmed   = trim( $limit_str );
 		if ( '-1' === $trimmed || (int) $trimmed < 0 ) {
 			return true;

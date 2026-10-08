@@ -1,0 +1,43 @@
+{
+	"name": "mksddn/wp-mksddn-migrate-content",
+	"description": "Dev/test harness for MksDdn Migrate Content (plugin lives under mksddn-migrate-content/trunk).",
+	"type": "project",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=8.1"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9.6",
+		"yoast/phpunit-polyfills": "^2.0",
+		"doiftrue/unitest-wp-copy": "7.1.*",
+		"10up/wp_mock": "^1.1"
+	},
+	"autoload": {
+		"psr-4": {
+			"MksDdn\\MigrateContent\\": "mksddn-migrate-content/trunk/includes/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"MksDdn\\MigrateContent\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"test:unit": "phpunit -c phpunit.unit.xml.dist",
+		"test:integration": "phpunit -c phpunit.integration.xml.dist",
+		"test": [
+			"@test:unit",
+			"@test:integration"
+		],
+		"test:coverage:unit": "php -d pcov.enabled=1 vendor/bin/phpunit -c phpunit.unit.xml.dist --coverage-text --coverage-clover tmp/coverage/unit-clover.xml",
+		"test:coverage:integration": "php -d pcov.enabled=1 vendor/bin/phpunit -c phpunit.integration.xml.dist --coverage-text --coverage-clover tmp/coverage/integration-clover.xml",
+		"infection:unit": "php bin/infection-unit.php --configuration=infection.json5 --threads=max --ignore-msi-with-no-mutations"
+	},
+	"config": {
+		"sort-packages": true,
+		"allow-plugins": {
+			"php-http/discovery": true,
+			"infection/extension-installer": true
+		}
+	}
+}

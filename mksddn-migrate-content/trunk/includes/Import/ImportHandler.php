@@ -13,6 +13,7 @@ use MksDdn\MigrateContent\Core\Wrappers\WpUserFunctionsWrapperInterface;
 use MksDdn\MigrateContent\Media\AttachmentRestorer;
 use MksDdn\MigrateContent\Options\OptionsHelper;
 use MksDdn\MigrateContent\Options\OptionsImporter;
+use MksDdn\MigrateContent\Services\PluginLogger;
 use WP_Error;
 use WP_Post;
 
@@ -323,6 +324,9 @@ class ImportHandler implements ImporterInterface {
 		$url_to_new_id   = $this->build_url_to_new_id_map( $data, $media_id_map );
 
 		$this->import_acf_fields( $data, $post_id, $media_id_map, $url_map, $url_to_new_id );
+
+		// Restore exported post meta (attachment IDs/URLs remapped via media maps).
+		$this->import_meta_data( $data, $post_id, $media_id_map, $url_map, $url_to_new_id );
 
 		if ( null !== $post_id_map && isset( $data['ID'] ) ) {
 			$post_id_map[ (int) $data['ID'] ] = $post_id;
@@ -1013,24 +1017,98 @@ class ImportHandler implements ImporterInterface {
 			}
 
 			$term_ids = array();
-			foreach ( $terms as $term_data ) {
-				$term = wp_insert_term(
-					$term_data['name'] ?? '',
-					$taxonomy,
-					array(
-						'slug'        => $term_data['slug'] ?? '',
-						'description' => $term_data['description'] ?? '',
-					)
-				);
-
-				if ( is_wp_error( $term ) ) {
-					$existing = get_term_by( 'slug', $term_data['slug'] ?? '', $taxonomy );
-					if ( $existing ) {
-						$term_ids[] = (int) $existing->term_id;
+			$pending  = array_values( $terms );
+			$guard    = 0;
+			while ( ! empty( $pending ) && $guard < 8 ) {
+				$deferred = array();
+				foreach ( $pending as $term_data ) {
+					if ( ! is_array( $term_data ) ) {
+						continue;
 					}
-				} else {
-					$term_ids[] = (int) $term['term_id'];
+					$parent_slug = isset( $term_data['parent_slug'] ) ? (string) $term_data['parent_slug'] : '';
+					$parent_id   = 0;
+					if ( '' !== $parent_slug ) {
+						$parent = get_term_by( 'slug', $parent_slug, $taxonomy );
+						if ( ! $parent instanceof \WP_Term ) {
+							$deferred[] = $term_data;
+							continue;
+						}
+						$parent_id = (int) $parent->term_id;
+					}
+
+					$slug     = isset( $term_data['slug'] ) ? (string) $term_data['slug'] : '';
+					if ( '' === $slug ) {
+						PluginLogger::log( sprintf( 'Skipped term without slug in taxonomy "%s".', $taxonomy ), 'import' );
+						continue;
+					}
+
+					$existing = get_term_by( 'slug', $slug, $taxonomy );
+
+					// Prefer slug identity: hierarchical taxonomies may accept a duplicate
+					// name under a new parent and invent a suffix slug instead of term_exists.
+					if ( $existing instanceof \WP_Term ) {
+						$update = array();
+						if ( isset( $term_data['description'] ) ) {
+							$update['description'] = (string) $term_data['description'];
+						}
+						if ( $parent_id > 0 && (int) $existing->parent !== $parent_id ) {
+							$update['parent'] = $parent_id;
+						}
+						if ( array() !== $update ) {
+							$updated = wp_update_term( (int) $existing->term_id, $taxonomy, $update );
+							if ( is_wp_error( $updated ) ) {
+								PluginLogger::log(
+									sprintf( 'Failed to update term "%s" (%s): %s', $slug, $taxonomy, $updated->get_error_message() ),
+									'import'
+								);
+							}
+						}
+						if ( $this->term_is_assigned_to_post( $term_data ) ) {
+							$term_ids[] = (int) $existing->term_id;
+						}
+						continue;
+					}
+
+					$args = array(
+						'slug'        => $slug,
+						'description' => $term_data['description'] ?? '',
+					);
+					if ( $parent_id > 0 ) {
+						$args['parent'] = $parent_id;
+					}
+
+					$term = wp_insert_term(
+						$term_data['name'] ?? '',
+						$taxonomy,
+						$args
+					);
+
+					if ( is_wp_error( $term ) ) {
+						$fallback = get_term_by( 'slug', $slug, $taxonomy );
+						if ( $fallback instanceof \WP_Term ) {
+							if ( $parent_id > 0 && (int) $fallback->parent !== $parent_id ) {
+								wp_update_term(
+									(int) $fallback->term_id,
+									$taxonomy,
+									array(
+										'parent' => $parent_id,
+									)
+								);
+							}
+							if ( $this->term_is_assigned_to_post( $term_data ) ) {
+								$term_ids[] = (int) $fallback->term_id;
+							}
+						}
+					} elseif ( $this->term_is_assigned_to_post( $term_data ) ) {
+						$term_ids[] = (int) $term['term_id'];
+					}
 				}
+
+				if ( count( $deferred ) === count( $pending ) ) {
+					break;
+				}
+				$pending = $deferred;
+				++$guard;
 			}
 
 			if ( ! empty( $term_ids ) ) {
@@ -1657,7 +1735,29 @@ class ImportHandler implements ImporterInterface {
 	}
 
 	/**
+	 * Whether a taxonomy payload row should be assigned to the post.
+	 *
+	 * Ancestor terms are exported with assigned=false so the hierarchy can be
+	 * created without attaching the parent to the post. Rows without the key
+	 * stay assigned (older archives).
+	 *
+	 * @param array $term_data Term payload row.
+	 * @return bool
+	 */
+	private function term_is_assigned_to_post( array $term_data ): bool {
+		if ( ! array_key_exists( 'assigned', $term_data ) ) {
+			return true;
+		}
+
+		return (bool) $term_data['assigned'];
+	}
+
+	/**
 	 * Import meta for a post.
+	 *
+	 * BatchLoader stores one unserialized value per meta key. A numeric list
+	 * (gallery, checkbox, a plain array of IDs) is that single value, not one
+	 * postmeta row per element. ACF field meta is left to import_acf_fields().
 	 *
 	 * @param array $data    Payload containing 'meta'.
 	 * @param int   $post_id Target post ID.
@@ -1668,22 +1768,61 @@ class ImportHandler implements ImporterInterface {
 			return;
 		}
 
-		foreach ( $data['meta'] as $key => $values ) {
-			$meta_key = sanitize_text_field( $key );
-			delete_post_meta( $post_id, $meta_key );
-
-			if ( is_array( $values ) ) {
-				foreach ( $values as $value ) {
-					$value = maybe_unserialize( $value );
-					$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
-					add_post_meta( $post_id, $meta_key, $value );
+		$acf_field_names = array();
+		if ( isset( $data['acf_fields'] ) && is_array( $data['acf_fields'] ) ) {
+			foreach ( array_keys( $data['acf_fields'] ) as $field_name ) {
+				$name = sanitize_text_field( (string) $field_name );
+				if ( '' !== $name ) {
+					$acf_field_names[] = $name;
 				}
-			} else {
-				$value = maybe_unserialize( $values );
-				$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
-				update_post_meta( $post_id, $meta_key, $value );
 			}
 		}
+
+		foreach ( $data['meta'] as $key => $values ) {
+			$meta_key = sanitize_text_field( (string) $key );
+			if ( '' === $meta_key || $this->is_importer_owned_meta_key( $meta_key ) ) {
+				continue;
+			}
+			if ( $this->meta_key_owned_by_acf_fields( $meta_key, $acf_field_names ) ) {
+				continue;
+			}
+
+			delete_post_meta( $post_id, $meta_key );
+			$value = maybe_unserialize( $values );
+			$value = $this->remap_media_values( $value, $id_map, $url_map, $url_to_new_id );
+			update_post_meta( $post_id, $meta_key, $value );
+		}
+	}
+
+	/**
+	 * Meta keys written by core or by AttachmentRestorer, not by this copy.
+	 *
+	 * @param string $meta_key Sanitized meta key.
+	 * @return bool
+	 */
+	private function is_importer_owned_meta_key( string $meta_key ): bool {
+		return in_array(
+			$meta_key,
+			array( '_edit_lock', '_edit_last', '_thumbnail_id', '_mksddn_original_thumbnail' ),
+			true
+		);
+	}
+
+	/**
+	 * Whether raw post meta belongs to an ACF field already imported from acf_fields.
+	 *
+	 * @param string   $meta_key    Sanitized meta key.
+	 * @param string[] $field_names ACF field names from the payload.
+	 * @return bool
+	 */
+	private function meta_key_owned_by_acf_fields( string $meta_key, array $field_names ): bool {
+		foreach ( $field_names as $field_name ) {
+			if ( $this->acf_meta_key_belongs_to_field( $meta_key, $field_name, $field_name . '_' ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -1898,21 +2037,7 @@ class ImportHandler implements ImporterInterface {
 			return $value;
 		}
 
-		$remapped = preg_replace_callback(
-			'/\[gallery([^\]]*?)ids="([^"]+)"/i',
-			static function ( array $matches ) use ( $id_map ): string {
-				$parts = array_map( 'trim', explode( ',', $matches[2] ) );
-				foreach ( $parts as $index => $part ) {
-					if ( is_numeric( $part ) && isset( $id_map[ (int) $part ] ) ) {
-						$parts[ $index ] = (string) $id_map[ (int) $part ];
-					}
-				}
-				return '[gallery' . $matches[1] . 'ids="' . implode( ',', $parts ) . '"';
-			},
-			$value
-		);
-
-		return is_string( $remapped ) ? $remapped : $value;
+		return AttachmentRestorer::remap_gallery_shortcode_ids( $value, $id_map );
 	}
 
 	/**
