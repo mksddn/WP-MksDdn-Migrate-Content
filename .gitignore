@@ -40,11 +40,11 @@ yarn.lock
 # gettext — default output of `msgfmt` without `-o` (not used; plugin uses trunk/languages/mksddn-migrate-content-*.mo)
 messages.mo
 
-# PHP
-# vendor/
-composer.lock
+# PHP / tests (repo-root harness)
+/vendor/
+/.phpunit.cache/
 .phpunit.result.cache
-
+/tmp/
 # WordPress специфичные
 wp-config.php
 wp-content/uploads/

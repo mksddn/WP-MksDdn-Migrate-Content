@@ -214,11 +214,9 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 	 */
 	private function collect_local_users(): array {
 		$result = array();
-		$users  = get_users(
-			array(
-				'fields' => array( 'ID', 'user_login', 'user_email', 'display_name', 'user_registered' ),
-			)
-		);
+		// Default get_users() returns WP_User objects (with roles). A custom `fields`
+		// list returns stdClass rows and would skip every user via the instanceof guard.
+		$users = get_users();
 
 		foreach ( $users as $user ) {
 			if ( ! $user instanceof WP_User ) {

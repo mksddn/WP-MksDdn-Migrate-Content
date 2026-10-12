@@ -510,30 +510,27 @@ class FullContentImporter {
 			$this->log( sprintf( 'Remaining table names: %s', implode( ', ', array_keys( $remaining_tables ) ) ) );
 		}
 
-		if ( $remaining_count === 0 ) {
+		if ( 0 === $remaining_count ) {
 			$this->log( 'No tables to import after removing user tables. Skipping database import.' );
 			unset( $data['database'] ); // Free database data immediately.
 			unset( $data ); // Free remaining data.
-			$this->restore_memory_limit( $original_limit );
-			// Mark as imported even if no tables to import (user tables were intentionally excluded).
+			// User-only dumps still need merge below; do not return early.
 			$this->database_imported = true;
-			// Return success even if no tables to import (user tables were intentionally excluded).
-			return true;
+		} else {
+			$this->log( sprintf( 'Importing %d tables after removing user tables...', $remaining_count ) );
+
+			// Import database.
+			$result = $this->db_importer->import( $data['database'] );
+			unset( $data['database'] ); // Free database data immediately.
+			unset( $data ); // Free remaining data.
+
+			if ( true !== $result ) {
+				$this->restore_memory_limit( $original_limit );
+				return $result;
+			}
+
+			$this->database_imported = true;
 		}
-
-		$this->log( sprintf( 'Importing %d tables after removing user tables...', $remaining_count ) );
-
-		// Import database.
-		$result = $this->db_importer->import( $data['database'] );
-		unset( $data['database'] ); // Free database data immediately.
-		unset( $data ); // Free remaining data.
-
-		if ( true !== $result ) {
-			$this->restore_memory_limit( $original_limit );
-			return $result;
-		}
-
-		$this->database_imported = true;
 
 		// Only merge users if we actually extracted them (has_selected_users was true).
 		if ( $needs_merge && isset( $user_applier ) && $merge_enabled && ! empty( $remote_snapshot['users'] ) ) {

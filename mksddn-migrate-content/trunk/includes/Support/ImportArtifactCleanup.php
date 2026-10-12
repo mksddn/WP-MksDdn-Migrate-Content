@@ -228,8 +228,9 @@ final class ImportArtifactCleanup {
 			);
 		}
 
-		$extension = self::resolve_extension( $original_name !== '' ? $original_name : $source_path, $source_path, $extension );
-		if ( ! in_array( $extension, array( 'wpbkp', 'json' ), true ) ) {
+		// Strict mode: unknown types are rejected instead of falling back to "wpbkp".
+		$extension = self::resolve_extension( $original_name !== '' ? $original_name : $source_path, $source_path, $extension, true );
+		if ( '' === $extension ) {
 			return new WP_Error(
 				'mksddn_mc_import_file_invalid_type',
 				__( 'Invalid import file type. Only .wpbkp and .json files are supported.', 'mksddn-migrate-content' )
@@ -424,9 +425,10 @@ final class ImportArtifactCleanup {
 	 * @param string $name_hint   Filename hint.
 	 * @param string $path_hint   Filesystem path hint.
 	 * @param string $known_extension Optional already-validated extension.
+	 * @param bool   $strict          Return an empty string for unknown types instead of "wpbkp".
 	 * @return string
 	 */
-	private static function resolve_extension( string $name_hint, string $path_hint, string $known_extension = '' ): string {
+	private static function resolve_extension( string $name_hint, string $path_hint, string $known_extension = '', bool $strict = false ): string {
 		$known_extension = strtolower( sanitize_file_name( $known_extension ) );
 		if ( in_array( $known_extension, array( 'wpbkp', 'json' ), true ) ) {
 			return $known_extension;
@@ -442,7 +444,7 @@ final class ImportArtifactCleanup {
 			return $extension;
 		}
 
-		return 'wpbkp';
+		return $strict ? '' : 'wpbkp';
 	}
 
 	/**

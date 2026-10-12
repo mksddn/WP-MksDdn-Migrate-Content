@@ -256,6 +256,8 @@ class AttachmentRestorer {
 			$content = preg_replace( '/wp-image-' . $old_id . '\b/', 'wp-image-' . $new_id, $content );
 		}
 
+		$content = self::remap_gallery_shortcode_ids( $content, $id_map );
+
 		if ( $content !== $post->post_content || $excerpt !== $post->post_excerpt ) {
 			wp_update_post(
 				array(
@@ -268,17 +270,44 @@ class AttachmentRestorer {
 	}
 
 	/**
+	 * Rewrite attachment IDs inside [gallery] shortcodes.
+	 *
+	 * Accepts double or single quotes and optional space around "=".
+	 *
+	 * @param string $content HTML or shortcode content.
+	 * @param array  $id_map  Original attachment ID => new ID.
+	 * @return string
+	 */
+	public static function remap_gallery_shortcode_ids( string $content, array $id_map ): string {
+		if ( '' === $content || array() === $id_map ) {
+			return $content;
+		}
+
+		$remapped = preg_replace_callback(
+			'/\[gallery\b([^\]]*?)ids\s*=\s*(["\'])([^"\']+)\2/i',
+			static function ( array $matches ) use ( $id_map ): string {
+				$parts = array_map( 'trim', explode( ',', $matches[3] ) );
+				foreach ( $parts as $index => $part ) {
+					if ( is_numeric( $part ) && isset( $id_map[ (int) $part ] ) ) {
+						$parts[ $index ] = (string) (int) $id_map[ (int) $part ];
+					}
+				}
+
+				return '[gallery' . $matches[1] . 'ids=' . $matches[2] . implode( ',', $parts ) . $matches[2];
+			},
+			$content
+		);
+
+		return is_string( $remapped ) ? $remapped : $content;
+	}
+
+	/**
 	 * Update featured image mapping if present in payload.
 	 *
 	 * @param int   $post_id Post ID.
 	 * @param array $id_map  Original => new attachment IDs.
 	 */
 	private function maybe_update_thumbnail( int $post_id, array $id_map ): void {
-		$current = get_post_thumbnail_id( $post_id );
-		if ( $current ) {
-			return;
-		}
-
 		$original_thumbnail = get_post_meta( $post_id, '_mksddn_original_thumbnail', true );
 		if ( ! $original_thumbnail ) {
 			return;
@@ -286,6 +315,7 @@ class AttachmentRestorer {
 
 		$original_thumbnail = (int) $original_thumbnail;
 		if ( isset( $id_map[ $original_thumbnail ] ) ) {
+			// Archive is the source of truth on upsert: replace an existing local thumbnail.
 			set_post_thumbnail( $post_id, $id_map[ $original_thumbnail ] );
 		}
 

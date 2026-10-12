@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.8.0
+Stable tag: 2.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -197,6 +197,10 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.8.1 =
+* Fixed: Hierarchical taxonomy terms recreate parent chain on selected-content import; featured image from archive replaces local thumbnail.
+* Fixed: Post meta restore/remap, gallery shortcode ID remapping, user-only full-site merge, user preflight listing, and strict import file type checks.
 
 = 2.8.0 =
 * Added: ACF Options Pages in Selected Content export and import.

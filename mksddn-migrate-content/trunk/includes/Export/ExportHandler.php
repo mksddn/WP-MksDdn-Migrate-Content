@@ -106,7 +106,7 @@ class ExportHandler implements ExporterInterface {
 	}
 
 	/**
-	 * Export arbitrary selection of content items.
+	 * Export arbitrary selection of content items (browser download).
 	 *
 	 * @param ContentSelection $selection Selection object.
 	 * @param string           $format    Requested format.
@@ -114,8 +114,39 @@ class ExportHandler implements ExporterInterface {
 	 * @since 1.0.0
 	 */
 	public function export_selected_content( ContentSelection $selection, string $format = 'archive' ): void {
+		$file = $this->create_selected_export_file( $selection, $format );
+		if ( \is_wp_error( $file ) ) {
+			\wp_die( \esc_html( $file->get_error_message() ) );
+		}
+
+		$extension = $this->should_output_json() ? 'json' : 'wpbkp';
+		$filename  = FilenameBuilder::build( 'selected', $extension );
+
+		if ( 'json' === $extension ) {
+			$this->download_json_file( $file, $filename );
+			return;
+		}
+
+		$this->download_archive( $file, $filename );
+	}
+
+	/**
+	 * Build a selected-content export file on disk without streaming a download.
+	 *
+	 * Used by admin download flow and by integration tests that need a real
+	 * .wpbkp / .json path for import roundtrips.
+	 *
+	 * @param ContentSelection $selection Selection object.
+	 * @param string           $format    Requested format (archive|json).
+	 * @return string|WP_Error Absolute path to the export file, or error.
+	 * @since 1.0.0
+	 */
+	public function create_selected_export_file( ContentSelection $selection, string $format = 'archive' ) {
 		if ( ! $selection->has_items() && ! $selection->has_options() && ! $selection->has_options_pages() ) {
-			\wp_die( \esc_html__( 'Select at least one item to export.', 'mksddn-migrate-content' ) );
+			return new WP_Error(
+				'mksddn_mc_export_empty',
+				__( 'Select at least one item to export.', 'mksddn-migrate-content' )
+			);
 		}
 
 		$this->format = $this->normalize_format( $format );
@@ -123,12 +154,21 @@ class ExportHandler implements ExporterInterface {
 		if ( 1 === $selection->count_items() && ! $selection->has_options() && ! $selection->has_options_pages() ) {
 			$first = $selection->first_item();
 			if ( $first ) {
-				$this->export_post_by_id( (int) $first['id'] );
-				return;
+				$built = $this->build_single_post_export( (int) $first['id'] );
+				if ( \is_wp_error( $built ) ) {
+					return $built;
+				}
+
+				return $this->write_payload_to_file( $built['data'], $built['media'], 'selected' );
 			}
 		}
 
-		$this->export_selection_bundle( $selection );
+		$built = $this->build_selection_bundle_export( $selection );
+		if ( \is_wp_error( $built ) ) {
+			return $built;
+		}
+
+		return $this->write_payload_to_file( $built['data'], $built['media'], 'selected' );
 	}
 
 	/**
@@ -157,19 +197,35 @@ class ExportHandler implements ExporterInterface {
 	}
 
 	/**
-	 * Export a single post object by ID.
+	 * Export a single post object by ID (browser download).
 	 *
 	 * @param int   $post_id      Target post ID.
 	 * @param array $allowed_types Optional whitelist (empty = allow all).
 	 */
 	private function export_post_by_id( int $post_id, array $allowed_types = array() ): void {
+		$built = $this->build_single_post_export( $post_id, $allowed_types );
+		if ( \is_wp_error( $built ) ) {
+			\wp_die( \esc_html( $built->get_error_message() ) );
+		}
+
+		$this->deliver_payload( $built['data'], 'selected', $built['media'] );
+	}
+
+	/**
+	 * Build a single-post export payload and media bundle.
+	 *
+	 * @param int   $post_id       Target post ID.
+	 * @param array $allowed_types Optional whitelist (empty = allow all).
+	 * @return array{data: array, media: AttachmentCollection|null}|WP_Error
+	 */
+	private function build_single_post_export( int $post_id, array $allowed_types = array() ) {
 		$post = \get_post( $post_id );
 		if ( ! $post ) {
-			\wp_die( \esc_html__( 'Invalid content ID.', 'mksddn-migrate-content' ) );
+			return new WP_Error( 'mksddn_mc_invalid_content', __( 'Invalid content ID.', 'mksddn-migrate-content' ) );
 		}
 
 		if ( ! empty( $allowed_types ) && ! in_array( $post->post_type, $allowed_types, true ) ) {
-			\wp_die( \esc_html__( 'Requested type is not allowed for this export.', 'mksddn-migrate-content' ) );
+			return new WP_Error( 'mksddn_mc_type_not_allowed', __( 'Requested type is not allowed for this export.', 'mksddn-migrate-content' ) );
 		}
 
 		// Preload ACF fields for single post export.
@@ -179,13 +235,17 @@ class ExportHandler implements ExporterInterface {
 
 		$media = $this->collect_media_for_post( $post );
 		$data  = $this->prepare_payload_for_post( $post, $media );
-		$this->deliver_payload( $data, 'selected', $media );
+
+		return array(
+			'data'  => $data,
+			'media' => $media,
+		);
 	}
 
 	/**
 	 * Prepare payload data for post/form entity.
 	 *
-	 * @param WP_Post                 $post  Post object.
+	 * @param WP_Post                   $post  Post object.
 	 * @param AttachmentCollection|null $media Media bundle.
 	 * @return array
 	 */
@@ -196,7 +256,14 @@ class ExportHandler implements ExporterInterface {
 
 		return $this->prepare_post_data( $post, $media );
 	}
-	private function export_selection_bundle( ContentSelection $selection ): void {
+
+	/**
+	 * Build a multi-item selection bundle payload and combined media.
+	 *
+	 * @param ContentSelection $selection Selection object.
+	 * @return array{data: array, media: AttachmentCollection|null}|WP_Error
+	 */
+	private function build_selection_bundle_export( ContentSelection $selection ) {
 		$bundle = array(
 			'type'          => 'bundle',
 			'items'         => array(),
@@ -281,7 +348,7 @@ class ExportHandler implements ExporterInterface {
 					continue;
 				}
 
-				$media = $this->collect_media_for_post( $post );
+				$media             = $this->collect_media_for_post( $post );
 				$bundle['items'][] = $this->prepare_payload_for_post( $post, $media );
 
 				if ( $media && $media->has_items() ) {
@@ -319,25 +386,23 @@ class ExportHandler implements ExporterInterface {
 			}
 
 			if ( ! empty( $missing_options_pages ) ) {
-				\wp_die(
-					\esc_html(
-						sprintf(
-							/* translators: %s: comma-separated ACF Options Page menu slugs */
-							__( 'Selected ACF Options Pages could not be found: %s', 'mksddn-migrate-content' ),
-							implode( ', ', $missing_options_pages )
-						)
+				return new WP_Error(
+					'mksddn_mc_options_pages_missing',
+					sprintf(
+						/* translators: %s: comma-separated ACF Options Page menu slugs */
+						__( 'Selected ACF Options Pages could not be found: %s', 'mksddn-migrate-content' ),
+						implode( ', ', $missing_options_pages )
 					)
 				);
 			}
 
 			if ( ! empty( $empty_options_pages ) && empty( $bundle['items'] ) && empty( $bundle['options_pages'] ) ) {
-				\wp_die(
-					\esc_html(
-						sprintf(
-							/* translators: %s: comma-separated ACF Options Page menu slugs */
-							__( 'Selected ACF Options Pages have no field groups located on their menu_slug, so there is nothing to export: %s', 'mksddn-migrate-content' ),
-							implode( ', ', $empty_options_pages )
-						)
+				return new WP_Error(
+					'mksddn_mc_options_pages_empty',
+					sprintf(
+						/* translators: %s: comma-separated ACF Options Page menu slugs */
+						__( 'Selected ACF Options Pages have no field groups located on their menu_slug, so there is nothing to export: %s', 'mksddn-migrate-content' ),
+						implode( ', ', $empty_options_pages )
 					)
 				);
 			}
@@ -353,8 +418,9 @@ class ExportHandler implements ExporterInterface {
 						: array();
 					$media_ids  = $this->media_collector->extract_attachment_ids_from_acf_values( $acf_fields, $schema );
 					if ( array() !== $media_ids ) {
-						\wp_die(
-							\esc_html__(
+						return new WP_Error(
+							'mksddn_mc_json_media_blocked',
+							__(
 								'JSON export cannot include media referenced by ACF Options Pages. Choose the .wpbkp archive format, or remove Options Pages that contain image/file/gallery fields.',
 								'mksddn-migrate-content'
 							)
@@ -374,11 +440,16 @@ class ExportHandler implements ExporterInterface {
 			&& empty( $bundle['options_pages'] )
 			&& ! $selection->has_options()
 		) {
-			\wp_die( \esc_html__( 'Nothing to export. Selected items could not be resolved.', 'mksddn-migrate-content' ) );
+			return new WP_Error(
+				'mksddn_mc_export_unresolved',
+				__( 'Nothing to export. Selected items could not be resolved.', 'mksddn-migrate-content' )
+			);
 		}
 
-		$media_payload = $combined_media->has_items() ? $combined_media : null;
-		$this->deliver_payload( $bundle, 'selected', $media_payload );
+		return array(
+			'data'  => $bundle,
+			'media' => $combined_media->has_items() ? $combined_media : null,
+		);
 	}
 
 
@@ -528,26 +599,73 @@ class ExportHandler implements ExporterInterface {
 	}
 
 	/**
-	 * Ship payload either as archive or debug JSON.
+	 * Ship payload either as archive or debug JSON (browser download).
 	 *
-	 * @param array  $data     Payload contents.
-	 * @param string                 $basename Filename base without extension.
-	 * @param AttachmentCollection|null $media Media bundle.
+	 * @param array                     $data    Payload contents.
+	 * @param string                    $context Filename context.
+	 * @param AttachmentCollection|null $media   Media bundle.
 	 */
 	private function deliver_payload( array $data, string $context, ?AttachmentCollection $media = null ): void {
+		$file = $this->write_payload_to_file( $data, $media, $context );
+		if ( \is_wp_error( $file ) ) {
+			\wp_die( \esc_html( $file->get_error_message() ) );
+		}
+
+		$extension = $this->should_output_json() ? 'json' : 'wpbkp';
+		$filename  = FilenameBuilder::build( $context, $extension );
+
+		if ( 'json' === $extension ) {
+			$this->download_json_file( $file, $filename );
+			return;
+		}
+
+		$this->download_archive( $file, $filename );
+	}
+
+	/**
+	 * Write payload to a temporary .wpbkp or .json file without downloading.
+	 *
+	 * @param array                     $data    Payload contents.
+	 * @param AttachmentCollection|null $media   Media bundle.
+	 * @param string                    $context Filename context.
+	 * @return string|WP_Error Absolute file path.
+	 */
+	private function write_payload_to_file( array $data, ?AttachmentCollection $media, string $context ) {
 		$is_json   = $this->should_output_json();
 		$extension = $is_json ? 'json' : 'wpbkp';
 		$filename  = FilenameBuilder::build( $context, $extension );
 		$label     = pathinfo( $filename, PATHINFO_FILENAME );
 
 		if ( $is_json ) {
-			$this->download_json( $data, $filename );
-			return;
+			$json = \wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+			if ( false === $json ) {
+				return new WP_Error( 'mksddn_mc_invalid_payload', __( 'Failed to encode payload for export.', 'mksddn-migrate-content' ) );
+			}
+
+			$temp = \wp_tempnam( 'mksddn-mc-json-' );
+			if ( ! $temp ) {
+				return new WP_Error( 'mksddn_mc_tempfile_error', __( 'Unable to create temporary archive file.', 'mksddn-migrate-content' ) );
+			}
+
+			$path = $temp . '.json';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- tempnam path to stable .json extension for importers.
+			if ( ! rename( $temp, $path ) ) {
+				FilesystemHelper::delete( $temp );
+				return new WP_Error( 'mksddn_mc_tempfile_error', __( 'Unable to create temporary archive file.', 'mksddn-migrate-content' ) );
+			}
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- local temp export file.
+			if ( false === file_put_contents( $path, $json ) ) {
+				FilesystemHelper::delete( $path );
+				return new WP_Error( 'mksddn_mc_tempfile_error', __( 'Unable to create temporary archive file.', 'mksddn-migrate-content' ) );
+			}
+
+			return $path;
 		}
 
 		$media_manifest = $media && $media->has_items() ? $media->get_manifest() : array();
 
-		$archive = $this->packer->create_archive(
+		return $this->packer->create_archive(
 			$data,
 			array(
 				'type'  => $data['type'] ?? 'page',
@@ -556,12 +674,6 @@ class ExportHandler implements ExporterInterface {
 			),
 			$media ? $media->get_assets() : array()
 		);
-
-		if ( \is_wp_error( $archive ) ) {
-			\wp_die( \esc_html( $archive->get_error_message() ) );
-		}
-
-		$this->download_archive( $archive, $filename );
 	}
 
 	/**
@@ -618,14 +730,21 @@ class ExportHandler implements ExporterInterface {
 	}
 
 	/**
-	 * Stream JSON file to the browser (debug mode only).
+	 * Stream a JSON export file to the browser, then delete it.
 	 *
-	 * @param array  $data     Payload.
-	 * @param string $filename Filename.
+	 * @param string $file_path Absolute path to the JSON file.
+	 * @param string $filename  Download filename.
 	 * @return void
 	 */
-	private function download_json( array $data, string $filename ): void {
-		$json = \wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
+	private function download_json_file( string $file_path, string $filename ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file -- local temp export file.
+		$json = file_get_contents( $file_path );
+		if ( false === $json ) {
+			FilesystemHelper::delete( $file_path );
+			\wp_die( \esc_html__( 'Failed to open archive for download.', 'mksddn-migrate-content' ) );
+		}
+
+		FilesystemHelper::delete( $file_path );
 
 		while ( ob_get_level() ) {
 			ob_end_clean();

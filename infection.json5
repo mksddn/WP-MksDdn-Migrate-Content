@@ -1,0 +1,45 @@
+{
+	"$schema": "https://raw.githubusercontent.com/infection/infection/0.29.14/resources/schema.json",
+	"source": {
+		"directories": [
+			"mksddn-migrate-content/trunk/includes/Archive",
+			"mksddn-migrate-content/trunk/includes/Validation",
+			"mksddn-migrate-content/trunk/includes/Database",
+			"mksddn-migrate-content/trunk/includes/Support"
+		],
+		"excludes": [
+			"FileValidator.php",
+			"FullDatabaseExporter.php",
+			"FullDatabaseImporter.php",
+			"DeactivationCleanup.php",
+			"EnvironmentVersionComparator.php",
+			"ExportMemoryHelper.php",
+			"ExportPreflight.php",
+			"FilesystemHelper.php",
+			"FullImportMaintenance.php",
+			"ImportArtifactCleanup.php",
+			"ImportLock.php",
+			"PostImportMaintenance.php",
+			"SiteUrlGuard.php",
+			"WpContentRuntimeStorage.php"
+		]
+	},
+	"timeout": 10,
+	"logs": {
+		"text": "tmp/coverage/infection.log",
+		"html": "tmp/coverage/infection",
+		"summary": "tmp/coverage/infection-summary.log"
+	},
+	"tmpDir": "tmp/coverage/infection-tmp",
+	"testFramework": "phpunit",
+	"phpUnit": {
+		"configDir": ".",
+		"customPath": "vendor/bin/phpunit"
+	},
+	"testFrameworkOptions": "",
+	"mutators": {
+		"@default": true
+	},
+	"minMsi": 68,
+	"minCoveredMsi": 68
+}
