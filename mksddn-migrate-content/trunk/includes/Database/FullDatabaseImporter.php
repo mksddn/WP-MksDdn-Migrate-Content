@@ -122,8 +122,9 @@ class FullDatabaseImporter {
 
 			// Identify user tables in dump to protect existing ones from truncation if not present.
 			$protected_tables = array();
-			$users_table      = $this->detect_table_by_suffix( array_keys( $dump['tables'] ), 'users' );
-			$usermeta_table   = $this->detect_table_by_suffix( array_keys( $dump['tables'] ), 'usermeta' );
+			$dump_table_names = array_map( 'strval', array_keys( $dump['tables'] ) );
+			$users_table      = DumpTableResolver::find( $dump_table_names, 'users', $source_prefix );
+			$usermeta_table   = DumpTableResolver::find( $dump_table_names, 'usermeta', $source_prefix );
 
 			// If user tables are not in dump, protect existing ones from truncation.
 			// This ensures current users and their capabilities are preserved when not importing users.
@@ -1815,30 +1816,6 @@ class FullDatabaseImporter {
 	}
 
 	/**
-	 * Detect table name by suffix in array of table names.
-	 *
-	 * @param array  $table_names Array of table names.
-	 * @param string $suffix      Table suffix (e.g., 'users', 'usermeta').
-	 * @return string|null Table name or null if not found.
-	 * @since 1.0.0
-	 */
-	private function detect_table_by_suffix( array $table_names, string $suffix ): ?string {
-		$suffix_length = strlen( $suffix );
-		if ( $suffix_length <= 0 ) {
-			return null;
-		}
-
-		foreach ( $table_names as $name ) {
-			$normalized = sanitize_text_field( (string) $name );
-			if ( substr( $normalized, -$suffix_length ) === $suffix ) {
-				return $normalized;
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * Auto-detect table prefix from table names (backward compatibility).
 	 *
 	 * @param array $table_names Array of table names.
@@ -1846,37 +1823,9 @@ class FullDatabaseImporter {
 	 * @since 1.0.0
 	 */
 	private function detect_prefix_from_tables( array $table_names ): string {
-		if ( empty( $table_names ) ) {
-			return '';
-		}
+		$resolved = DumpTableResolver::resolve_prefix( array_map( 'strval', $table_names ) );
 
-		// Look for common WordPress core tables to detect prefix.
-		$core_suffixes = array( 'posts', 'options', 'users', 'usermeta', 'terms', 'term_taxonomy' );
-		
-		foreach ( $table_names as $table_name ) {
-			foreach ( $core_suffixes as $suffix ) {
-				// Check if table ends with core suffix.
-				if ( substr( $table_name, -strlen( $suffix ) ) === $suffix ) {
-					// Extract prefix (everything before the suffix).
-					$prefix = substr( $table_name, 0, -strlen( $suffix ) );
-					
-					// Verify this prefix works for other core tables.
-					$matches = 0;
-					foreach ( $core_suffixes as $test_suffix ) {
-						if ( in_array( $prefix . $test_suffix, $table_names, true ) ) {
-							++$matches;
-						}
-					}
-					
-					// If at least 3 core tables match, we found the prefix.
-					if ( $matches >= 3 ) {
-						return $prefix;
-					}
-				}
-			}
-		}
-
-		return '';
+		return null !== $resolved ? $resolved : '';
 	}
 
 	/**

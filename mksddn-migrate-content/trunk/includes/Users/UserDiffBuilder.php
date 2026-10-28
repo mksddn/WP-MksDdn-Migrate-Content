@@ -9,6 +9,7 @@
 namespace MksDdn\MigrateContent\Users;
 
 use MksDdn\MigrateContent\Contracts\UserDiffBuilderInterface;
+use MksDdn\MigrateContent\Database\DumpTableResolver;
 use MksDdn\MigrateContent\Filesystem\FullArchivePayload;
 use WP_Error;
 use WP_Roles;
@@ -72,8 +73,10 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 	 */
 	private function extract_remote_users( array $database ): array {
 		$tables         = isset( $database['tables'] ) && is_array( $database['tables'] ) ? $database['tables'] : array();
-		$users_table    = $this->find_table_name( $tables, 'users' );
-		$usermeta_table = $this->find_table_name( $tables, 'usermeta' );
+		$source_prefix  = isset( $database['table_prefix'] ) ? (string) $database['table_prefix'] : '';
+		$table_names    = array_map( 'strval', array_keys( $tables ) );
+		$users_table    = DumpTableResolver::find( $table_names, 'users', $source_prefix );
+		$usermeta_table = DumpTableResolver::find( $table_names, 'usermeta', $source_prefix );
 
 		if ( ! $users_table || ! $usermeta_table ) {
 			return array(
@@ -153,27 +156,6 @@ class UserDiffBuilder implements UserDiffBuilderInterface {
 		}
 
 		return $grouped;
-	}
-
-	/**
-	 * Detect table name with suffix.
-	 *
-	 * @param array<string, mixed> $tables Table list.
-	 * @param string                $suffix Table suffix (e.g., 'users', 'usermeta').
-	 * @return string|null Table name or null if not found.
-	 * @since 1.0.0
-	 */
-	private function find_table_name( array $tables, string $suffix ): ?string {
-		$suffix_length = strlen( $suffix );
-
-		foreach ( array_keys( $tables ) as $name ) {
-			$normalized = sanitize_text_field( (string) $name );
-			if ( $suffix_length <= 0 || substr( $normalized, -$suffix_length ) === $suffix ) {
-				return $normalized;
-			}
-		}
-
-		return null;
 	}
 
 	/**

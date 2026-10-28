@@ -8,6 +8,7 @@
 namespace MksDdn\MigrateContent\Users;
 
 use MksDdn\MigrateContent\Contracts\UserMergeApplierInterface;
+use MksDdn\MigrateContent\Database\DumpTableResolver;
 use WP_Error;
 use WP_User;
 
@@ -40,8 +41,8 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	 */
 	public function extract_remote_users( array $database, array $table_hints = array() ): array {
 		$tables         = isset( $database['tables'] ) && is_array( $database['tables'] ) ? $database['tables'] : array();
-		$users_table    = $table_hints['users'] ?? $this->find_table_name( $tables, 'users' );
-		$usermeta_table = $table_hints['usermeta'] ?? $this->find_table_name( $tables, 'usermeta' );
+		$users_table    = $table_hints['users'] ?? $this->find_table_name( $database, 'users' );
+		$usermeta_table = $table_hints['usermeta'] ?? $this->find_table_name( $database, 'usermeta' );
 
 		if ( ! $users_table || ! $usermeta_table ) {
 			return array(
@@ -124,8 +125,8 @@ class UserMergeApplier implements UserMergeApplierInterface {
 
 		// Auto-detect user tables if hints are missing.
 		if ( empty( $tables_to_remove ) ) {
-			$users_table    = $this->find_table_name( $database['tables'], 'users' );
-			$usermeta_table = $this->find_table_name( $database['tables'], 'usermeta' );
+			$users_table    = $this->find_table_name( $database, 'users' );
+			$usermeta_table = $this->find_table_name( $database, 'usermeta' );
 
 			if ( $users_table ) {
 				$tables_to_remove[] = $users_table;
@@ -547,26 +548,17 @@ class UserMergeApplier implements UserMergeApplierInterface {
 	}
 
 	/**
-	 * Locate table name by suffix.
+	 * Locate core table name by suffix, preferring the dump's own prefix.
 	 *
-	 * @param array  $tables Table definitions.
-	 * @param string $suffix Target suffix.
+	 * @param array  $database Database dump (tables and optional table_prefix).
+	 * @param string $suffix   Target suffix.
 	 * @return string|null
 	 */
-	private function find_table_name( array $tables, string $suffix ): ?string {
-		$length = strlen( $suffix );
-		foreach ( array_keys( $tables ) as $name ) {
-			$normalized = sanitize_text_field( (string) $name );
-			if ( '' === $normalized ) {
-				continue;
-			}
+	private function find_table_name( array $database, string $suffix ): ?string {
+		$tables = isset( $database['tables'] ) && is_array( $database['tables'] ) ? $database['tables'] : array();
+		$prefix = isset( $database['table_prefix'] ) ? (string) $database['table_prefix'] : '';
 
-			if ( substr( $normalized, -$length ) === $suffix ) {
-				return $normalized;
-			}
-		}
-
-		return null;
+		return DumpTableResolver::find( array_map( 'strval', array_keys( $tables ) ), $suffix, $prefix );
 	}
 }
 

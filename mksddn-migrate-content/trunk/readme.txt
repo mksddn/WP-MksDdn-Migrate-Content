@@ -4,7 +4,7 @@ Tags: migration, export, import, backup, wpbkp
 Requires at least: 5.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.8.1
+Stable tag: 2.8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -114,6 +114,7 @@ The plugin follows SOLID principles and WordPress Coding Standards with a clean,
 * `ImportHandler` — selected content import (parent-child ordering, slug lookup, Polylang/ACF, ACF Options Pages). For post ACF/SCF fields: `update_field()` when a local field object exists; scoped `meta` fallback when the field group is missing or nested structural meta is incomplete; cleanup of non-scalar root “blob” meta left by a failed expand so leaf repeater/group keys remain authoritative
 * `SelectionBuilder`, `ContentSelection` — build export selections from admin input (posts/CPTs and Options Page `menu_slug`s)
 * `FullContentExporter`, `FullContentImporter` — full-site archive assembly and restore
+* `DumpTableResolver` — picks the real `{prefix}users` / `{prefix}usermeta` tables from a dump using the dump's `table_prefix` (ignores foreign sets such as Plugin Check `wppc_*`)
 * `FullDatabaseExporter`, `FullDatabaseImporter`, `SwapTableNames` — streaming database export/import; schema recreate uses a swap table then atomic RENAME
 * `ThemeExporter`, `ThemeImporter` — theme archive export and filesystem apply
 * `OptionsExporter`, `OptionsImporter` — raw WordPress options / widget slices
@@ -197,6 +198,9 @@ All key components implement interfaces:
 * `DomainReplacer` safely handles URL replacement during migrations
 
 == Changelog ==
+
+= 2.8.2 =
+* Fixed: Full-site user table detection no longer picks foreign tables ending with `users`/`usermeta` (for example Plugin Check `wppc_*`); resolution prefers the dump `table_prefix` via `DumpTableResolver`.
 
 = 2.8.1 =
 * Fixed: Hierarchical taxonomy terms recreate parent chain on selected-content import; featured image from archive replaces local thumbnail.
