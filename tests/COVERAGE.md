@@ -83,6 +83,7 @@ Empty stub `Chunking/ChunkController.php` is excluded.
 | `DataTransferObjects/ExportResult.php` | `ExportResult` | unit:ExportResultTest |
 | `DataTransferObjects/FileUpload.php` | `FileUpload` | unit:FileUploadTest |
 | `DataTransferObjects/ImportRequest.php` | `ImportRequest` | unit:ImportRequestTest |
+| `Database/DumpTableResolver.php` | `DumpTableResolver` | unit:DumpTableResolverTest |
 | `Database/FullDatabaseExporter.php` | `FullDatabaseExporter` | integration:FullSiteSubsetTest, FullDatabaseRoundtripTest |
 | `Database/FullDatabaseImporter.php` | `FullDatabaseImporter` | integration:MissingPipelineTest, FullDatabaseRoundtripTest |
 | `Database/SwapTableNames.php` | `SwapTableNames` | unit:SwapTableNamesTest |
